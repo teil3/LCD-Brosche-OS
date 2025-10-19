@@ -10,6 +10,16 @@
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
 ButtonState btn2({(uint8_t)BTN2_PIN, true});
 
+static const char* btnEventName(BtnEvent e) {
+  switch (e) {
+    case BtnEvent::Single: return "Single";
+    case BtnEvent::Double: return "Double";
+    case BtnEvent::Triple: return "Triple";
+    case BtnEvent::Long:   return "Long";
+    default:               return "None";
+  }
+}
+
 // Apps
 AppManager appman;
 SlideshowApp app_slideshow;
@@ -47,6 +57,7 @@ void loop() {
   // Globale Button-Logik (BTN1): App-Wechsel & Backlight
   BtnEvent e1 = btn1.poll();
   if (e1 != BtnEvent::None) {
+    Serial.printf("[BTN] BTN1 %s\n", btnEventName(e1));
     switch (e1) {
       case BtnEvent::Single: appman.next(); break;
       case BtnEvent::Double: appman.prev(); break;
@@ -58,7 +69,10 @@ void loop() {
 
   // App-seitige Events (BTN2)
   BtnEvent e2 = btn2.poll();
-  if (e2 != BtnEvent::None) appman.dispatchBtn(2, e2);
+  if (e2 != BtnEvent::None) {
+    Serial.printf("[BTN] BTN2 %s\n", btnEventName(e2));
+    appman.dispatchBtn(2, e2);
+  }
 
   appman.tick(dt);
   appman.draw();

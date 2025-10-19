@@ -3,11 +3,16 @@
 #include <SD.h>
 #include <TJpg_Decoder.h>
 #include <algorithm>
+#include <array>
 
 #include "Core/Gfx.h"
 #include "Config.h"
 
 // ---- intern ----
+
+namespace {
+constexpr std::array<uint32_t, 5> kDwellSteps{1000, 5000, 10000, 30000, 300000};
+}
 
 bool SlideshowApp::isJpeg_(const String& n) {
   String l = n; l.toLowerCase();
@@ -15,8 +20,15 @@ bool SlideshowApp::isJpeg_(const String& n) {
 }
 
 void SlideshowApp::showModeOsd_() {
-  // Kleine Statuszeile oben mit dem aktuellen Modus
-  const char* txt = auto_mode ? "AUTO" : "MANUAL";
+  // Kleine Statuszeile oben mit dem aktuellen Modus oder Override
+  const uint32_t now = millis();
+  const bool useOverride = osdOverrideUntil_ && (now < osdOverrideUntil_);
+  if (!useOverride && osdOverrideUntil_) {
+    osdOverrideUntil_ = 0;
+    osdOverride_.clear();
+  }
+
+  String txt = useOverride ? osdOverride_ : modeLabel_();
   tft.fillRect(0, 0, TFT_W, 18, TFT_BLACK);
   tft.setTextDatum(TC_DATUM);
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
@@ -64,7 +76,66 @@ void SlideshowApp::showCurrent_() {
     tft.drawString(base, TFT_W/2, TFT_H-2, 2);
   }
 
+  drawToastIfActive_();
+
   Serial.printf("[Slideshow] OK: %s\n", path.c_str());
+}
+
+void SlideshowApp::advance_(int step) {
+  if (files_.empty()) return;
+
+  const size_t total = files_.size();
+  int64_t next = static_cast<int64_t>(idx_) + step;
+  int64_t wrap = static_cast<int64_t>(total);
+  next %= wrap;
+  if (next < 0) next += wrap;
+
+  idx_ = static_cast<size_t>(next);
+  showCurrent_();
+  timeSinceSwitch_ = 0;
+}
+
+void SlideshowApp::applyDwell_() {
+  if (dwellIdx_ >= kDwellSteps.size()) dwellIdx_ = 0;
+  dwell_ms = kDwellSteps[dwellIdx_];
+}
+
+void SlideshowApp::setOsdOverride_(const String& txt, uint32_t duration_ms) {
+  osdOverride_ = txt;
+  osdOverrideUntil_ = millis() + duration_ms;
+}
+
+String SlideshowApp::dwellLabel_() const {
+  if (dwell_ms % 60000 == 0) {
+    return String(dwell_ms / 60000) + "m";
+  }
+  return String((dwell_ms + 500) / 1000) + "s";
+}
+
+String SlideshowApp::modeLabel_() const {
+  if (!auto_mode) return String("MANUAL");
+  return String("AUTO ") + dwellLabel_();
+}
+
+void SlideshowApp::showToast_(const String& txt, uint32_t duration_ms) {
+  toastText_ = txt;
+  toastUntil_ = millis() + duration_ms;
+}
+
+void SlideshowApp::drawToastIfActive_() {
+  if (!toastUntil_) return;
+  if (millis() >= toastUntil_) return;
+
+  const int boxW = TFT_W - 40;
+  const int boxH = 32;
+  const int x = (TFT_W - boxW) / 2;
+  const int y = (TFT_H - boxH) / 2;
+
+  tft.fillRoundRect(x, y, boxW, boxH, 6, TFT_BLACK);
+  tft.drawRoundRect(x, y, boxW, boxH, 6, TFT_YELLOW);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.drawString(toastText_, TFT_W/2, TFT_H/2, 2);
 }
 
 // ---- App-Lebenszyklus ----
@@ -72,7 +143,13 @@ void SlideshowApp::showCurrent_() {
 void SlideshowApp::init() {
   files_.clear();
   idx_ = 0;
-  lastSwitch_ = 0;
+  timeSinceSwitch_ = 0;
+  auto_mode = true;  // Start immer im Auto-Slide
+  osdOverride_.clear();
+  osdOverrideUntil_ = 0;
+  toastText_.clear();
+  toastUntil_ = 0;
+  applyDwell_();
 
   File root = SD.open(dir.c_str());
   if (!root || !root.isDirectory()) {
@@ -100,19 +177,34 @@ void SlideshowApp::init() {
   // Beim Start sofort erstes Bild anzeigen (falls vorhanden)
   if (!files_.empty()) {
     showCurrent_();
-    lastSwitch_ = millis();
+    timeSinceSwitch_ = 0;
     // idx_ bleibt auf 0; Auto-Advance übernimmt tick()
   }
 }
 
-void SlideshowApp::tick(uint32_t /*delta_ms*/) {
-  if (files_.empty()) return;
+void SlideshowApp::tick(uint32_t delta_ms) {
+  uint32_t now = millis();
 
-  // Nur automatisch weiterschalten, wenn Auto-Modus aktiv ist
-  if (auto_mode && (millis() - lastSwitch_ >= dwell_ms)) {
-    idx_ = (idx_ + 1) % files_.size();
-    showCurrent_();
-    lastSwitch_ = millis();
+  if (osdOverrideUntil_ && now >= osdOverrideUntil_) {
+    osdOverrideUntil_ = 0;
+    osdOverride_.clear();
+    showModeOsd_();
+  }
+
+  if (toastUntil_ && now >= toastUntil_) {
+    toastUntil_ = 0;
+    if (!files_.empty()) {
+      showCurrent_();
+    } else {
+      showModeOsd_();
+    }
+  }
+
+  if (files_.empty() || !auto_mode) return;
+
+  timeSinceSwitch_ += delta_ms;
+  if (timeSinceSwitch_ >= dwell_ms) {
+    advance_(+1);
   }
 }
 
@@ -121,28 +213,32 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
 
   switch (e) {
     case BtnEvent::Single: // nächstes Bild
-      idx_ = (idx_ + 1) % files_.size();
-      showCurrent_();
-      lastSwitch_ = millis();
+      advance_(+1);
       break;
 
-    case BtnEvent::Double: // vorheriges Bild
-      idx_ = (idx_ + files_.size() - 1) % files_.size();
+    case BtnEvent::Double: // dwell-Zeit zyklisch erhöhen
+      dwellIdx_ = (dwellIdx_ + 1) % kDwellSteps.size();
+      applyDwell_();
+      timeSinceSwitch_ = 0;
+      setOsdOverride_(String("AUTO ") + dwellLabel_(), 1000);
+      showToast_(String("AUTO ") + dwellLabel_(), 1000);
       showCurrent_();
-      lastSwitch_ = millis();
+      Serial.printf("[Slideshow] dwell=%lu ms\n", (unsigned long)dwell_ms);
       break;
 
     case BtnEvent::Triple: // Dateiname toggeln
       show_filename = !show_filename;
       showCurrent_();
-      lastSwitch_ = millis();
+      timeSinceSwitch_ = 0;
       break;
 
     case BtnEvent::Long: // Moduswechsel: AUTO <-> MANUAL
       auto_mode = !auto_mode;
-      // OSD aktualisieren; Timer resetten, damit AUTO nicht sofort triggert
-      showModeOsd_();
-      lastSwitch_ = millis();
+      // Komplettes Bild inkl. OSD neu zeichnen, damit kein schwarzer Balken bleibt
+      osdOverrideUntil_ = 0;
+      osdOverride_.clear();
+      showCurrent_();
+      timeSinceSwitch_ = 0;
       Serial.printf("[Slideshow] Mode: %s\n", auto_mode ? "AUTO" : "MANUAL");
       break;
 
@@ -158,4 +254,3 @@ void SlideshowApp::draw() {
 void SlideshowApp::shutdown() {
   files_.clear();
 }
-

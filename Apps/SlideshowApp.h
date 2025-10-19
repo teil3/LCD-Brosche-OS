@@ -6,7 +6,7 @@
 class SlideshowApp : public App {
 public:
   String dir = "/";
-  uint32_t dwell_ms = 2000;
+  uint32_t dwell_ms = 5000;
   bool show_filename = true;
 
   // NEU:
@@ -22,12 +22,23 @@ public:
 private:
   std::vector<String> files_;
   size_t idx_ = 0;
-  uint32_t lastSwitch_ = 0;
+  uint32_t timeSinceSwitch_ = 0;
+  uint8_t dwellIdx_ = 1; // 0=1s,1=5s,2=10s,3=30s,4=300s
+  String osdOverride_;
+  uint32_t osdOverrideUntil_ = 0;
+  String toastText_;
+  uint32_t toastUntil_ = 0;
 
   void showCurrent_();
   bool isJpeg_(const String& n);
+  void advance_(int step);
+  void applyDwell_();
+  void setOsdOverride_(const String& txt, uint32_t duration_ms);
+  String dwellLabel_() const;
+  String modeLabel_() const;
+  void showToast_(const String& txt, uint32_t duration_ms);
+  void drawToastIfActive_();
 
   // NEU: kleines OSD für Modus-Anzeige
   void showModeOsd_();
 };
-

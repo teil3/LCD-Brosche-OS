@@ -11,8 +11,8 @@ inline constexpr int TFT_CS_PIN    = 5;
 inline constexpr int TFT_BL_PIN    = 22;
 
 // --- Buttons ---
-inline constexpr int BTN1_PIN = 32;
-inline constexpr int BTN2_PIN = 35;
+inline constexpr int BTN1_PIN = 19;
+inline constexpr int BTN2_PIN = 4;
 
 // --- Display ---
 inline constexpr uint16_t TFT_W = 240;
@@ -28,4 +28,3 @@ inline constexpr uint16_t LONG_MS        = 600;
 inline constexpr uint32_t BOOT_MS = 5000;
 
 #endif // CONFIG_H
-
