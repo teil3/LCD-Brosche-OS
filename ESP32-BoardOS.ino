@@ -84,4 +84,5 @@ void loop() {
 #include "Core/Buttons.cpp"
 #include "Core/AppManager.cpp"
 #include "Core/Gfx.cpp"
+#include "Core/TinyFont.cpp"
 #include "Apps/SlideshowApp.cpp"

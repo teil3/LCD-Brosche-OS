@@ -24,8 +24,6 @@ private:
   size_t idx_ = 0;
   uint32_t timeSinceSwitch_ = 0;
   uint8_t dwellIdx_ = 1; // 0=1s,1=5s,2=10s,3=30s,4=300s
-  String osdOverride_;
-  uint32_t osdOverrideUntil_ = 0;
   String toastText_;
   uint32_t toastUntil_ = 0;
 
@@ -33,12 +31,9 @@ private:
   bool isJpeg_(const String& n);
   void advance_(int step);
   void applyDwell_();
-  void setOsdOverride_(const String& txt, uint32_t duration_ms);
   String dwellLabel_() const;
   String modeLabel_() const;
+  String dwellToastLabel_() const;
   void showToast_(const String& txt, uint32_t duration_ms);
-  void drawToastIfActive_();
-
-  // NEU: kleines OSD für Modus-Anzeige
-  void showModeOsd_();
+  void drawToastOverlay_();
 };

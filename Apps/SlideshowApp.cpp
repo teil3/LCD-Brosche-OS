@@ -7,6 +7,7 @@
 
 #include "Core/Gfx.h"
 #include "Config.h"
+#include "Core/TinyFont.h"
 
 // ---- intern ----
 
@@ -17,22 +18,6 @@ constexpr std::array<uint32_t, 5> kDwellSteps{1000, 5000, 10000, 30000, 300000};
 bool SlideshowApp::isJpeg_(const String& n) {
   String l = n; l.toLowerCase();
   return l.endsWith(".jpg") || l.endsWith(".jpeg");
-}
-
-void SlideshowApp::showModeOsd_() {
-  // Kleine Statuszeile oben mit dem aktuellen Modus oder Override
-  const uint32_t now = millis();
-  const bool useOverride = osdOverrideUntil_ && (now < osdOverrideUntil_);
-  if (!useOverride && osdOverrideUntil_) {
-    osdOverrideUntil_ = 0;
-    osdOverride_.clear();
-  }
-
-  String txt = useOverride ? osdOverride_ : modeLabel_();
-  tft.fillRect(0, 0, TFT_W, 18, TFT_BLACK);
-  tft.setTextDatum(TC_DATUM);
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.drawString(txt, TFT_W/2, 2, 2);
 }
 
 void SlideshowApp::showCurrent_() {
@@ -62,21 +47,18 @@ void SlideshowApp::showCurrent_() {
     return;
   }
 
-  // Modus-OSD oben
-  showModeOsd_();
-
-  // Dateiname unten (optional)
+  // Dateiname unten (optional) – transparent Overlay mit Outline
   if (show_filename) {
-    tft.fillRect(0, TFT_H-18, TFT_W, 18, TFT_BLACK);
-    tft.setTextDatum(BC_DATUM);
     String base = path;
     int sidx = base.lastIndexOf('/');
     if (sidx >= 0) base = base.substring(sidx+1);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawString(base, TFT_W/2, TFT_H-2, 2);
+    uint8_t scale = 2;
+    int16_t y = TFT_H - TinyFont::glyphHeight(scale) - 4;
+    if (y < 0) y = 0;
+    TinyFont::drawStringOutlineCentered(tft, y, base, TFT_BLACK, TFT_WHITE, scale);
   }
 
-  drawToastIfActive_();
+  drawToastOverlay_();
 
   Serial.printf("[Slideshow] OK: %s\n", path.c_str());
 }
@@ -100,11 +82,6 @@ void SlideshowApp::applyDwell_() {
   dwell_ms = kDwellSteps[dwellIdx_];
 }
 
-void SlideshowApp::setOsdOverride_(const String& txt, uint32_t duration_ms) {
-  osdOverride_ = txt;
-  osdOverrideUntil_ = millis() + duration_ms;
-}
-
 String SlideshowApp::dwellLabel_() const {
   if (dwell_ms % 60000 == 0) {
     return String(dwell_ms / 60000) + "m";
@@ -117,25 +94,29 @@ String SlideshowApp::modeLabel_() const {
   return String("AUTO ") + dwellLabel_();
 }
 
+String SlideshowApp::dwellToastLabel_() const {
+  return String("Delay ") + dwellLabel_();
+}
+
 void SlideshowApp::showToast_(const String& txt, uint32_t duration_ms) {
   toastText_ = txt;
   toastUntil_ = millis() + duration_ms;
+  drawToastOverlay_();
 }
 
-void SlideshowApp::drawToastIfActive_() {
+void SlideshowApp::drawToastOverlay_() {
   if (!toastUntil_) return;
-  if (millis() >= toastUntil_) return;
+  if (millis() >= toastUntil_) {
+    toastUntil_ = 0;
+    toastText_.clear();
+    return;
+  }
 
-  const int boxW = TFT_W - 40;
-  const int boxH = 32;
-  const int x = (TFT_W - boxW) / 2;
-  const int y = (TFT_H - boxH) / 2;
-
-  tft.fillRoundRect(x, y, boxW, boxH, 6, TFT_BLACK);
-  tft.drawRoundRect(x, y, boxW, boxH, 6, TFT_YELLOW);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.drawString(toastText_, TFT_W/2, TFT_H/2, 2);
+  uint8_t scale = 3;
+  int16_t textY = (TFT_H - TinyFont::glyphHeight(scale)) / 2;
+  if (textY < 0) textY = 0;
+  TinyFont::drawStringOutlineCentered(tft, textY, toastText_, TFT_BLACK, TFT_WHITE,
+                                      scale);
 }
 
 // ---- App-Lebenszyklus ----
@@ -145,8 +126,6 @@ void SlideshowApp::init() {
   idx_ = 0;
   timeSinceSwitch_ = 0;
   auto_mode = true;  // Start immer im Auto-Slide
-  osdOverride_.clear();
-  osdOverrideUntil_ = 0;
   toastText_.clear();
   toastUntil_ = 0;
   applyDwell_();
@@ -178,6 +157,7 @@ void SlideshowApp::init() {
   if (!files_.empty()) {
     showCurrent_();
     timeSinceSwitch_ = 0;
+    showToast_(modeLabel_(), 1000);
     // idx_ bleibt auf 0; Auto-Advance übernimmt tick()
   }
 }
@@ -185,19 +165,10 @@ void SlideshowApp::init() {
 void SlideshowApp::tick(uint32_t delta_ms) {
   uint32_t now = millis();
 
-  if (osdOverrideUntil_ && now >= osdOverrideUntil_) {
-    osdOverrideUntil_ = 0;
-    osdOverride_.clear();
-    showModeOsd_();
-  }
-
   if (toastUntil_ && now >= toastUntil_) {
     toastUntil_ = 0;
-    if (!files_.empty()) {
-      showCurrent_();
-    } else {
-      showModeOsd_();
-    }
+    toastText_.clear();
+    if (!files_.empty()) showCurrent_();
   }
 
   if (files_.empty() || !auto_mode) return;
@@ -220,9 +191,7 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
       dwellIdx_ = (dwellIdx_ + 1) % kDwellSteps.size();
       applyDwell_();
       timeSinceSwitch_ = 0;
-      setOsdOverride_(String("AUTO ") + dwellLabel_(), 1000);
-      showToast_(String("AUTO ") + dwellLabel_(), 1000);
-      showCurrent_();
+      showToast_(dwellToastLabel_(), 1000);
       Serial.printf("[Slideshow] dwell=%lu ms\n", (unsigned long)dwell_ms);
       break;
 
@@ -234,10 +203,7 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
 
     case BtnEvent::Long: // Moduswechsel: AUTO <-> MANUAL
       auto_mode = !auto_mode;
-      // Komplettes Bild inkl. OSD neu zeichnen, damit kein schwarzer Balken bleibt
-      osdOverrideUntil_ = 0;
-      osdOverride_.clear();
-      showCurrent_();
+      showToast_(modeLabel_(), 1000);
       timeSinceSwitch_ = 0;
       Serial.printf("[Slideshow] Mode: %s\n", auto_mode ? "AUTO" : "MANUAL");
       break;
