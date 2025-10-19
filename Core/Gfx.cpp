@@ -1,0 +1,73 @@
+#include "Gfx.h"
+
+TFT_eSPI tft;
+SPIClass sdSPI(VSPI);
+
+static bool g_backlight = true;
+
+static bool tft_output_cb(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
+  if (x >= tft.width() || y >= tft.height()) return false;
+  tft.pushImage(x, y, w, h, bitmap);
+  return true;
+}
+
+void setBacklight(bool on) {
+  g_backlight = on;
+  pinMode(TFT_BL_PIN, OUTPUT);
+  digitalWrite(TFT_BL_PIN, on ? HIGH : LOW);
+}
+
+bool backlightOn() { return g_backlight; }
+
+void gfxBegin() {
+  // Backlight an + CS-Leitungen sicher HIGH
+  setBacklight(true);
+  pinMode(TFT_CS_PIN, OUTPUT); digitalWrite(TFT_CS_PIN, HIGH);
+  pinMode(SD_CS_PIN,  OUTPUT); digitalWrite(SD_CS_PIN,  HIGH);
+
+  // --- SD zuerst, konservativ wie im funktionierenden Sketch ---
+  sdSPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SD_CS_PIN);
+
+  // während SD-Init: Display sicher deselektiert lassen
+  digitalWrite(TFT_CS_PIN, HIGH);
+  bool sd_ok = SD.begin(SD_CS_PIN, sdSPI, 5000000);     // 5 MHz
+  if (!sd_ok) {
+    Serial.println("[GFX] SD @5MHz FAIL, retry @2MHz");
+    sd_ok = SD.begin(SD_CS_PIN, sdSPI, 2000000);        // Fallback 2 MHz
+  }
+  if (!sd_ok) {
+    Serial.println("[GFX] SD init FAILED");
+  } else {
+    // Mini-Diagnose
+    uint8_t type = SD.cardType();
+    Serial.printf("[GFX] SD OK, type=%u\n", type);
+    File root = SD.open("/");
+    if (root) {
+      int shown = 0;
+      for (File f = root.openNextFile(); f && shown < 5; f = root.openNextFile(), ++shown) {
+        Serial.printf("[GFX] /%s%s\n", f.isDirectory()?"<DIR> ":"", f.name());
+      }
+    }
+  }
+
+  // --- TFT danach ---
+  tft.init();
+  tft.setRotation(0);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextDatum(MC_DATUM);
+
+  // kurzer Selbsttest
+  tft.fillScreen(TFT_RED);   delay(120);
+  tft.fillScreen(TFT_GREEN); delay(120);
+  tft.fillScreen(TFT_BLUE);  delay(120);
+  tft.fillScreen(TFT_BLACK);
+
+  // JPEG-Decoder (nach TFT, aber unabhängig vom SD-Init)
+  TJpgDec.setCallback(tft_output_cb);
+  TJpgDec.setSwapBytes(true);
+
+  Serial.println("[GFX] init ok");
+}
+
+
+
