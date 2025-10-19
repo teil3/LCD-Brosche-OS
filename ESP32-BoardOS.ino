@@ -5,6 +5,9 @@
 #include "Core/Buttons.h"
 #include "Core/AppManager.h"
 #include "Apps/SlideshowApp.h"
+#include "Apps/RandomSmallPixelIntoneApp.h"
+#include "Apps/RandomPixelIntoneApp.h"
+#include "Apps/RandomChaoticLinesApp.h"
 
 // Buttons
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
@@ -23,6 +26,9 @@ static const char* btnEventName(BtnEvent e) {
 // Apps
 AppManager appman;
 SlideshowApp app_slideshow;
+RandomSmallPixelIntoneApp app_pixel_field;
+RandomPixelIntoneApp app_pixel_blocks;
+RandomChaoticLinesApp app_random_lines;
 
 void setup() {
   Serial.begin(115200);
@@ -41,6 +47,9 @@ void setup() {
   Serial.println("[BOOT] buttons ready");
 
   appman.add(&app_slideshow);
+  appman.add(&app_pixel_field);
+  appman.add(&app_pixel_blocks);
+  appman.add(&app_random_lines);
   appman.begin();
   Serial.println("[BOOT] appman.begin done");
 }
@@ -86,3 +95,6 @@ void loop() {
 #include "Core/Gfx.cpp"
 #include "Core/TinyFont.cpp"
 #include "Apps/SlideshowApp.cpp"
+#include "Apps/RandomSmallPixelIntoneApp.cpp"
+#include "Apps/RandomPixelIntoneApp.cpp"
+#include "Apps/RandomChaoticLinesApp.cpp"
