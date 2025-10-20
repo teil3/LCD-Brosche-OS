@@ -1,5 +1,7 @@
 # ESP32 Board OS
 
+<img src="docs/LCD-Brosche-Ansicht.png" alt="Board overview" width="50%">
+
 Kompaktes Firmware-Projekt fuer ein ESP32-Devboard mit rundem GC9A01-TFT (240x240) und SD-Karte. Die Firmware stellt einen einfachen App-Manager bereit, der mehrere eigenstaendige Apps kapselt (z. B. eine Slideshow) und ueber zwei Hardware-Tasten gesteuert wird.
 
 ## Hardware
@@ -57,10 +59,10 @@ arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200
 - [`docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf`](<docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf>) - Boarddatenblatt und Anschlussplan
 
 ### Hardwaregalerie
-![Frontansicht mit Buttons](docs/LCD-Brosche-vorne-Knoepfe.png)
-![Linke Seite mit SD-Karte](docs/LCD-Brosche-links-SD-Card.png)
-![Unterseite mit USB-C](docs/LCD-Brosche-unten-USB-C.png)
-![Oberseite mit Anhaenger](docs/LCD-Brosche-oben-Anhaenger.png)
+<img src="docs/LCD-Brosche-vorne-Knoepfe.png" alt="Front view with buttons" width="50%">
+<img src="docs/LCD-Brosche-links-SD-Card.png" alt="Left side with SD slot" width="50%">
+<img src="docs/LCD-Brosche-unten-USB-C.png" alt="Bottom with USB-C" width="50%">
+<img src="docs/LCD-Brosche-oben-Anhaenger.png" alt="Top with hanger" width="50%">
 
 ## Mitwirken & Naechste Schritte
 - Weitere Apps koennen als `Apps/<Name>App.h/.cpp` hinzugefuegt und in `ESP32-BoardOS.ino` registriert werden.
