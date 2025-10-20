@@ -54,11 +54,13 @@ arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200
 - Medien muessen im JPEG-Format mit korrekter SOI-Signatur (`0xFF 0xD8`) vorliegen.
 
 ## Dokumentation
-- `docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf` - Boarddatenblatt und Anschlussplan
-- `docs/LCD-Brosche-vorne-Knoepfe.png` - Frontansicht mit Button-Markierungen
-- `docs/LCD-Brosche-links-SD-Card.png` - Seitenansicht mit SD-Kartenfach
-- `docs/LCD-Brosche-unten-USB-C.png` - Unterseite mit USB-C-Anschluss
-- `docs/LCD-Brosche-oben-Anhaenger.png` - Aufhaengepunkt bzw. Befestigung
+- [`docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf`](<docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf>) - Boarddatenblatt und Anschlussplan
+
+### Hardwaregalerie
+![Frontansicht mit Buttons](docs/LCD-Brosche-vorne-Knoepfe.png)
+![Linke Seite mit SD-Karte](docs/LCD-Brosche-links-SD-Card.png)
+![Unterseite mit USB-C](docs/LCD-Brosche-unten-USB-C.png)
+![Oberseite mit Anhaenger](docs/LCD-Brosche-oben-Anhaenger.png)
 
 ## Mitwirken & Naechste Schritte
 - Weitere Apps koennen als `Apps/<Name>App.h/.cpp` hinzugefuegt und in `ESP32-BoardOS.ino` registriert werden.
