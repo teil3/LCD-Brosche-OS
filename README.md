@@ -1,8 +1,8 @@
-# ESP32 Board OS
+# ESP32 LCD-Brosche Board OS
 
 <img src="docs/LCD-Brosche-Ansicht.png" alt="Board overview" width="50%">
 
-Kompaktes Firmware-Projekt fuer ein ESP32-Devboard mit rundem GC9A01-TFT (240x240) und SD-Karte. Die Firmware stellt einen einfachen App-Manager bereit, der mehrere eigenstaendige Apps kapselt (z. B. eine Slideshow) und ueber zwei Hardware-Tasten gesteuert wird.
+Kompaktes Firmware-Projekt fuer eine tragbare LCD-Brosche: Ein schmuckartiges ESP32-Devboard mit rundem GC9A01-TFT (240x240) und SD-Karte. Die Firmware stellt einen einfachen App-Manager bereit, der mehrere eigenstaendige Apps kapselt (z. B. eine Slideshow) und ueber zwei Hardware-Tasten gesteuert wird.
 
 ## Hardware
 - ESP32 (D0WD-V3 oder kompatibel)
@@ -10,6 +10,7 @@ Kompaktes Firmware-Projekt fuer ein ESP32-Devboard mit rundem GC9A01-TFT (240x24
 - Micro-SD-Kartenslot
 - Zwei Taster (BTN1=GPIO32, BTN2=GPIO33 oder GPIO35 ohne internen Pull-up)
 - Pins laut `Config.h` (nicht aendern, ohne Ruecksprache):<br>`SCK=14`, `MOSI=15`, `MISO=2`, `SD_CS=13`, `TFT_CS=5`, `TFT_BL=22`
+- Schmuck-tauglicher Formfaktor als Brosche mit Anhaengepunkt
 
 ## Projektaufbau
 - `ESP32-BoardOS.ino` - Einstiegspunkt, Hardware-Setup, App-Registrierung
