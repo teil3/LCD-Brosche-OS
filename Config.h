@@ -25,6 +25,6 @@ inline constexpr uint16_t TRIPLE_GAP_MS  = 350;
 inline constexpr uint16_t LONG_MS        = 600;
 
 // --- Boot ---
-inline constexpr uint32_t BOOT_MS = 5000;
+inline constexpr uint32_t BOOT_MS = 1000;
 
 #endif // CONFIG_H

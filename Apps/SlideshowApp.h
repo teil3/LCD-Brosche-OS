@@ -53,6 +53,12 @@ private:
   uint8_t copyConfirmSelection_ = 1; // 0=Nein, 1=Ja
   bool copyConfirmDirty_ = true;
   uint8_t copyConfirmLastSelection_ = 255;
+  bool copyOverlayNeedsClear_ = true;
+  uint32_t copyHeaderChecksum_ = 0;
+  uint16_t copyBarFill_ = 0;
+  bool copyHintDrawn_ = false;
+  bool copyToastActive_ = false;
+  String copyLastToast_;
   bool storageMenuDirty_ = true;
   String storageMenuLastSource_;
   String storageMenuLastFooter_;
@@ -89,6 +95,7 @@ private:
   bool readDirectoryEntries_(fs::FS* fs, const String& basePath, std::vector<String>& out);
   bool prepareCopyQueue_();
   bool ensureFlashReady_();
+  bool ensureSdReady_();
   void markStorageMenuDirty_();
   void markCopyConfirmDirty_();
 };

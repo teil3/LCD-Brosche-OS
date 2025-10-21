@@ -59,6 +59,7 @@ void setup() {
   gfxBegin();
   Serial.println("[BOOT] gfxBegin done");
 
+  Serial.printf("[BOOT] BOOT_MS=%u\n", BOOT_MS);
   drawBootLogo(tft, BOOT_MS);
   Serial.println("[BOOT] bootlogo done");
 

@@ -107,12 +107,6 @@ void SlideshowApp::exitStorageMenu_() {
 
 void SlideshowApp::requestCopy_() {
   if (copyState_ == CopyState::Running) return;
-  if (dir.isEmpty()) return;
-  if (source_ != SlideSource::SDCard) {
-    showToast_("Quelle zuerst SD waehlen", kToastShortMs);
-    return;
-  }
-
   copyState_ = CopyState::Confirm;
   copyAbortRequest_ = false;
   copyConfirmSelection_ = 1; // Ja vorauswaehlen
@@ -145,6 +139,23 @@ bool SlideshowApp::ensureFlashReady_() {
   return true;
 }
 
+bool SlideshowApp::ensureSdReady_() {
+  if (SD.cardType() != CARD_NONE) {
+    return true;
+  }
+
+  digitalWrite(TFT_CS_PIN, HIGH);
+  bool ok = SD.begin(SD_CS_PIN, sdSPI, 5000000);
+  if (!ok) {
+    Serial.println("[Slideshow] SD init retry @2MHz");
+    ok = SD.begin(SD_CS_PIN, sdSPI, 2000000);
+  }
+  if (!ok) {
+    Serial.println("[Slideshow] SD init failed");
+  }
+  return ok;
+}
+
 bool SlideshowApp::prepareCopyQueue_() {
   copyQueue_.clear();
   copyQueueIndex_ = 0;
@@ -153,6 +164,10 @@ bool SlideshowApp::prepareCopyQueue_() {
   copyFileBytesDone_ = 0;
   copyAbortRequest_ = false;
   closeCopyFiles_();
+
+  if (!ensureSdReady_()) {
+    return false;
+  }
   std::vector<String> sdFiles;
   if (!readDirectoryEntries_(&SD, dir, sdFiles)) {
     Serial.printf("[Slideshow] prepareCopyQueue: readDirectoryEntries failed for '%s'\n", dir.c_str());
@@ -223,6 +238,12 @@ void SlideshowApp::beginCopy_() {
   auto_mode = false;
   controlMode_ = ControlMode::StorageMenu;
   tft.fillScreen(TFT_BLACK);
+  copyOverlayNeedsClear_ = true;
+  copyHeaderChecksum_ = 0xFFFFFFFFu;
+  copyBarFill_ = 0;
+  copyHintDrawn_ = false;
+  copyToastActive_ = false;
+  copyLastToast_.clear();
   drawCopyOverlay_();
 }
 
@@ -240,6 +261,12 @@ void SlideshowApp::finalizeCopy_(CopyState state, const String& message) {
   copyFileBytesDone_ = 0;
   copyAbortRequest_ = false;
   copyState_ = CopyState::Idle;
+  copyOverlayNeedsClear_ = true;
+  copyHeaderChecksum_ = 0xFFFFFFFFu;
+  copyBarFill_ = 0;
+  copyHintDrawn_ = false;
+  copyToastActive_ = false;
+  copyLastToast_.clear();
   markCopyConfirmDirty_();
 
   if (!message.isEmpty()) {
@@ -248,7 +275,7 @@ void SlideshowApp::finalizeCopy_(CopyState state, const String& message) {
 
   if (state == CopyState::Done) {
     setSource_(SlideSource::Flash, false);
-    showToast_("Kopie fertig – Quelle Flash", kCopyDoneToastMs);
+    showToast_("Fertig kopiert", kCopyDoneToastMs);
   }
 }
 
@@ -455,33 +482,89 @@ void SlideshowApp::drawToastOverlay_() {
 void SlideshowApp::drawCopyOverlay_() {
   if (copyState_ != CopyState::Running) return;
 
-  tft.fillRect(0, 0, TFT_W, TFT_H, TFT_BLACK);
+  const uint32_t now = millis();
+  bool headerChanged = false;
+  bool progressChanged = false;
 
   const size_t totalFiles = copyQueue_.size();
   const size_t displayedIndex = std::min(copyQueueIndex_ + (copySrc_ ? 1u : 0u), totalFiles);
 
-  String header = String("Kopiere ") + String(displayedIndex) + "/" + String(totalFiles);
-  TextRenderer::drawCentered(24, header, TFT_WHITE, TFT_BLACK);
-
-  String hint = String("BTN2 Long = Abbrechen");
-  TextRenderer::drawCentered(24 + TextRenderer::lineHeight() + 14, hint, TFT_WHITE, TFT_BLACK);
-
+  int16_t headerY = 52;
   int16_t barWidth = TFT_W - 40;
   int16_t barHeight = 20;
   int16_t barX = (TFT_W - barWidth) / 2;
-  int16_t barY = (TFT_H / 2) + 2; // 8px weiter nach oben
+  int16_t barY = (TFT_H / 2) - 6;
 
-  tft.drawRect(barX, barY, barWidth, barHeight, TFT_WHITE);
+  uint32_t headerChecksum = ((static_cast<uint32_t>(displayedIndex) & 0xFFFF) << 16) |
+                           (static_cast<uint32_t>(totalFiles) & 0xFFFF);
   float progress = (copyBytesTotal_ == 0) ? 0.0f : static_cast<float>(copyBytesDone_) / static_cast<float>(copyBytesTotal_);
   progress = std::min(std::max(progress, 0.0f), 1.0f);
-  int16_t fill = static_cast<int16_t>((barWidth - 2) * progress);
-  if (fill > 0) {
-    tft.fillRect(barX + 1, barY + 1, fill, barHeight - 2, TFT_WHITE);
+  uint16_t progressFill = static_cast<uint16_t>((barWidth - 2) * progress);
+  if (progressFill < copyBarFill_) {
+    progressFill = copyBarFill_;
   }
 
-  if (toastUntil_ && millis() < toastUntil_) {
-    TextRenderer::drawCentered(barY + barHeight + 18, toastText_, TFT_WHITE, TFT_BLACK);
+  if (copyOverlayNeedsClear_) {
+    tft.fillScreen(TFT_BLACK);
+    copyOverlayNeedsClear_ = false;
+    headerChanged = true;
+    progressChanged = true;
   }
+
+  if (headerChecksum != copyHeaderChecksum_) {
+    headerChanged = true;
+    copyHeaderChecksum_ = headerChecksum;
+  }
+
+  uint16_t fillDelta = (progressFill > copyBarFill_) ? (progressFill - copyBarFill_) : 0;
+  if (progressFill != copyBarFill_) {
+    progressChanged = true;
+  }
+  if (!progressChanged) {
+    // force repaint each frame to avoid stale fill when queue started anew
+    progressChanged = true;
+  }
+
+  if (headerChanged) {
+    tft.fillRect(0, headerY - 6, TFT_W, TextRenderer::lineHeight() * 2 + 44, TFT_BLACK);
+    String header = String("Kopiere ") + String(displayedIndex) + "/" + String(totalFiles);
+    TextRenderer::drawCentered(headerY, header, TFT_WHITE, TFT_BLACK);
+  }
+
+  if (progressChanged) {
+    tft.drawRect(barX, barY, barWidth, barHeight, TFT_WHITE);
+    tft.fillRect(barX + 1, barY + 1, barWidth - 2, barHeight - 2, TFT_BLACK);
+    if (progressFill > 0) {
+      tft.fillRect(barX + 1, barY + 1, progressFill, barHeight - 2, TFT_WHITE);
+    }
+    copyBarFill_ = progressFill;
+  }
+
+  const int16_t textTop = barY + barHeight + 10;
+  const int16_t hintY = textTop + TextRenderer::lineHeight() - 15;
+  const bool toastActive = toastUntil_ && now < toastUntil_;
+  const bool toastChanged = (toastActive != copyToastActive_) || (toastActive && toastText_ != copyLastToast_);
+
+  if (toastChanged) {
+    tft.fillRect(0, textTop - 4, TFT_W, TextRenderer::lineHeight() * 2 + 24, TFT_BLACK);
+    copyHintDrawn_ = false;
+  }
+
+  if (toastActive) {
+    if (toastChanged || !copyToastActive_) {
+      TextRenderer::drawCentered(textTop, toastText_, TFT_WHITE, TFT_BLACK);
+    }
+    copyLastToast_ = toastText_;
+  } else if (toastChanged) {
+    copyLastToast_.clear();
+  }
+
+  if (!copyHintDrawn_) {
+    TextRenderer::drawCentered(hintY, "Lang: Abbrechen", TFT_WHITE, TFT_BLACK);
+    copyHintDrawn_ = true;
+  }
+
+  copyToastActive_ = toastActive;
 }
 
 void SlideshowApp::drawCopyConfirmOverlay_() {
@@ -495,16 +578,16 @@ void SlideshowApp::drawCopyConfirmOverlay_() {
   tft.fillScreen(TFT_BLACK);
 
   const int16_t line = TextRenderer::lineHeight();
-  const int16_t top = 16;
+  const int16_t top = 26;
   TextRenderer::drawCentered(top, "SD", TFT_WHITE, TFT_BLACK);
   TextRenderer::drawCentered(top + line, "kopieren", TFT_WHITE, TFT_BLACK);
 
   String options = (copyConfirmSelection_ == 0) ? String("> Nein    Ja")
                                                : String("Nein    > Ja");
-  TextRenderer::drawCentered(top + line * 2 + 6, options, TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line * 2 + 16, options, TFT_WHITE, TFT_BLACK);
 
-  TextRenderer::drawCentered(top + line * 3 + 18, "Single: Wechseln", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(top + line * 4 + 18, "Long: Bestaetigen", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line * 3 + 28, "Klick: Wechseln", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line * 4 + 28, "Lang: Bestaetigen", TFT_WHITE, TFT_BLACK);
 }
 
 void SlideshowApp::drawStorageMenuOverlay_() {
@@ -534,7 +617,7 @@ void SlideshowApp::drawStorageMenuOverlay_() {
 
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 10;
-  const int16_t top = 12;
+  const int16_t top = 22;
   const int16_t sourceY = top + line + spacing;
   const int16_t singleY = sourceY + line + spacing;
   const int16_t doubleY = singleY + line + spacing;
@@ -542,8 +625,8 @@ void SlideshowApp::drawStorageMenuOverlay_() {
 
   TextRenderer::drawCentered(top, "Setup", TFT_WHITE, TFT_BLACK);
   TextRenderer::drawCentered(sourceY, sourceLine, TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(singleY, "Single: Quelle", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(doubleY, "Double: Kopieren", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(singleY, "Klick: Quelle", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(doubleY, "Doppel: Kopieren", TFT_WHITE, TFT_BLACK);
   TextRenderer::drawCentered(footerY, footerLine, TFT_WHITE, TFT_BLACK);
 }
 
@@ -595,6 +678,9 @@ bool SlideshowApp::rebuildFileListFrom_(SlideSource src) {
 }
 
 bool SlideshowApp::rebuildFileList_() {
+  if (source_ == SlideSource::SDCard && !ensureSdReady_()) {
+    Serial.println("[Slideshow] rebuild: SD not ready");
+  }
   if (rebuildFileListFrom_(source_)) {
     idx_ = 0;
     return true;
@@ -609,7 +695,7 @@ bool SlideshowApp::rebuildFileList_() {
     }
   }
 
-  if (source_ == SlideSource::Flash && rebuildFileListFrom_(SlideSource::SDCard)) {
+  if (source_ == SlideSource::Flash && ensureSdReady_() && rebuildFileListFrom_(SlideSource::SDCard)) {
     source_ = SlideSource::SDCard;
     idx_ = 0;
     return true;
@@ -730,7 +816,7 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
 
     case BtnEvent::Triple:
       if (controlMode_ == ControlMode::StorageMenu) {
-        showToast_("Long: Modus verlassen", kToastShortMs);
+        showToast_("Lang: Modus verlassen", kToastShortMs);
       } else {
         show_filename = !show_filename;
         showCurrent_();

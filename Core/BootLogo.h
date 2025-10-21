@@ -298,6 +298,9 @@ static const uint8_t schmucklogo_jpg[] PROGMEM = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Bootlogo zeichnen (zentriert) und optional für `ms` anzeigen
 inline void drawBootLogo(TFT_eSPI& tft, uint32_t ms) {
+  if (ms == 0) {
+    return;
+  }
   tft.fillScreen(TFT_BLACK);
 
   const int x = (int)((int)TFT_W - (int)SCHMUCKLOGO_WIDTH)  / 2 - 3;
