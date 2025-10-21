@@ -20,10 +20,10 @@ SCK=14, MOSI=15, MISO=2, SD_CS=13, TFT_CS=5, TFT_BL=22. BTN1=32, BTN2=33/35 (35 
   - `arduino-cli core install esp32:esp32`
   - `arduino-cli lib install "TFT_eSPI" "TJpg_Decoder"`
 - **Kompilieren (Board-Beispiel):**
-  - `arduino-cli compile -b esp32:esp32:esp32 --build-property build.flash_size=16MB --build-property build.partitions=partitions.csv --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" --build-property compiler.c.extra_flags="-DSMOOTH_FONT" .`
+  - `arduino-cli compile -b esp32:esp32:esp32 --build-property build.flash_size=16MB --build-property build.partitions=partitions.csv --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" --build-property compiler.c.extra_flags="-DSMOOTH_FONT" --build-path build-16m .`
   - `arduino-cli compile -b esp32:esp32:esp32 --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" --build-property compiler.c.extra_flags="-DSMOOTH_FONT" .`
 - **Upload:**  
-  - `arduino-cli upload  -b esp32:esp32:esp32 -p /dev/ttyACM0`
+  - `arduino-cli upload  -b esp32:esp32:esp32 --input-dir build-16m -p /dev/ttyACM0`
 - **Hinweis:** Vor dem Upload muss die erste Compile-Zeile gelaufen sein, damit die 16 MB `partitions.csv` aktiv ist. Der Upload nutzt immer das zuletzt erzeugte Artefakt.
 - **Seriell (115200):**
   - `arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200`

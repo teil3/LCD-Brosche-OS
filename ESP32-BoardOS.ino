@@ -7,6 +7,7 @@
 #include "Core/AppManager.h"
 #include "Apps/SlideshowApp.h"
 #include "Apps/PixelFieldApp.h"
+#include "Apps/RandomImagerApp.h"
 #include "Apps/RandomPixelIntoneApp.h"
 #include "Apps/RandomChaoticLinesApp.h"
 #include "Apps/RandomStripesIntoneApp.h"
@@ -30,6 +31,7 @@ static const char* btnEventName(BtnEvent e) {
 AppManager appman;
 SlideshowApp app_slideshow;
 PixelFieldApp app_pixel_field;
+RandomImagerApp app_random_imager;
 RandomPixelIntoneApp app_pixel_blocks;
 RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
@@ -71,6 +73,7 @@ void setup() {
   appman.add(&app_pixel_blocks);
   appman.add(&app_random_lines);
   appman.add(&app_random_stripes);
+  appman.add(&app_random_imager);
   appman.begin();
   Serial.println("[BOOT] appman.begin done");
 }
@@ -118,6 +121,7 @@ void loop() {
 #include "Core/TextRenderer.cpp"
 #include "Apps/SlideshowApp.cpp"
 #include "Apps/PixelFieldApp.cpp"
+#include "Apps/RandomImagerApp.cpp"
 #include "Apps/RandomPixelIntoneApp.cpp"
 #include "Apps/RandomChaoticLinesApp.cpp"
 #include "Apps/RandomStripesIntoneApp.cpp"

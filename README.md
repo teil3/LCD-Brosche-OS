@@ -38,11 +38,12 @@ arduino-cli compile -b esp32:esp32:esp32 \
   --build-property build.flash_size=16MB \
   --build-property build.partitions=partitions.csv \
   --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" \
-  --build-property compiler.c.extra_flags="-DSMOOTH_FONT" .
+  --build-property compiler.c.extra_flags="-DSMOOTH_FONT" \
+  --build-path build-16m .
 arduino-cli compile -b esp32:esp32:esp32 \
   --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" \
   --build-property compiler.c.extra_flags="-DSMOOTH_FONT" .
-arduino-cli upload  -b esp32:esp32:esp32 -p /dev/ttyACM0
+arduino-cli upload  -b esp32:esp32:esp32 --input-dir build-16m -p /dev/ttyACM0
 arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 ```
 
