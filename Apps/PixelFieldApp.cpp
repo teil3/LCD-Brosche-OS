@@ -1,4 +1,4 @@
-#include "RandomSmallPixelIntoneApp.h"
+#include "PixelFieldApp.h"
 
 #include <esp_random.h>
 
@@ -18,13 +18,13 @@ uint16_t pack565(uint8_t r, uint8_t g, uint8_t b) {
 }
 }
 
-void RandomSmallPixelIntoneApp::reseedBaseColor_() {
+void PixelFieldApp::reseedBaseColor_() {
   base_r_ = rand8();
   base_g_ = rand8();
   base_b_ = rand8();
 }
 
-void RandomSmallPixelIntoneApp::driftBaseColor_() {
+void PixelFieldApp::driftBaseColor_() {
   auto clamp = [](int v) {
     if (v < 0) return 0;
     if (v > 255) return 255;
@@ -39,7 +39,7 @@ void RandomSmallPixelIntoneApp::driftBaseColor_() {
   base_b_ = static_cast<uint8_t>(clamp(base_b_ + randOffset()));
 }
 
-uint16_t RandomSmallPixelIntoneApp::randomColor_() const {
+uint16_t PixelFieldApp::randomColor_() const {
   auto clamp = [](int v) {
     if (v < 0) return 0;
     if (v > 255) return 255;
@@ -55,7 +55,7 @@ uint16_t RandomSmallPixelIntoneApp::randomColor_() const {
   return pack565(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
 }
 
-void RandomSmallPixelIntoneApp::drawBurst_() {
+void PixelFieldApp::drawBurst_() {
   for (uint16_t i = 0; i < kBurstPixels; ++i) {
     uint16_t x = esp_random() % TFT_W;
     uint16_t y = esp_random() % TFT_H;
@@ -65,14 +65,14 @@ void RandomSmallPixelIntoneApp::drawBurst_() {
   driftBaseColor_();
 }
 
-void RandomSmallPixelIntoneApp::init() {
+void PixelFieldApp::init() {
   timeAccum_ = 0;
   tft.fillScreen(TFT_BLACK);
   reseedBaseColor_();
   drawBurst_();
 }
 
-void RandomSmallPixelIntoneApp::tick(uint32_t delta_ms) {
+void PixelFieldApp::tick(uint32_t delta_ms) {
   timeAccum_ += delta_ms;
   while (timeAccum_ >= kBurstIntervalMs) {
     timeAccum_ -= kBurstIntervalMs;
@@ -80,7 +80,7 @@ void RandomSmallPixelIntoneApp::tick(uint32_t delta_ms) {
   }
 }
 
-void RandomSmallPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
+void PixelFieldApp::onButton(uint8_t index, BtnEvent e) {
   if (index != 2) return;
 
   switch (e) {
@@ -102,6 +102,6 @@ void RandomSmallPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
   }
 }
 
-void RandomSmallPixelIntoneApp::shutdown() {
+void PixelFieldApp::shutdown() {
   // Nothing persistent to clean up.
 }

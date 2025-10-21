@@ -2,7 +2,7 @@
 #include "Core/App.h"
 #include <Arduino.h>
 
-class RandomSmallPixelIntoneApp : public App {
+class PixelFieldApp : public App {
 public:
   const char* name() const override { return "Pixel Field"; }
   void init() override;
