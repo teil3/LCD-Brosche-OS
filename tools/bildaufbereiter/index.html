@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>JPG → 240×240 (MozJPEG, Baseline)</title>
+  <title>Bilderaufbereiter für die LCD-Brosche</title>
   <style>
     :root { color-scheme: light dark; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; }
@@ -11,17 +11,22 @@
     h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem; }
     .muted { opacity: .75; }
     .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin: .75rem 0; }
-    canvas { border: 1px solid #ccc; border-radius: .6rem; background: #fff; box-shadow: 0 1px 8px rgba(0,0,0,.05); }
+    .preview { position: relative; display: block; width: 358.2857142857px; height: 350.0571428571px; margin: 2.5rem auto 0; }
+    .preview__viewport { position: absolute; top: 43.7142857143px; left: 55.0285714286px; width: 240px; height: 240px; border-radius: 50%; overflow: hidden; border: 1px solid #c9c9c9; box-shadow: 0 1px 8px rgba(0,0,0,.08); background: #fff; }
+    .preview__viewport::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: default; }
+    .preview__mask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; object-fit: cover; }
     button, select, input[type="number"], input[type="file"] { padding: .55rem .8rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: canvas; }
     button[disabled] { opacity: .5; }
+    .actions { margin: 1.5rem 0 0; }
     footer { margin-top: 2rem; font-size: .9rem; }
     code { background: rgba(127,127,127,.15); padding: .1rem .3rem; border-radius: .3rem; }
   </style>
 </head>
 <body>
   <header>
-    <h1>JPG → 240×240 (MozJPEG, <b>Baseline</b> – nicht progressiv)</h1>
-    <p class="muted">Alles läuft lokal im Browser. Ergebnis ist garantiert <b>Baseline-DCT</b> (kein „progressive“).</p>
+    <h1>Bilderaufbereiter für die LCD-Brosche</h1>
+    <p class="muted">Alles läuft lokal im Browser. Ergebnis ist ein 240×240-Pixel-JPEG im <b>Baseline-DCT</b>-Format (kein „progressive“).</p>
   </header>
 
   <div class="row">
@@ -35,19 +40,18 @@
     <label>Qualität:
       <input id="quality" type="number" min="10" max="100" value="92" style="width:5rem"> %
     </label>
-    <label>Subsampling:
-      <select id="chroma">
-        <option value="2" selected>4:2:0 (kleiner, Standard)</option>
-        <option value="1">4:2:2</option>
-        <option value="0">4:4:4 (beste Qualität)</option>
-      </select>
-    </label>
-    <button id="save" disabled>Als JPEG speichern</button>
   </div>
 
-  <canvas id="cv" width="240" height="240"></canvas>
+  <div class="preview">
+    <div class="preview__viewport">
+      <canvas id="cv" width="240" height="240"></canvas>
+    </div>
+    <img class="preview__mask" src="./LCD-Brosche-maske.png" alt="Maske der LCD-Brosche" />
+  </div>
 
-  <p class="muted">Tipp: Viele Arduino-JPEG-Decoder erwarten <b>Baseline</b>. Hier wird explizit <code>baseline: true</code> und <code>progressive: false</code> gesetzt.</p>
+  <div class="actions">
+    <button id="save" disabled>Als JPEG speichern</button>
+  </div>
 
   <script type="module">
     // --- Import der MozJPEG-WASM-Codec-Factory (jSquash, auf UNPKG gehostet) ---
@@ -62,13 +66,16 @@
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
     const qInput    = document.getElementById('quality');
-    const chromaSel = document.getElementById('chroma');
     const btnSave   = document.getElementById('save');
     const cv        = document.getElementById('cv');
     const ctx       = cv.getContext('2d', { willReadFrequently: true });
 
     let currentBitmap = null;
     let moz = null;
+    let coverPan = { x: 0, y: 0 };
+    let isDragging = false;
+    let dragStart = { x: 0, y: 0 };
+    let panStart = { x: 0, y: 0 };
 
     // JPEG header scan to verify non-progressive:
     // Baseline SOF0 marker = 0xFFC0, Progressive SOF2 = 0xFFC2
@@ -92,6 +99,11 @@
       ctx.restore();
     }
 
+    function resetCoverPan() {
+      coverPan.x = 0;
+      coverPan.y = 0;
+    }
+
     async function loadImageBitmap(file) {
       const url = URL.createObjectURL(file);
       const img = new Image();
@@ -100,6 +112,28 @@
       const bmp = await createImageBitmap(img);
       URL.revokeObjectURL(url);
       return bmp;
+    }
+
+    function clampCoverPanValues(bmp, x, y) {
+      if (!bmp) return { x: 0, y: 0 };
+      const T = 240;
+      const s = Math.max(T / bmp.width, T / bmp.height);
+      const w = bmp.width * s;
+      const h = bmp.height * s;
+      const maxPanX = Math.max(0, (w - T) / 2);
+      const maxPanY = Math.max(0, (h - T) / 2);
+      return {
+        x: Math.max(-maxPanX, Math.min(maxPanX, x)),
+        y: Math.max(-maxPanY, Math.min(maxPanY, y))
+      };
+    }
+
+    function updateCanvasCursor() {
+      if (currentBitmap && modeSel.value === 'cover') {
+        cv.style.cursor = isDragging ? 'grabbing' : 'grab';
+      } else {
+        cv.style.cursor = 'default';
+      }
     }
 
     function drawScaled(bmp) {
@@ -111,7 +145,11 @@
       if (modeSel.value === 'cover') {
         const s = Math.max(T / sw, T / sh);
         const w = sw * s, h = sh * s;
-        const dx = (T - w) / 2, dy = (T - h) / 2;
+        const clamped = clampCoverPanValues(bmp, coverPan.x, coverPan.y);
+        coverPan.x = clamped.x;
+        coverPan.y = clamped.y;
+        const dx = (T - w) / 2 + coverPan.x;
+        const dy = (T - h) / 2 + coverPan.y;
         ctx.drawImage(bmp, dx, dy, w, h);
       } else {
         const s = Math.min(T / sw, T / sh);
@@ -125,6 +163,7 @@
       const file = e.target.files?.[0];
       if (!file) return;
       currentBitmap = await loadImageBitmap(file);
+      resetCoverPan();
       drawScaled(currentBitmap);
       if (!moz) {
         try {
@@ -137,11 +176,56 @@
         }
       }
       btnSave.disabled = false;
+      updateCanvasCursor();
     });
 
     modeSel.addEventListener('change', () => {
+      if (isDragging) {
+        isDragging = false;
+      }
+      updateCanvasCursor();
       if (currentBitmap) drawScaled(currentBitmap);
     });
+
+    cv.addEventListener('pointerdown', (e) => {
+      if (!currentBitmap || modeSel.value !== 'cover') return;
+      e.preventDefault();
+      isDragging = true;
+      dragStart = { x: e.clientX, y: e.clientY };
+      panStart = { x: coverPan.x, y: coverPan.y };
+      try {
+        cv.setPointerCapture(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+      updateCanvasCursor();
+    });
+
+    cv.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      const nextPan = clampCoverPanValues(currentBitmap, panStart.x + dx, panStart.y + dy);
+      coverPan.x = nextPan.x;
+      coverPan.y = nextPan.y;
+      drawScaled(currentBitmap);
+    });
+
+    function endDrag(e) {
+      if (!isDragging) return;
+      e.preventDefault();
+      isDragging = false;
+      try {
+        cv.releasePointerCapture(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+      updateCanvasCursor();
+    }
+
+    cv.addEventListener('pointerup', endDrag);
+    cv.addEventListener('pointercancel', endDrag);
 
     btnSave.addEventListener('click', async () => {
       if (!moz) {
@@ -150,7 +234,6 @@
       }
       const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
       const quality = Math.min(100, Math.max(10, parseInt(qInput.value, 10) || 92));
-      const chroma = parseInt(chromaSel.value, 10); // 0=4:4:4, 1=4:2:2, 2=4:2:0
 
       const opts = {
         quality,
@@ -166,7 +249,7 @@
         trellis_opt_table: false,
         trellis_loops: 1,
         auto_subsample: false,
-        chroma_subsample: chroma,  // 0=4:4:4, 1=4:2:2, 2=4:2:0
+        chroma_subsample: 2,       // erzwingt 4:2:0 (YCbCr) für die Brosche
         separate_chroma_quality: false,
         chroma_quality: quality
       };
