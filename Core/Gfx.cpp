@@ -4,25 +4,14 @@
 TFT_eSPI tft;
 SPIClass sdSPI(VSPI);
 
-static bool g_backlight = true;
-
 static bool tft_output_cb(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
   if (x >= tft.width() || y >= tft.height()) return false;
   tft.pushImage(x, y, w, h, bitmap);
   return true;
 }
 
-void setBacklight(bool on) {
-  g_backlight = on;
-  pinMode(TFT_BL_PIN, OUTPUT);
-  digitalWrite(TFT_BL_PIN, on ? HIGH : LOW);
-}
-
-bool backlightOn() { return g_backlight; }
-
 void gfxBegin() {
-  // Backlight an + CS-Leitungen sicher HIGH
-  setBacklight(true);
+  // CS-Leitungen sicher HIGH
   pinMode(TFT_CS_PIN, OUTPUT); digitalWrite(TFT_CS_PIN, HIGH);
   pinMode(SD_CS_PIN,  OUTPUT); digitalWrite(SD_CS_PIN,  HIGH);
 
@@ -64,4 +53,3 @@ void gfxBegin() {
 
   Serial.println("[GFX] init ok");
 }
-

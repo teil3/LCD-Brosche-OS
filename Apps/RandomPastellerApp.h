@@ -3,9 +3,9 @@
 #include "Core/App.h"
 #include <Arduino.h>
 
-class RandomImagerApp : public App {
+class RandomPastellerApp : public App {
 public:
-  const char* name() const override { return "Zufallszeichner"; }
+  const char* name() const override { return "Pastell-Zeichner"; }
   void init() override;
   void tick(uint32_t delta_ms) override;
   void onButton(uint8_t index, BtnEvent e) override;
@@ -21,20 +21,16 @@ private:
     uint8_t r;
     uint8_t g;
     uint8_t b;
-    float major;
-    float minor;
-    float angle;
-    float wobble;
+    float radius;
   };
 
   static constexpr uint8_t kBlobCount = 6;
   static constexpr uint16_t kPixelsPerBurst = 60;
   static constexpr uint32_t kBurstIntervalMs = 14;
   static constexpr uint8_t kColorDrift = 8;
-  static constexpr float kMinAxis = 14.0f;
-  static constexpr float kMaxAxis = 78.0f;
+  static constexpr float kMinRadius = 18.0f;
+  static constexpr float kMaxRadius = 64.0f;
   static constexpr float kSpeed = 16.0f;
-  static constexpr float kAngleDrift = 0.22f;
 
   Blob blobs_[kBlobCount];
   uint32_t time_accum_ = 0;

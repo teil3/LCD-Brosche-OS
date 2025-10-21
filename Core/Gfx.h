@@ -15,7 +15,5 @@ extern TFT_eSPI tft;
 extern SPIClass sdSPI;
 
 void gfxBegin();
-void setBacklight(bool on);
-bool backlightOn();
 
 #endif // CORE_GFX_H

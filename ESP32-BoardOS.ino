@@ -8,6 +8,8 @@
 #include "Apps/SlideshowApp.h"
 #include "Apps/PixelFieldApp.h"
 #include "Apps/RandomImagerApp.h"
+#include "Apps/RandomPastellerApp.h"
+#include "Apps/RandomSquareIntoneApp.h"
 #include "Apps/RandomPixelIntoneApp.h"
 #include "Apps/RandomChaoticLinesApp.h"
 #include "Apps/RandomStripesIntoneApp.h"
@@ -32,7 +34,9 @@ AppManager appman;
 SlideshowApp app_slideshow;
 PixelFieldApp app_pixel_field;
 RandomImagerApp app_random_imager;
+RandomPastellerApp app_random_pasteller;
 RandomPixelIntoneApp app_pixel_blocks;
+RandomSquareIntoneApp app_square_intone;
 RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
 
@@ -74,6 +78,8 @@ void setup() {
   appman.add(&app_random_lines);
   appman.add(&app_random_stripes);
   appman.add(&app_random_imager);
+  appman.add(&app_random_pasteller);
+  appman.add(&app_square_intone);
   appman.begin();
   Serial.println("[BOOT] appman.begin done");
 }
@@ -93,9 +99,9 @@ void loop() {
     Serial.printf("[BTN] BTN1 %s\n", btnEventName(e1));
     switch (e1) {
       case BtnEvent::Single: appman.next(); break;
-      case BtnEvent::Double: appman.prev(); break;
-      case BtnEvent::Triple: /* frei: z.B. App-List OSD */ break;
-      case BtnEvent::Long:   setBacklight(!backlightOn()); break;
+      case BtnEvent::Double: /* frei: z.B. App-List OSD */ break;
+      case BtnEvent::Triple: /* frei */ break;
+      case BtnEvent::Long:   appman.prev(); break;
       default: break;
     }
   }
@@ -122,6 +128,8 @@ void loop() {
 #include "Apps/SlideshowApp.cpp"
 #include "Apps/PixelFieldApp.cpp"
 #include "Apps/RandomImagerApp.cpp"
+#include "Apps/RandomPastellerApp.cpp"
+#include "Apps/RandomSquareIntoneApp.cpp"
 #include "Apps/RandomPixelIntoneApp.cpp"
 #include "Apps/RandomChaoticLinesApp.cpp"
 #include "Apps/RandomStripesIntoneApp.cpp"

@@ -437,9 +437,9 @@ String SlideshowApp::modeLabel_() const {
     case ControlMode::Auto:
       return String("AUTO ") + dwellLabel_();
     case ControlMode::Manual:
-      return String("MANUAL");
+      return String("MANUELL");
     case ControlMode::StorageMenu:
-      return String("SETUP");
+      return String("EINSTELLUNG");
   }
   return String("?");
 }
@@ -599,7 +599,7 @@ void SlideshowApp::drawStorageMenuOverlay_() {
   }
 
   String sourceLine = String("Quelle: ") + sourceLabel_();
-  String footerLine = toastActive ? toastText_ : String("Long: Modus");
+  String footerLine = toastActive ? toastText_ : String("Lang: Modus");
 
   if (!storageMenuDirty_ &&
       storageMenuLastSource_ == sourceLine &&

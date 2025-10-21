@@ -123,14 +123,14 @@ void RandomPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
-      showStatus_(String("Step ") + String(currentStep_()));
+      showStatus_(String("Groesse ") + String(currentStep_()));
       break;
     case BtnEvent::Double:
       slower_();
       Serial.printf("[PixelIntone] interval=%lums\n", static_cast<unsigned long>(currentInterval_()));
       reseed_();
       drawBurst_();
-      showStatus_(String("Delay ") + String(currentInterval_()) + "ms");
+      showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");
       break;
     case BtnEvent::Long:
       intervalIndex_ = 0;
@@ -138,7 +138,7 @@ void RandomPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
-      showStatus_(String("Delay ") + String(currentInterval_()) + "ms");
+      showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");
       break;
     default:
       break;

@@ -5,7 +5,7 @@
 
 class RandomStripesIntoneApp : public App {
 public:
-  const char* name() const override { return "Stripes Intone"; }
+  const char* name() const override { return "Streifen-Toene"; }
 
   void init() override;
   void tick(uint32_t delta_ms) override;

@@ -4,7 +4,7 @@
 
 class PixelFieldApp : public App {
 public:
-  const char* name() const override { return "Pixel Field"; }
+  const char* name() const override { return "Pixel-Feld"; }
   void init() override;
   void tick(uint32_t delta_ms) override;
   void onButton(uint8_t index, BtnEvent e) override;

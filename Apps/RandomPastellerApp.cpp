@@ -1,6 +1,5 @@
-#include "RandomImagerApp.h"
+#include "RandomPastellerApp.h"
 
-#include <algorithm>
 #include <cmath>
 #include <esp_random.h>
 
@@ -8,52 +7,48 @@
 #include "Core/Gfx.h"
 
 namespace {
-constexpr float kTwoPi = 6.28318530718f;
+constexpr float kTwoPiPasteller = 6.28318530718f;
 
-inline uint8_t clamp8(int v) {
+inline uint8_t clamp8p(int v) {
   if (v < 0) return 0;
   if (v > 255) return 255;
   return static_cast<uint8_t>(v);
 }
 }
 
-float RandomImagerApp::randUnit_() {
+float RandomPastellerApp::randUnit_() {
   return static_cast<float>(esp_random() & 0xFFFFFF) * (1.0f / 16777216.0f);
 }
 
-int32_t RandomImagerApp::randInt_(int32_t max_exclusive) {
+int32_t RandomPastellerApp::randInt_(int32_t max_exclusive) {
   if (max_exclusive <= 0) return 0;
   return static_cast<int32_t>(esp_random() % static_cast<uint32_t>(max_exclusive));
 }
 
-uint16_t RandomImagerApp::pack565_(uint8_t r, uint8_t g, uint8_t b) {
+uint16_t RandomPastellerApp::pack565_(uint8_t r, uint8_t g, uint8_t b) {
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
 }
 
-void RandomImagerApp::reseedAll_() {
+void RandomPastellerApp::reseedAll_() {
   for (auto& blob : blobs_) {
     reseedBlob_(blob);
   }
 }
 
-void RandomImagerApp::reseedBlob_(Blob& blob) {
+void RandomPastellerApp::reseedBlob_(Blob& blob) {
   blob.x = randUnit_() * (TFT_W - 1);
   blob.y = randUnit_() * (TFT_H - 1);
-  float angle = randUnit_() * kTwoPi;
+  float angle = randUnit_() * kTwoPiPasteller;
   float speed = kSpeed * (0.25f + randUnit_());
   blob.vx = std::cos(angle) * speed;
   blob.vy = std::sin(angle) * speed;
-  blob.major = kMinAxis + (kMaxAxis - kMinAxis) * randUnit_();
-  float aspect = 0.22f + randUnit_() * 0.65f;
-  blob.minor = std::max(kMinAxis * 0.35f, blob.major * aspect);
-  blob.angle = randUnit_() * kTwoPi;
-  blob.wobble = randUnit_() * kTwoPi;
+  blob.radius = kMinRadius + (kMaxRadius - kMinRadius) * randUnit_();
   blob.r = static_cast<uint8_t>(randInt_(256));
   blob.g = static_cast<uint8_t>(randInt_(256));
   blob.b = static_cast<uint8_t>(randInt_(256));
 }
 
-void RandomImagerApp::driftBlob_(Blob& blob) {
+void RandomPastellerApp::driftBlob_(Blob& blob) {
   // Mild velocity wander.
   blob.vx += (randUnit_() - 0.5f) * 6.0f;
   blob.vy += (randUnit_() - 0.5f) * 6.0f;
@@ -85,58 +80,31 @@ void RandomImagerApp::driftBlob_(Blob& blob) {
     blob.vy = -std::abs(blob.vy) * 0.8f;
   }
 
-  // Slowly drift axes within bounds.
-  blob.major += (randUnit_() - 0.5f) * 5.0f;
-  blob.minor += (randUnit_() - 0.5f) * 4.0f;
-  if (blob.major < kMinAxis) blob.major = kMinAxis;
-  if (blob.major > kMaxAxis) blob.major = kMaxAxis;
-  float minMinor = std::max(kMinAxis * 0.25f, blob.major * 0.18f);
-  float maxMinor = blob.major * 0.9f;
-  if (blob.minor < minMinor) blob.minor = minMinor;
-  if (blob.minor > maxMinor) blob.minor = maxMinor;
-
-  blob.angle += (randUnit_() - 0.5f) * kAngleDrift;
-  if (blob.angle < 0.0f) blob.angle += kTwoPi;
-  if (blob.angle >= kTwoPi) blob.angle -= kTwoPi;
-
-  blob.wobble += 0.04f + randUnit_() * 0.08f;
-  if (blob.wobble >= kTwoPi) blob.wobble -= kTwoPi;
+  // Slowly drift radius within bounds.
+  blob.radius += (randUnit_() - 0.5f) * 4.5f;
+  if (blob.radius < kMinRadius) blob.radius = kMinRadius;
+  if (blob.radius > kMaxRadius) blob.radius = kMaxRadius;
 
   auto randColorOffset = [&]() -> int {
     int span = 2 * kColorDrift + 1;
     return randInt_(span) - kColorDrift;
   };
-  blob.r = clamp8(blob.r + randColorOffset());
-  blob.g = clamp8(blob.g + randColorOffset());
-  blob.b = clamp8(blob.b + randColorOffset());
+  blob.r = clamp8p(blob.r + randColorOffset());
+  blob.g = clamp8p(blob.g + randColorOffset());
+  blob.b = clamp8p(blob.b + randColorOffset());
 }
 
-void RandomImagerApp::drawBurst_(Blob& blob) {
-  float sinA = std::sin(blob.angle);
-  float cosA = std::cos(blob.angle);
-  float wobbleSin = std::sin(blob.wobble);
-
+void RandomPastellerApp::drawBurst_(Blob& blob) {
   for (uint16_t i = 0; i < kPixelsPerBurst; ++i) {
-    float along = randUnit_() * 2.0f - 1.0f;
-    along = std::copysign(std::pow(std::abs(along), 0.35f), along);
-    float across = randUnit_() * 2.0f - 1.0f;
-    across = std::copysign(std::pow(std::abs(across), 0.6f), across);
+    float angle = randUnit_() * kTwoPiPasteller;
+    float falloffBias = std::pow(randUnit_(), 0.45f); // concentrate nearer the center
+    float distance = blob.radius * falloffBias;
+    float dx = std::cos(angle) * distance;
+    float dy = std::sin(angle) * distance;
 
-    float majorScale = blob.major * (0.68f + 0.32f * wobbleSin);
-    float minorScale = blob.minor * (0.7f + 0.24f * std::cos(blob.wobble + along * 2.0f));
-
-    float localX = along * majorScale;
-    float localY = across * minorScale;
-
-    float shear = (randUnit_() - 0.5f) * 0.35f * majorScale;
-    localY += shear * along;
-
-    float jitter = 2.5f + 4.0f * randUnit_();
-    localX += (randUnit_() - 0.5f) * jitter;
-    localY += (randUnit_() - 0.5f) * jitter;
-
-    float dx = localX * cosA - localY * sinA;
-    float dy = localX * sinA + localY * cosA;
+    // Add some jitter to break symmetry.
+    dx += (randUnit_() - 0.5f) * 2.4f;
+    dy += (randUnit_() - 0.5f) * 2.4f;
 
     int16_t px = static_cast<int16_t>(std::round(blob.x + dx));
     int16_t py = static_cast<int16_t>(std::round(blob.y + dy));
@@ -144,38 +112,36 @@ void RandomImagerApp::drawBurst_(Blob& blob) {
       continue;
     }
 
-    float majorNorm = std::abs(localX) / (majorScale + 0.01f);
-    float minorNorm = std::abs(localY) / (minorScale + 0.01f);
-    float dist = std::min(1.0f, std::sqrt(0.62f * majorNorm * majorNorm + 1.38f * minorNorm * minorNorm));
-    float highlight = (1.0f - dist);
-    float chromaBoost = 0.55f + 0.5f * (1.0f - dist * dist);
+    float normalized = 1.0f - (distance / (blob.radius + 0.01f));
+    float highlight = normalized * normalized;
+    float chromaBoost = 0.6f + 0.4f * normalized;
 
     auto addVariation = [&](uint8_t base) -> uint8_t {
-      int variation = static_cast<int>((randUnit_() - 0.5f) * 155.0f * highlight);
+      int variation = static_cast<int>((randUnit_() - 0.5f) * 140.0f * highlight);
       int value = static_cast<int>(base * chromaBoost) + variation;
-      return clamp8(value);
+      return clamp8p(value);
     };
 
     uint8_t r = addVariation(blob.r);
     uint8_t g = addVariation(blob.g);
     uint8_t b = addVariation(blob.b);
 
-    // Occasional bright edge slashes introduce focal hints.
-    if (randUnit_() < 0.035f) {
-      r = clamp8(r + 60);
-      g = clamp8(g + 40);
-      b = clamp8(b + 70);
+    // Occasional bright sparkle to introduce focal points.
+    if (randUnit_() < 0.045f) {
+      r = clamp8p(r + 50);
+      g = clamp8p(g + 50);
+      b = clamp8p(b + 50);
     }
 
     tft.drawPixel(px, py, pack565_(r, g, b));
   }
 }
 
-void RandomImagerApp::clearCanvas_() {
+void RandomPastellerApp::clearCanvas_() {
   tft.fillScreen(TFT_BLACK);
 }
 
-void RandomImagerApp::init() {
+void RandomPastellerApp::init() {
   time_accum_ = 0;
   clearCanvas_();
   reseedAll_();
@@ -188,7 +154,7 @@ void RandomImagerApp::init() {
   }
 }
 
-void RandomImagerApp::tick(uint32_t delta_ms) {
+void RandomPastellerApp::tick(uint32_t delta_ms) {
   time_accum_ += delta_ms;
   while (time_accum_ >= kBurstIntervalMs) {
     time_accum_ -= kBurstIntervalMs;
@@ -203,7 +169,7 @@ void RandomImagerApp::tick(uint32_t delta_ms) {
   }
 }
 
-void RandomImagerApp::onButton(uint8_t index, BtnEvent e) {
+void RandomPastellerApp::onButton(uint8_t index, BtnEvent e) {
   if (index != 2) return;
 
   switch (e) {
@@ -213,7 +179,6 @@ void RandomImagerApp::onButton(uint8_t index, BtnEvent e) {
         blob.r = static_cast<uint8_t>(randInt_(256));
         blob.g = static_cast<uint8_t>(randInt_(256));
         blob.b = static_cast<uint8_t>(randInt_(256));
-        blob.angle = randUnit_() * kTwoPi;
       }
       break;
     case BtnEvent::Double:
@@ -228,6 +193,6 @@ void RandomImagerApp::onButton(uint8_t index, BtnEvent e) {
   }
 }
 
-void RandomImagerApp::shutdown() {
+void RandomPastellerApp::shutdown() {
   // No persistent state.
 }

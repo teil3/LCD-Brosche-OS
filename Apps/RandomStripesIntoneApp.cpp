@@ -120,14 +120,14 @@ void RandomStripesIntoneApp::onButton(uint8_t index, BtnEvent e) {
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
-      showStatus_(String("Height ") + String(currentStripeHeight_()));
+      showStatus_(String("Hoehe ") + String(currentStripeHeight_()));
       break;
     case BtnEvent::Double:
       slower_();
       Serial.printf("[StripesIntone] interval=%lums\n", static_cast<unsigned long>(currentInterval_()));
       reseed_();
       drawBurst_();
-      showStatus_(String("Delay ") + String(currentInterval_()) + "ms");
+      showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");
       break;
     case BtnEvent::Long:
       intervalIndex_ = 0;
@@ -135,7 +135,7 @@ void RandomStripesIntoneApp::onButton(uint8_t index, BtnEvent e) {
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
-      showStatus_(String("Delay ") + String(currentInterval_()) + "ms");
+      showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");
       break;
     default:
       break;

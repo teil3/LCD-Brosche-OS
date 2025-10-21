@@ -4,7 +4,7 @@
 
 class RandomPixelIntoneApp : public App {
 public:
-  const char* name() const override { return "Pixel Intone"; }
+  const char* name() const override { return "Pixel-Toene"; }
   void init() override;
   void tick(uint32_t delta_ms) override;
   void onButton(uint8_t index, BtnEvent e) override;

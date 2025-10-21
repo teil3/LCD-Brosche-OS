@@ -15,7 +15,7 @@ public:
   // NEU:
   bool auto_mode = true;  // true=Auto-Slideshow, false=Manuell
 
-  const char* name() const override { return "Slideshow"; }
+  const char* name() const override { return "Diashow"; }
   void init() override;
   void tick(uint32_t delta_ms) override;
   void onButton(uint8_t index, BtnEvent e) override;
