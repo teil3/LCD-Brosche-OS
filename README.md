@@ -86,8 +86,9 @@ arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200
 - Medien muessen im JPEG-Format mit korrekter SOI-Signatur (`0xFF 0xD8`) vorliegen.
 
 ## Dokumentation
-- [`docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf`](<docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf>) - Boarddatenblatt und Anschlussplan
-- [`docs/1.28ESP32-Round-TFT-Board_User-Manual_V1.12_EN.pdf`](<docs/1.28ESP32-Round-TFT-Board_User-Manual_V1.12_EN.pdf>) - Englische Referenz zum Basismodul
+- [Datenblatt (DE)](<docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf>) - Boarddatenblatt und Anschlussplan
+- [User Manual (EN)](<docs/1.28ESP32-Round-TFT-Board_User-Manual_V1.12_EN.pdf>) - Englische Referenz zum Basismodul
+- [Blockdiagramm](<docs/PrincipleBlockDiagram V1.11.pdf>) - Uebersichtliche Darstellung von Signalfluesse und Komponenten
 
 ### Hardwaregalerie
 <img src="docs/LCD-Brosche-vorne-Knoepfe.png" alt="Front view with buttons" width="50%">
