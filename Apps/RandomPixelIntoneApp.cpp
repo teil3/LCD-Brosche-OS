@@ -1,15 +1,19 @@
 #include "RandomPixelIntoneApp.h"
 
+#include <Arduino.h>
 #include <esp_random.h>
 
 #include "Config.h"
 #include "Core/Gfx.h"
+#include "Core/TinyFont.h"
 
 namespace {
 constexpr uint8_t kIntoneVariation = 4;
 constexpr uint16_t kIntoneBurstPx = 50;
-constexpr uint32_t kIntoneIntervalMs = 10;
-constexpr uint8_t kIntoneStep = 5;
+constexpr uint16_t kIntoneSteps[] = {5, 10, 20, 40, 80, 160};
+constexpr uint8_t kIntoneStepCount = sizeof(kIntoneSteps) / sizeof(kIntoneSteps[0]);
+constexpr uint32_t kIntoneIntervals[] = {10, 20, 40, 80, 160, 240, 480, 960, 1920, 3840};
+constexpr uint8_t kIntoneIntervalCount = sizeof(kIntoneIntervals) / sizeof(kIntoneIntervals[0]);
 constexpr uint8_t kIntoneBaseDrift = 24;
 
 inline uint8_t rand8Intone() { return static_cast<uint8_t>(esp_random() & 0xFF); }
@@ -58,27 +62,53 @@ uint16_t RandomPixelIntoneApp::colorForPixel_() const {
 }
 
 void RandomPixelIntoneApp::drawBurst_() {
-  for (uint16_t i = 0; i < kIntoneBurstPx; ++i) {
+  uint16_t step = currentStep_();
+  if (step > TFT_W) step = TFT_W;
+  if (step > TFT_H) step = TFT_H;
+  uint16_t burstCount = kIntoneBurstPx;
+  if (step > kIntoneSteps[0]) {
+    burstCount = static_cast<uint16_t>((kIntoneBurstPx * kIntoneSteps[0]) / step);
+    if (burstCount == 0) burstCount = 1;
+  }
+
+  for (uint16_t i = 0; i < burstCount; ++i) {
     uint16_t x = randCoordIntone(TFT_W);
     uint16_t y = randCoordIntone(TFT_H);
-    x = (x / kIntoneStep) * kIntoneStep;
-    y = (y / kIntoneStep) * kIntoneStep;
-    tft.fillRect(x, y, kIntoneStep, kIntoneStep, colorForPixel_());
+    x = (x / step) * step;
+    y = (y / step) * step;
+    uint16_t maxX = (TFT_W > step) ? static_cast<uint16_t>(TFT_W - step) : 0;
+    uint16_t maxY = (TFT_H > step) ? static_cast<uint16_t>(TFT_H - step) : 0;
+    if (x > maxX) x = maxX;
+    if (y > maxY) y = maxY;
+    tft.fillRect(x, y, step, step, colorForPixel_());
   }
   drift_();
 }
 
 void RandomPixelIntoneApp::init() {
   timeAccum_ = 0;
+  stepIndex_ = 0;
+  intervalIndex_ = 0;
+  pauseUntil_ = 0;
   tft.fillScreen(TFT_BLACK);
   reseed_();
   drawBurst_();
 }
 
 void RandomPixelIntoneApp::tick(uint32_t delta_ms) {
+  if (pauseUntil_) {
+    uint32_t now = millis();
+    if (now < pauseUntil_) {
+      return;
+    }
+    pauseUntil_ = 0;
+    timeAccum_ = 0;
+  }
+
   timeAccum_ += delta_ms;
-  while (timeAccum_ >= kIntoneIntervalMs) {
-    timeAccum_ -= kIntoneIntervalMs;
+  uint32_t interval = currentInterval_();
+  while (timeAccum_ >= interval) {
+    timeAccum_ -= interval;
     drawBurst_();
   }
 }
@@ -88,17 +118,27 @@ void RandomPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
 
   switch (e) {
     case BtnEvent::Single:
-      reseed_();
-      drawBurst_();
-      break;
-    case BtnEvent::Double:
+      nextStep_();
+      Serial.printf("[PixelIntone] step=%u\n", currentStep_());
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
+      showStatus_(String("Step ") + String(currentStep_()));
       break;
-    case BtnEvent::Long:
+    case BtnEvent::Double:
+      slower_();
+      Serial.printf("[PixelIntone] interval=%lums\n", static_cast<unsigned long>(currentInterval_()));
       reseed_();
       drawBurst_();
+      showStatus_(String("Delay ") + String(currentInterval_()) + "ms");
+      break;
+    case BtnEvent::Long:
+      intervalIndex_ = 0;
+      Serial.printf("[PixelIntone] interval reset to %lums\n", static_cast<unsigned long>(currentInterval_()));
+      tft.fillScreen(TFT_BLACK);
+      reseed_();
+      drawBurst_();
+      showStatus_(String("Delay ") + String(currentInterval_()) + "ms");
       break;
     default:
       break;
@@ -107,4 +147,34 @@ void RandomPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
 
 void RandomPixelIntoneApp::shutdown() {
   // Nothing persistent to clean.
+}
+
+void RandomPixelIntoneApp::nextStep_() {
+  ++stepIndex_;
+  if (stepIndex_ >= kIntoneStepCount) {
+    stepIndex_ = 0;
+  }
+}
+
+void RandomPixelIntoneApp::slower_() {
+  ++intervalIndex_;
+  if (intervalIndex_ >= kIntoneIntervalCount) {
+    intervalIndex_ = 0;
+  }
+}
+
+void RandomPixelIntoneApp::showStatus_(const String& msg) {
+  uint8_t scale = 3;
+  int16_t textY = static_cast<int16_t>((TFT_H - TinyFont::glyphHeight(scale)) / 2);
+  if (textY < 0) textY = 0;
+  TinyFont::drawStringOutlineCentered(tft, textY, msg, TFT_WHITE, TFT_BLACK, scale);
+  pauseUntil_ = millis() + 1000;
+}
+
+uint16_t RandomPixelIntoneApp::currentStep_() const {
+  return kIntoneSteps[stepIndex_];
+}
+
+uint32_t RandomPixelIntoneApp::currentInterval_() const {
+  return kIntoneIntervals[intervalIndex_];
 }

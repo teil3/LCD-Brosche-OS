@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <LittleFS.h>
 #include "Config.h"
 #include "Core/Gfx.h"
 #include "Core/BootLogo.h"
@@ -8,6 +9,8 @@
 #include "Apps/RandomSmallPixelIntoneApp.h"
 #include "Apps/RandomPixelIntoneApp.h"
 #include "Apps/RandomChaoticLinesApp.h"
+#include "Apps/RandomStripesIntoneApp.h"
+#include "Core/Storage.h"
 
 // Buttons
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
@@ -29,6 +32,7 @@ SlideshowApp app_slideshow;
 RandomSmallPixelIntoneApp app_pixel_field;
 RandomPixelIntoneApp app_pixel_blocks;
 RandomChaoticLinesApp app_random_lines;
+RandomStripesIntoneApp app_random_stripes;
 
 void setup() {
   Serial.begin(115200);
@@ -36,6 +40,21 @@ void setup() {
   // Warten, bis der Monitor dran ist (nur kurz)
   for (int i=0;i<20;i++){ if (Serial) break; delay(10); }
   Serial.println("[BOOT] setup start");
+
+  bool lfs_ok = LittleFS.begin();
+  if (!lfs_ok) {
+    Serial.println("[BOOT] LittleFS mount failed, try format");
+    lfs_ok = LittleFS.begin(true);
+  }
+  if (lfs_ok) {
+    if (!ensureFlashSlidesDir()) {
+      Serial.println("[BOOT] ensureFlashSlidesDir failed");
+    } else {
+      Serial.println("[BOOT] LittleFS ready");
+    }
+  } else {
+    Serial.println("[BOOT] LittleFS unavailable");
+  }
 
   gfxBegin();
   Serial.println("[BOOT] gfxBegin done");
@@ -50,6 +69,7 @@ void setup() {
   appman.add(&app_pixel_field);
   appman.add(&app_pixel_blocks);
   appman.add(&app_random_lines);
+  appman.add(&app_random_stripes);
   appman.begin();
   Serial.println("[BOOT] appman.begin done");
 }
@@ -93,8 +113,10 @@ void loop() {
 #include "Core/Buttons.cpp"
 #include "Core/AppManager.cpp"
 #include "Core/Gfx.cpp"
+#include "Core/Storage.cpp"
 #include "Core/TinyFont.cpp"
 #include "Apps/SlideshowApp.cpp"
 #include "Apps/RandomSmallPixelIntoneApp.cpp"
 #include "Apps/RandomPixelIntoneApp.cpp"
 #include "Apps/RandomChaoticLinesApp.cpp"
+#include "Apps/RandomStripesIntoneApp.cpp"

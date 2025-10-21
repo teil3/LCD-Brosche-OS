@@ -19,6 +19,7 @@ Kompaktes Firmware-Projekt fuer eine tragbare LCD-Brosche: Ein schmuckartiges ES
 - `Apps/` - App-Implementierungen wie `SlideshowApp`
 - `assets/` - Beispielinhalte fuer die SD-Karte (Bilder, Medien, ...)
 - `docs/` - Hardwarefotos und ein Datenblatt als Referenz
+- `partitions/` - Benutzerdefinierte Partitionstabelle mit grosser LittleFS-Partition
 
 ## Voraussetzungen
 - Arduino CLI >= 0.35
@@ -33,10 +34,23 @@ arduino-cli lib install "TFT_eSPI" "TJpg_Decoder"
 
 ## Kompilieren & Flashen
 ```bash
-arduino-cli compile -b esp32:esp32:esp32 .
+arduino-cli compile -b esp32:esp32:esp32 \
+  --build-property build.partitions=custom_16mb_lfs .
 arduino-cli upload  -b esp32:esp32:esp32 -p /dev/ttyUSB0
 arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200
 ```
+
+> Hinweis: `custom_16mb_lfs.csv` (in `partitions/`) legt eine 8 MB grosse LittleFS-Partition
+> an. Das Firmware-Image muss immer mit dieser Partitionstabelle gebaut werden, damit der
+> interne Slidespeicher funktioniert.
+
+## Flash-Speicher & Offline-Modus
+- LittleFS wird beim Start automatisch gemountet und bei Bedarf formatiert (erste Nutzung).
+- Im Flash liegt der Ordner `/slides`, der durch den Kopiervorgang aus der Slideshow-App
+  befuellt wird.
+- Bilder lassen sich offline anzeigen, sobald sie von der SD-Karte in den Flash kopiert wurden.
+- JPEGs sollten bereits am Rechner auf 204x240 Pixel verkleinert und als non-progressive
+  gespeichert werden (z. B. per Web-Tool oder Skript), damit die ESP32-Dekodierung sicher klappt.
 
 ## Laufzeitverhalten
 - SD-Karte vor dem TFT initialisieren; beide CS-Leitungen vor `begin()` auf HIGH legen.
@@ -46,8 +60,23 @@ arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200
 
 ### Buttonbelegung
 - BTN1: Single -> naechste App, Double -> vorherige App, Long -> Backlight Toggle
-- BTN2: Single -> naechster Slide, Double -> vorheriger Slide bzw. Verweildauer anpassen,
-  Triple -> Dateiname ein/aus, Long -> Auto/Manuell umschalten
+- BTN2 (Moduswechsel mit Long-Press): Auto -> Manuell -> Setup -> Auto
+  - Auto/Manuell: Single -> naechster Slide, Double -> Verweildauer zyklisch, Triple -> Dateiname an/aus
+  - Setup-Modus (Flash/SD):
+    - Single -> Quelle umschalten (SD <-> Flash)
+    - Double -> Kopier-Dialog "Alles kopieren?" (Single wechselt Auswahl, Long bestaetigt)
+    - Long  -> zurueck zum naechsten Modus (Auto)
+    - Waerend des Kopierens: Long -> Abbrechen (Fortschrittsanzeige erscheint)
+
+## Offline-Slideshow (Flash)
+- Schritt-fuer-Schritt (SD -> Flash):
+  1. BTN2 lang druecken, bis der schwarze Setup-Bildschirm mit "Setup" und der aktuellen Quelle erscheint (Moduswechsel Auto -> Manual -> Setup).
+  2. BTN2 doppelt druecken: Der Dialog "Alles kopieren?" erscheint.
+  3. Mit BTN2 kurz zwischen "Nein" und "Ja" wechseln (Pfeil markiert die Auswahl), BTN2 lang bestaetigt die markierte Option.
+  4. BTN2 lang waehrend des laufenden Kopierens -> Abbrechen (bereits kopierte Dateien bleiben erhalten).
+  5. Nach Abschluss schaltet die App automatisch auf Flash als Quelle um (Setup-Overlay zeigt "Quelle: Flash").
+- Quelle manuell wechseln (SD <-> Flash): Im Setup-Modus BTN2 einmal kurz druecken.
+- Falls keine Bilder existieren, erscheint ein Hinweis Toast; in diesem Fall bleiben Quelle und Modus unveraendert.
 
 ## Slideshow-App
 - Laedt JPEG-Dateien von der SD-Karte (Standardverzeichnis `/`).
@@ -58,6 +87,7 @@ arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200
 
 ## Dokumentation
 - [`docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf`](<docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf>) - Boarddatenblatt und Anschlussplan
+- [`docs/1.28ESP32-Round-TFT-Board_User-Manual_V1.12_EN.pdf`](<docs/1.28ESP32-Round-TFT-Board_User-Manual_V1.12_EN.pdf>) - Englische Referenz zum Basismodul
 
 ### Hardwaregalerie
 <img src="docs/LCD-Brosche-vorne-Knoepfe.png" alt="Front view with buttons" width="50%">

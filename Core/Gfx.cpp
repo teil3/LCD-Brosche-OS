@@ -56,18 +56,11 @@ void gfxBegin() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextDatum(MC_DATUM);
 
-  // kurzer Selbsttest
-  tft.fillScreen(TFT_RED);   delay(120);
-  tft.fillScreen(TFT_GREEN); delay(120);
-  tft.fillScreen(TFT_BLUE);  delay(120);
-  tft.fillScreen(TFT_BLACK);
-
   // JPEG-Decoder (nach TFT, aber unabhängig vom SD-Init)
   TJpgDec.setCallback(tft_output_cb);
   TJpgDec.setSwapBytes(true);
 
   Serial.println("[GFX] init ok");
 }
-
 
 
