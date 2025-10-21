@@ -19,7 +19,7 @@ Kompaktes Firmware-Projekt fuer eine tragbare LCD-Brosche: Ein schmuckartiges ES
 - `Apps/` - App-Implementierungen wie `SlideshowApp`
 - `assets/` - Beispielinhalte fuer die SD-Karte (Bilder, Medien, ...)
 - `docs/` - Hardwarefotos und ein Datenblatt als Referenz
-- `partitions/` - Benutzerdefinierte Partitionstabelle mit grosser LittleFS-Partition
+- `partitions.csv` - Benutzerdefinierte Partitions-Tabelle (16 MB Flash, 8 MB LittleFS)
 
 ## Voraussetzungen
 - Arduino CLI >= 0.35
@@ -35,16 +35,22 @@ arduino-cli lib install "TFT_eSPI" "TJpg_Decoder"
 ## Kompilieren & Flashen
 ```bash
 arduino-cli compile -b esp32:esp32:esp32 \
-  --build-property build.partitions=custom_16mb_lfs \
+  --build-property build.flash_size=16MB \
+  --build-property build.partitions=partitions.csv \
   --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" \
   --build-property compiler.c.extra_flags="-DSMOOTH_FONT" .
-arduino-cli upload  -b esp32:esp32:esp32 -p /dev/ttyUSB0
-arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200
+arduino-cli compile -b esp32:esp32:esp32 \
+  --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" \
+  --build-property compiler.c.extra_flags="-DSMOOTH_FONT" .
+arduino-cli upload  -b esp32:esp32:esp32 -p /dev/ttyACM0
+arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 ```
 
-> Hinweis: `custom_16mb_lfs.csv` (in `partitions/`) legt eine 8 MB grosse LittleFS-Partition
-> an. Das Firmware-Image muss immer mit dieser Partitionstabelle gebaut werden, damit der
-> interne Slidespeicher funktioniert.
+> Hinweis: Die Datei `partitions.csv` im Projektwurzelverzeichnis definiert die 8 MB grosse
+> LittleFS-Partition. Fuehre vor dem Upload unbedingt die erste `arduino-cli compile`-Zeile
+> aus, damit Partitionstabelle und Bootloader auf 16 MB Flash abgestimmt sind. Der direkte
+> Upload-Befehl uebernimmt dann das zuletzt erzeugte Build-Artefakt. Die zweite Compile-Zeile
+> dient nur als Fallback fuer Boards mit 4 MB Standardlayout.
 
 ## Flash-Speicher & Offline-Modus
 - LittleFS wird beim Start automatisch gemountet und bei Bedarf formatiert (erste Nutzung).

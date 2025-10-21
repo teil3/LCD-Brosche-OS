@@ -1,4 +1,5 @@
 #include "AppManager.h"
+#include <Arduino.h>
 #include <TFT_eSPI.h>
 
 extern TFT_eSPI tft; // aus Gfx.cpp
@@ -10,6 +11,9 @@ void AppManager::setActive(int i) {
   if (i < 0 || i >= (int)apps_.size()) return;
   if (active_ >= 0) apps_[active_]->shutdown();
   active_ = i;
+  if (Serial) {
+    Serial.printf("[APP] activate %s (%d/%d)\n", apps_[active_]->name(), active_ + 1, (int)apps_.size());
+  }
   tft.fillScreen(TFT_BLACK);
   apps_[active_]->init();
 }
@@ -20,4 +24,3 @@ void AppManager::prev() { if (!apps_.empty()) setActive((active_+apps_.size()-1)
 void AppManager::dispatchBtn(uint8_t idx, BtnEvent e) { if (active_>=0) apps_[active_]->onButton(idx,e); }
 void AppManager::tick(uint32_t dt) { if (active_>=0) apps_[active_]->tick(dt); }
 void AppManager::draw() { if (active_>=0) apps_[active_]->draw(); }
-
