@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>JPG → 240×240 (MozJPEG, Baseline)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; }
+    header { margin-bottom: 1rem; }
+    h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem; }
+    .muted { opacity: .75; }
+    .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin: .75rem 0; }
+    canvas { border: 1px solid #ccc; border-radius: .6rem; background: #fff; box-shadow: 0 1px 8px rgba(0,0,0,.05); }
+    button, select, input[type="number"], input[type="file"] { padding: .55rem .8rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: canvas; }
+    button[disabled] { opacity: .5; }
+    footer { margin-top: 2rem; font-size: .9rem; }
+    code { background: rgba(127,127,127,.15); padding: .1rem .3rem; border-radius: .3rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JPG → 240×240 (MozJPEG, <b>Baseline</b> – nicht progressiv)</h1>
+    <p class="muted">Alles läuft lokal im Browser. Ergebnis ist garantiert <b>Baseline-DCT</b> (kein „progressive“).</p>
+  </header>
+
+  <div class="row">
+    <input id="file" type="file" accept="image/*" />
+    <label>Zuschnitt:
+      <select id="mode">
+        <option value="cover">Zentriert zuschneiden (füllend)</option>
+        <option value="contain">Einpassen (weiß auffüllen)</option>
+      </select>
+    </label>
+    <label>Qualität:
+      <input id="quality" type="number" min="10" max="100" value="92" style="width:5rem"> %
+    </label>
+    <label>Subsampling:
+      <select id="chroma">
+        <option value="2" selected>4:2:0 (kleiner, Standard)</option>
+        <option value="1">4:2:2</option>
+        <option value="0">4:4:4 (beste Qualität)</option>
+      </select>
+    </label>
+    <button id="save" disabled>Als JPEG speichern</button>
+  </div>
+
+  <canvas id="cv" width="240" height="240"></canvas>
+
+  <p class="muted">Tipp: Viele Arduino-JPEG-Decoder erwarten <b>Baseline</b>. Hier wird explizit <code>baseline: true</code> und <code>progressive: false</code> gesetzt.</p>
+
+  <script type="module">
+    // --- Import der MozJPEG-WASM-Codec-Factory (jSquash, auf UNPKG gehostet) ---
+    // Dokumentation/Quelle: https://github.com/jamsinclair/jSquash (encode API) –
+    // und Typdefinitionen der Optionen (mozjpeg_enc.d.ts)
+    const moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
+
+    // Fallback: Wenn du die WASM/JS lokal ausliefern willst, lege sie in ./mozjpeg/ ab
+    // und ersetze die URL oben durch: './mozjpeg/mozjpeg_enc.js'
+    // (Achte darauf, dass mozjpeg_enc.wasm im selben Ordner liegt.)
+
+    const fileInput = document.getElementById('file');
+    const modeSel   = document.getElementById('mode');
+    const qInput    = document.getElementById('quality');
+    const chromaSel = document.getElementById('chroma');
+    const btnSave   = document.getElementById('save');
+    const cv        = document.getElementById('cv');
+    const ctx       = cv.getContext('2d', { willReadFrequently: true });
+
+    let currentBitmap = null;
+    let moz = null;
+
+    // JPEG header scan to verify non-progressive:
+    // Baseline SOF0 marker = 0xFFC0, Progressive SOF2 = 0xFFC2
+    function isProgressiveJPEG(u8) {
+      for (let i = 0; i < u8.length - 1; i++) {
+        if (u8[i] === 0xFF) {
+          const code = u8[i + 1];
+          if (code === 0xC2) return true;   // SOF2
+          if (code === 0xDA) break;         // SOS reached -> stop scanning
+        }
+      }
+      return false;
+    }
+
+    function clearCanvas() {
+      ctx.save();
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.restore();
+    }
+
+    async function loadImageBitmap(file) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      const bmp = await createImageBitmap(img);
+      URL.revokeObjectURL(url);
+      return bmp;
+    }
+
+    function drawScaled(bmp) {
+      clearCanvas();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      const T = 240, sw = bmp.width, sh = bmp.height;
+      if (modeSel.value === 'cover') {
+        const s = Math.max(T / sw, T / sh);
+        const w = sw * s, h = sh * s;
+        const dx = (T - w) / 2, dy = (T - h) / 2;
+        ctx.drawImage(bmp, dx, dy, w, h);
+      } else {
+        const s = Math.min(T / sw, T / sh);
+        const w = sw * s, h = sh * s;
+        const dx = (T - w) / 2, dy = (T - h) / 2;
+        ctx.drawImage(bmp, dx, dy, w, h);
+      }
+    }
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      currentBitmap = await loadImageBitmap(file);
+      drawScaled(currentBitmap);
+      if (!moz) {
+        try {
+          moz = await moduleFactory(); // lädt automatisch mozjpeg_enc.wasm
+          console.log('MozJPEG (WASM) bereit.');
+        } catch (err) {
+          console.error(err);
+          alert('Konnte MozJPEG-WASM nicht laden. Prüfe Internetverbindung oder nutze lokale Dateien in ./mozjpeg/');
+          return;
+        }
+      }
+      btnSave.disabled = false;
+    });
+
+    modeSel.addEventListener('change', () => {
+      if (currentBitmap) drawScaled(currentBitmap);
+    });
+
+    btnSave.addEventListener('click', async () => {
+      if (!moz) {
+        alert('MozJPEG ist noch nicht initialisiert.');
+        return;
+      }
+      const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
+      const quality = Math.min(100, Math.max(10, parseInt(qInput.value, 10) || 92));
+      const chroma = parseInt(chromaSel.value, 10); // 0=4:4:4, 1=4:2:2, 2=4:2:0
+
+      const opts = {
+        quality,
+        baseline: true,          // <<< sicherstellen: Baseline-DCT
+        progressive: false,      // <<< sicherstellen: NICHT progressiv
+        arithmetic: false,
+        optimize_coding: true,
+        smoothing: 0,
+        color_space: 3,          // MozJpegColorSpace.YCbCr
+        quant_table: 3,          // "HVS Best" (wie Squoosh-Default)
+        trellis_multipass: false,
+        trellis_opt_zero: false,
+        trellis_opt_table: false,
+        trellis_loops: 1,
+        auto_subsample: false,
+        chroma_subsample: chroma,  // 0=4:4:4, 1=4:2:2, 2=4:2:0
+        separate_chroma_quality: false,
+        chroma_quality: quality
+      };
+
+      try {
+        const jpegU8 = moz.encode(data, 240, 240, opts);
+        // Verifizieren: nicht progressiv
+        if (isProgressiveJPEG(jpegU8)) {
+          alert('Warnung: Der erzeugte JPEG scheint progressiv zu sein – das sollte nicht passieren.');
+        }
+        const blob = new Blob([jpegU8], { type: 'image/jpeg' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'image_240x240.jpg';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error(err);
+        alert('Fehler beim JPEG-Encode: ' + (err?.message || err));
+      }
+    });
+  </script>
+</body>
+</html>

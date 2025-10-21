@@ -35,7 +35,9 @@ arduino-cli lib install "TFT_eSPI" "TJpg_Decoder"
 ## Kompilieren & Flashen
 ```bash
 arduino-cli compile -b esp32:esp32:esp32 \
-  --build-property build.partitions=custom_16mb_lfs .
+  --build-property build.partitions=custom_16mb_lfs \
+  --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" \
+  --build-property compiler.c.extra_flags="-DSMOOTH_FONT" .
 arduino-cli upload  -b esp32:esp32:esp32 -p /dev/ttyUSB0
 arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200
 ```
@@ -56,7 +58,7 @@ arduino-cli monitor -p /dev/ttyUSB0 -c baudrate=115200
 - SD-Karte vor dem TFT initialisieren; beide CS-Leitungen vor `begin()` auf HIGH legen.
 - JPEG-Ausgabe nutzt `TJpgDec.setSwapBytes(true)`.
 - Keine langen `delay()`-Aufrufe in App-Logik, um Buttons responsiv zu halten.
-- Statusmeldungen (Toast/Overlay) immer via `TinyFont::drawStringOutlineCentered()` zeichnen und mit `pauseUntil()` ungefaehr 1 s sichtbar lassen.
+- Statusmeldungen (Toast/Overlay) immer via `TextRenderer::drawCentered()` + Outline zeichnen und mit `pauseUntil()` ungefaehr 1 s sichtbar lassen.
 
 ### Buttonbelegung
 - BTN1: Single -> naechste App, Double -> vorherige App, Long -> Backlight Toggle

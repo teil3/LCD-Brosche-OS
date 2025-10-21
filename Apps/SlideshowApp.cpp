@@ -4,7 +4,7 @@
 
 #include "Core/Gfx.h"
 #include "Config.h"
-#include "Core/TinyFont.h"
+#include "Core/TextRenderer.h"
 #include "Core/Storage.h"
 
 namespace {
@@ -118,6 +118,7 @@ void SlideshowApp::requestCopy_() {
   copyConfirmSelection_ = 1; // Ja vorauswaehlen
   toastText_.clear();
   toastUntil_ = 0;
+  toastDirty_ = false;
   markCopyConfirmDirty_();
 }
 
@@ -130,7 +131,18 @@ void SlideshowApp::cancelCopy_() {
 }
 
 bool SlideshowApp::ensureFlashReady_() {
-  return ensureFlashSlidesDir();
+  if (!mountLittleFs(false)) {
+    Serial.println("[Slideshow] LittleFS mount retry");
+    if (!mountLittleFs(true)) {
+      Serial.println("[Slideshow] LittleFS format+mount failed");
+      return false;
+    }
+  }
+  if (!ensureFlashSlidesDir()) {
+    Serial.println("[Slideshow] ensureFlashSlidesDir failed");
+    return false;
+  }
+  return true;
 }
 
 bool SlideshowApp::prepareCopyQueue_() {
@@ -141,32 +153,45 @@ bool SlideshowApp::prepareCopyQueue_() {
   copyFileBytesDone_ = 0;
   copyAbortRequest_ = false;
   closeCopyFiles_();
-
-  if (!ensureFlashReady_()) {
-    return false;
-  }
-
-  File root = SD.open(dir.c_str());
-  if (!root || !root.isDirectory()) {
+  std::vector<String> sdFiles;
+  if (!readDirectoryEntries_(&SD, dir, sdFiles)) {
+    Serial.printf("[Slideshow] prepareCopyQueue: readDirectoryEntries failed for '%s'\n", dir.c_str());
     return false;
   }
 
   std::vector<CopyItem> items;
-  for (File f = root.openNextFile(); f; f = root.openNextFile()) {
-    if (f.isDirectory()) continue;
-    String base = f.name();
+  items.reserve(sdFiles.size());
+
+  for (String path : sdFiles) {
+    if (!path.startsWith("/")) path = "/" + path;
+    String base = path;
     int s = base.lastIndexOf('/');
     if (s >= 0) base = base.substring(s + 1);
     if (!isJpeg_(base)) continue;
+
+    File f = SD.open(path.c_str(), FILE_READ);
+    if (!f) {
+      Serial.printf("[Slideshow] copy queue open fail: %s\n", path.c_str());
+      continue;
+    }
+    size_t size = f.size();
+    f.close();
+    if (size == 0) continue;
+
     CopyItem ci;
+    ci.path = path;
     ci.name = base;
-    ci.size = f.size();
+    ci.size = size;
     items.push_back(ci);
-    copyBytesTotal_ += ci.size;
   }
-  root.close();
 
   if (items.empty()) {
+    Serial.println("[Slideshow] prepareCopyQueue: no JPEG files on SD");
+    return false;
+  }
+
+  if (!ensureFlashReady_()) {
+    Serial.println("[Slideshow] prepareCopyQueue: ensureFlashReady_ failed");
     return false;
   }
 
@@ -179,6 +204,12 @@ bool SlideshowApp::prepareCopyQueue_() {
   }
 
   copyQueue_ = std::move(items);
+  for (const auto& item : copyQueue_) {
+    copyBytesTotal_ += item.size;
+  }
+  Serial.printf("[Slideshow] prepareCopyQueue: %u files, total=%u bytes\n",
+                static_cast<unsigned>(copyQueue_.size()),
+                static_cast<unsigned>(copyBytesTotal_));
   return true;
 }
 
@@ -237,13 +268,9 @@ void SlideshowApp::handleCopyTick_(uint32_t budget_ms) {
       }
 
       const CopyItem& item = copyQueue_[copyQueueIndex_];
-      String sdPath = dir;
-      if (!sdPath.endsWith("/")) sdPath += "/";
-      sdPath += item.name;
-
       String flashPath = String(kFlashSlidesDir) + "/" + item.name;
 
-      copySrc_ = SD.open(sdPath.c_str(), FILE_READ);
+      copySrc_ = SD.open(item.path.c_str(), FILE_READ);
       copyDst_ = LittleFS.open(flashPath.c_str(), FILE_WRITE);
       copyFileBytesDone_ = 0;
 
@@ -335,12 +362,14 @@ void SlideshowApp::showCurrent_() {
     String base = path;
     int sidx = base.lastIndexOf('/');
     if (sidx >= 0) base = base.substring(sidx + 1);
-    uint8_t scale = 2;
-    int16_t y = TFT_H - TinyFont::glyphHeight(scale) - 4;
+    int16_t y = TFT_H - TextRenderer::lineHeight() - 4;
     if (y < 0) y = 0;
-    TinyFont::drawStringOutlineCentered(tft, y, base, TFT_BLACK, TFT_WHITE, scale);
+    TextRenderer::drawCentered(y, base, TFT_WHITE, TFT_BLACK);
   }
 
+  if (toastUntil_) {
+    toastDirty_ = true;
+  }
   drawToastOverlay_();
 
   Serial.printf("[Slideshow] OK (%s): %s\n", slideSourceLabel(source_), path.c_str());
@@ -399,6 +428,7 @@ String SlideshowApp::dwellToastLabel_() const {
 void SlideshowApp::showToast_(const String& txt, uint32_t duration_ms) {
   toastText_ = txt;
   toastUntil_ = millis() + duration_ms;
+  toastDirty_ = true;
   if (controlMode_ == ControlMode::StorageMenu) {
     markStorageMenuDirty_();
   } else {
@@ -411,13 +441,15 @@ void SlideshowApp::drawToastOverlay_() {
   if (millis() >= toastUntil_) {
     toastUntil_ = 0;
     toastText_.clear();
+    toastDirty_ = false;
     return;
   }
+  if (!toastDirty_) return;
+  toastDirty_ = false;
 
-  uint8_t scale = 3;
-  int16_t textY = (TFT_H - TinyFont::glyphHeight(scale)) / 2;
+  int16_t textY = (TFT_H - TextRenderer::lineHeight()) / 2;
   if (textY < 0) textY = 0;
-  TinyFont::drawStringOutlineCentered(tft, textY, toastText_, TFT_BLACK, TFT_WHITE, scale);
+  TextRenderer::drawCentered(textY, toastText_, TFT_WHITE, TFT_BLACK);
 }
 
 void SlideshowApp::drawCopyOverlay_() {
@@ -429,10 +461,10 @@ void SlideshowApp::drawCopyOverlay_() {
   const size_t displayedIndex = std::min(copyQueueIndex_ + (copySrc_ ? 1u : 0u), totalFiles);
 
   String header = String("Kopiere ") + String(displayedIndex) + "/" + String(totalFiles);
-  TinyFont::drawStringOutlineCentered(tft, 60, header, TFT_BLACK, TFT_WHITE, 3);
+  TextRenderer::drawCentered(24, header, TFT_WHITE, TFT_BLACK);
 
   String hint = String("BTN2 Long = Abbrechen");
-  TinyFont::drawStringOutlineCentered(tft, 140, hint, TFT_BLACK, TFT_WHITE, 2);
+  TextRenderer::drawCentered(24 + TextRenderer::lineHeight() + 14, hint, TFT_WHITE, TFT_BLACK);
 
   int16_t barWidth = TFT_W - 40;
   int16_t barHeight = 20;
@@ -448,7 +480,7 @@ void SlideshowApp::drawCopyOverlay_() {
   }
 
   if (toastUntil_ && millis() < toastUntil_) {
-    TinyFont::drawStringOutlineCentered(tft, barY + barHeight + 20, toastText_, TFT_BLACK, TFT_WHITE, 2);
+    TextRenderer::drawCentered(barY + barHeight + 18, toastText_, TFT_WHITE, TFT_BLACK);
   }
 }
 
@@ -462,15 +494,17 @@ void SlideshowApp::drawCopyConfirmOverlay_() {
 
   tft.fillScreen(TFT_BLACK);
 
-  TinyFont::drawStringOutlineCentered(tft, 30, "SD", TFT_BLACK, TFT_WHITE, 2);
-  TinyFont::drawStringOutlineCentered(tft, 58, "kopieren", TFT_BLACK, TFT_WHITE, 2);
+  const int16_t line = TextRenderer::lineHeight();
+  const int16_t top = 16;
+  TextRenderer::drawCentered(top, "SD", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line, "kopieren", TFT_WHITE, TFT_BLACK);
 
   String options = (copyConfirmSelection_ == 0) ? String("> Nein    Ja")
                                                : String("Nein    > Ja");
-  TinyFont::drawStringOutlineCentered(tft, 100, options, TFT_BLACK, TFT_WHITE, 2);
+  TextRenderer::drawCentered(top + line * 2 + 6, options, TFT_WHITE, TFT_BLACK);
 
-  TinyFont::drawStringOutlineCentered(tft, 142, "Single: Wechseln", TFT_BLACK, TFT_WHITE, 2);
-  TinyFont::drawStringOutlineCentered(tft, 168, "Long: Bestaetigen", TFT_BLACK, TFT_WHITE, 2);
+  TextRenderer::drawCentered(top + line * 3 + 18, "Single: Wechseln", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line * 4 + 18, "Long: Bestaetigen", TFT_WHITE, TFT_BLACK);
 }
 
 void SlideshowApp::drawStorageMenuOverlay_() {
@@ -498,12 +532,19 @@ void SlideshowApp::drawStorageMenuOverlay_() {
 
   tft.fillScreen(TFT_BLACK);
 
-  TinyFont::drawStringOutlineCentered(tft, 28, "Setup", TFT_BLACK, TFT_WHITE, 2);
-  TinyFont::drawStringOutlineCentered(tft, 68, sourceLine, TFT_BLACK, TFT_WHITE, 2);
+  const int16_t line = TextRenderer::lineHeight();
+  const int16_t spacing = 10;
+  const int16_t top = 12;
+  const int16_t sourceY = top + line + spacing;
+  const int16_t singleY = sourceY + line + spacing;
+  const int16_t doubleY = singleY + line + spacing;
+  const int16_t footerY = doubleY + line + spacing;
 
-  TinyFont::drawStringOutlineCentered(tft, 118, "Single: Quelle", TFT_BLACK, TFT_WHITE, 2);
-  TinyFont::drawStringOutlineCentered(tft, 146, "Double: Kopieren", TFT_BLACK, TFT_WHITE, 2);
-  TinyFont::drawStringOutlineCentered(tft, 174, footerLine, TFT_BLACK, TFT_WHITE, 2);
+  TextRenderer::drawCentered(top, "Setup", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(sourceY, sourceLine, TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(singleY, "Single: Quelle", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(doubleY, "Double: Kopieren", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(footerY, footerLine, TFT_WHITE, TFT_BLACK);
 }
 
 void SlideshowApp::markStorageMenuDirty_() {
@@ -554,11 +595,27 @@ bool SlideshowApp::rebuildFileListFrom_(SlideSource src) {
 }
 
 bool SlideshowApp::rebuildFileList_() {
-  bool ok = rebuildFileListFrom_(source_);
-  if (ok) {
+  if (rebuildFileListFrom_(source_)) {
     idx_ = 0;
+    return true;
   }
-  return ok;
+
+  if (source_ == SlideSource::SDCard) {
+    Serial.println("[Slideshow] SD leer – auf Flash umschalten");
+    if (rebuildFileListFrom_(SlideSource::Flash)) {
+      source_ = SlideSource::Flash;
+      idx_ = 0;
+      return true;
+    }
+  }
+
+  if (source_ == SlideSource::Flash && rebuildFileListFrom_(SlideSource::SDCard)) {
+    source_ = SlideSource::SDCard;
+    idx_ = 0;
+    return true;
+  }
+
+  return false;
 }
 
 void SlideshowApp::init() {
@@ -567,6 +624,7 @@ void SlideshowApp::init() {
   timeSinceSwitch_ = 0;
   toastText_.clear();
   toastUntil_ = 0;
+  toastDirty_ = false;
   dwellIdx_ = 1;
   auto_mode = true;
   controlMode_ = ControlMode::Auto;
@@ -603,6 +661,7 @@ void SlideshowApp::tick(uint32_t delta_ms) {
   if (toastUntil_ && now >= toastUntil_) {
     toastUntil_ = 0;
     toastText_.clear();
+    toastDirty_ = false;
     if (controlMode_ == ControlMode::StorageMenu) {
       markStorageMenuDirty_();
     } else if (!files_.empty()) {

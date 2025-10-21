@@ -11,6 +11,8 @@ enum class SlideSource : uint8_t {
 };
 
 constexpr const char* kFlashSlidesDir = "/slides";
+constexpr const char* kLittleFsBasePath = "/littlefs";
+constexpr const char* kLittleFsPartition = "littlefs";
 
 inline const char* slideSourceLabel(SlideSource src) {
   switch (src) {
@@ -30,5 +32,6 @@ inline fs::FS* filesystemFor(SlideSource src) {
 
 bool ensureFlashSlidesDir();
 bool clearFlashSlidesDir();
+bool mountLittleFs(bool formatOnFail);
 
 #endif // CORE_STORAGE_H

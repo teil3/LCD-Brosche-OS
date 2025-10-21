@@ -1,4 +1,5 @@
 #include "Gfx.h"
+#include "TextRenderer.h"
 
 TFT_eSPI tft;
 SPIClass sdSPI(VSPI);
@@ -55,6 +56,7 @@ void gfxBegin() {
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
   tft.setTextDatum(MC_DATUM);
+  TextRenderer::begin();
 
   // JPEG-Decoder (nach TFT, aber unabhängig vom SD-Init)
   TJpgDec.setCallback(tft_output_cb);
@@ -62,5 +64,4 @@ void gfxBegin() {
 
   Serial.println("[GFX] init ok");
 }
-
 

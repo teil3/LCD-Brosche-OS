@@ -20,8 +20,8 @@ SCK=14, MOSI=15, MISO=2, SD_CS=13, TFT_CS=5, TFT_BL=22. BTN1=32, BTN2=33/35 (35 
   - `arduino-cli core install esp32:esp32`
   - `arduino-cli lib install "TFT_eSPI" "TJpg_Decoder"`
 - **Kompilieren (Board-Beispiel):**
-  - `arduino-cli compile -b esp32:esp32:esp32 --build-property build.partitions=custom_16mb_lfs .`
-  - `arduino-cli compile -b esp32:esp32:esp32 .`
+  - `arduino-cli compile -b esp32:esp32:esp32 --build-property build.partitions=custom_16mb_lfs --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" --build-property compiler.c.extra_flags="-DSMOOTH_FONT" .`
+  - `arduino-cli compile -b esp32:esp32:esp32 --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" --build-property compiler.c.extra_flags="-DSMOOTH_FONT" .`
 - **Upload:**  
   - `arduino-cli upload  -b esp32:esp32:esp32 -p /dev/ttyACM0`
 - **Seriell (115200):**
@@ -32,7 +32,7 @@ SCK=14, MOSI=15, MISO=2, SD_CS=13, TFT_CS=5, TFT_BL=22. BTN1=32, BTN2=33/35 (35 
 - JPEG: `TJpgDec.setSwapBytes(true)`.
 - LittleFS (`/slides`) wird beim Start eingebunden; grosse Dateien zuerst von SD in den Flash kopieren.
 - Keine langen `delay()` in App-Logik (Buttons responsiv halten).
-- Status/Toast-Overlays immer mit `TinyFont::drawStringOutlineCentered` (weiß, schwarze Outline) zeichnen und anschließend per `pauseUntil` ~1 s Animation pausieren, damit der Text sichtbar bleibt.
+- Status/Toast-Overlays immer mit `TextRenderer::drawCentered` + Outline zeichnen und anschließend per `pauseUntil` ~1 s Animation pausieren, damit der Text sichtbar bleibt.
 
 ## Button-Mapping
 - BTN1: Single=nextApp, Double=prevApp, Long=Backlight toggle

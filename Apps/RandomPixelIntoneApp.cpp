@@ -5,7 +5,7 @@
 
 #include "Config.h"
 #include "Core/Gfx.h"
-#include "Core/TinyFont.h"
+#include "Core/TextRenderer.h"
 
 namespace {
 constexpr uint8_t kIntoneVariation = 4;
@@ -164,10 +164,9 @@ void RandomPixelIntoneApp::slower_() {
 }
 
 void RandomPixelIntoneApp::showStatus_(const String& msg) {
-  uint8_t scale = 3;
-  int16_t textY = static_cast<int16_t>((TFT_H - TinyFont::glyphHeight(scale)) / 2);
+  int16_t textY = static_cast<int16_t>((TFT_H - TextRenderer::lineHeight()) / 2);
   if (textY < 0) textY = 0;
-  TinyFont::drawStringOutlineCentered(tft, textY, msg, TFT_WHITE, TFT_BLACK, scale);
+  TextRenderer::drawCentered(textY, msg, TFT_WHITE, TFT_BLACK);
   pauseUntil_ = millis() + 1000;
 }
 

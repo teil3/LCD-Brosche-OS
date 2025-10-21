@@ -41,10 +41,10 @@ void setup() {
   for (int i=0;i<20;i++){ if (Serial) break; delay(10); }
   Serial.println("[BOOT] setup start");
 
-  bool lfs_ok = LittleFS.begin();
+  bool lfs_ok = mountLittleFs(false);
   if (!lfs_ok) {
     Serial.println("[BOOT] LittleFS mount failed, try format");
-    lfs_ok = LittleFS.begin(true);
+    lfs_ok = mountLittleFs(true);
   }
   if (lfs_ok) {
     if (!ensureFlashSlidesDir()) {
@@ -114,7 +114,7 @@ void loop() {
 #include "Core/AppManager.cpp"
 #include "Core/Gfx.cpp"
 #include "Core/Storage.cpp"
-#include "Core/TinyFont.cpp"
+#include "Core/TextRenderer.cpp"
 #include "Apps/SlideshowApp.cpp"
 #include "Apps/RandomSmallPixelIntoneApp.cpp"
 #include "Apps/RandomPixelIntoneApp.cpp"

@@ -1,5 +1,19 @@
 #include "Storage.h"
 
+bool mountLittleFs(bool formatOnFail) {
+  auto tryMount = [](bool format) {
+    return LittleFS.begin(format, kLittleFsBasePath, 10, kLittleFsPartition);
+  };
+
+  if (tryMount(false)) {
+    return true;
+  }
+  if (formatOnFail && tryMount(true)) {
+    return true;
+  }
+  return false;
+}
+
 bool ensureFlashSlidesDir() {
   if (!LittleFS.exists(kFlashSlidesDir)) {
     return LittleFS.mkdir(kFlashSlidesDir);

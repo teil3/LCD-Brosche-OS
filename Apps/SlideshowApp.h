@@ -27,6 +27,7 @@ private:
   enum class CopyState : uint8_t { Idle = 0, Confirm = 1, Running = 2, Done = 3, Error = 4, Aborted = 5 };
 
   struct CopyItem {
+    String path;
     String name;
     size_t size = 0;
   };
@@ -56,6 +57,7 @@ private:
   String storageMenuLastSource_;
   String storageMenuLastFooter_;
   bool storageMenuLastToastActive_ = false;
+  bool toastDirty_ = false;
 
   void setControlMode_(ControlMode mode, bool showToast = true);
   void setSource_(SlideSource src, bool showToast = true);
