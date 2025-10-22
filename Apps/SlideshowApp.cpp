@@ -587,7 +587,7 @@ void SlideshowApp::drawCopyConfirmOverlay_() {
   TextRenderer::drawCentered(top + line * 2 + 16, options, TFT_WHITE, TFT_BLACK);
 
   TextRenderer::drawCentered(top + line * 3 + 28, "Klick: Wechseln", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(top + line * 4 + 28, "Lang: Bestaetigen", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line * 4 + 28, "Lang: Bestätigen", TFT_WHITE, TFT_BLACK);
 }
 
 void SlideshowApp::drawStorageMenuOverlay_() {

@@ -123,7 +123,7 @@ void RandomPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
-      showStatus_(String("Groesse ") + String(currentStep_()));
+      showStatus_(String("Grösse ") + String(currentStep_()));
       break;
     case BtnEvent::Double:
       slower_();

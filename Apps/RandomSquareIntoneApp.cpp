@@ -163,7 +163,7 @@ void RandomSquareIntoneApp::onButton(uint8_t index, BtnEvent e) {
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
-      showStatus_(String("Groesse <= ") + String(currentMaxSize_()));
+      showStatus_(String("Grösse <= ") + String(currentMaxSize_()));
       break;
     case BtnEvent::Double:
       nextInterval_();
@@ -217,7 +217,7 @@ void RandomSquareIntoneApp::showStatus_(const String& msg) {
 const char* RandomSquareIntoneApp::paletteName_() const {
   switch (palette_mode_) {
     case 1: return "Rot";
-    case 2: return "Gruen";
+    case 2: return "Grün";
     case 3: return "Blau";
     case 4: return "Graustufen";
     default: return "Alle Farben";

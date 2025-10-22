@@ -120,7 +120,7 @@ void RandomStripesIntoneApp::onButton(uint8_t index, BtnEvent e) {
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
-      showStatus_(String("Hoehe ") + String(currentStripeHeight_()));
+      showStatus_(String("Höhe ") + String(currentStripeHeight_()));
       break;
     case BtnEvent::Double:
       slower_();
