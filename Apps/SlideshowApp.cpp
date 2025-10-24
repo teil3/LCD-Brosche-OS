@@ -800,10 +800,10 @@ void SlideshowApp::drawBleReceiveOverlay_() {
   }
 
   const int16_t line = TextRenderer::lineHeight();
-  const int16_t headerY = 32;
-  const int16_t primaryY = headerY + line + 10;
-  const int16_t secondaryY = primaryY + line + 8;
-  const int16_t barWidth = tft.width() - 40;
+  const int16_t headerY = 44;
+  const int16_t primaryY = headerY + line + 12;
+  const int16_t secondaryY = primaryY + line + 10;
+  const int16_t barWidth = tft.width() - 48;
   const int16_t barHeight = 14;
   const int16_t barX = (tft.width() - barWidth) / 2;
   const int16_t barY = secondaryY + line + 18;
@@ -924,7 +924,7 @@ void SlideshowApp::drawBleReceiveOverlay_() {
     footer = toastText_;
   }
   if (footer.isEmpty()) {
-    footer = "Lang: Auto-Modus";
+    footer = "Lang: Auto";
   }
   if (footer != bleLastFooter_) {
     tft.fillRect(0, footerY - 4, tft.width(), line + 8, TFT_BLACK);
