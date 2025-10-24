@@ -17,7 +17,6 @@ constexpr uint32_t kCopyTickBudgetMs = 25;   // max Arbeit je loop
 constexpr uint32_t kCopyAbortToastMs = 1200;
 constexpr uint32_t kCopyDoneToastMs = 1800;
 constexpr uint32_t kCopyErrorToastMs = 1800;
-std::vector<uint8_t> gFlashFrameBuffer;
 }
 
 bool SlideshowApp::isJpeg_(const String& n) {
@@ -501,35 +500,14 @@ void SlideshowApp::showCurrent_() {
 
   tft.fillScreen(TFT_BLACK);
 
-  int rc = 0;
+  JRESULT rc = JDR_OK;
   if (source_ == SlideSource::SDCard) {
     rc = TJpgDec.drawSdJpg(0, 0, path.c_str());
   } else {
-    File jpg = fs->open(path.c_str(), FILE_READ);
-    if (!jpg) {
-      Serial.printf("[Slideshow] Flash open FAIL: %s\n", path.c_str());
-      return;
-    }
-    size_t size = jpg.size();
-    if (size == 0 || size > 400000) {
-      jpg.close();
-      Serial.printf("[Slideshow] Flash size issue (%u): %s\n", (unsigned)size, path.c_str());
-      return;
-    }
-    if (gFlashFrameBuffer.capacity() < size) {
-      gFlashFrameBuffer.reserve(size);
-    }
-    gFlashFrameBuffer.resize(size);
-    size_t read = jpg.read(gFlashFrameBuffer.data(), size);
-    jpg.close();
-    if (read != size) {
-      Serial.printf("[Slideshow] Flash read fail: %s\n", path.c_str());
-      return;
-    }
-    Serial.printf("[Slideshow] Flash draw %s (%u bytes)\n", path.c_str(), (unsigned)size);
-    rc = TJpgDec.drawJpg(0, 0, gFlashFrameBuffer.data(), read);
+    digitalWrite(SD_CS_PIN, HIGH);
+    rc = TJpgDec.drawFsJpg(0, 0, path.c_str(), LittleFS);
   }
-  if (rc != 1) {
+  if (rc != JDR_OK) {
     Serial.printf("[Slideshow] draw fail (%d): %s\n", rc, path.c_str());
     return;
   }
