@@ -109,7 +109,10 @@
     let currentDownloadName = 'image_240.jpg';
     let bleSending = false;
 
-    const bleSupported = 'bluetooth' in navigator;
+    const secureContextHosts = new Set(['localhost', '127.0.0.1', '::1']);
+    const secureContext = window.isSecureContext || secureContextHosts.has(location.hostname);
+    const bleAvailable = 'bluetooth' in navigator;
+    const bleSupported = secureContext && bleAvailable;
 
     function setBleStatus(text) {
       if (!bleStatus) return;
@@ -621,9 +624,12 @@
 
     btnBle.addEventListener('click', sendViaBle);
 
-    if (!bleSupported) {
-      btnBle.title = 'WebBluetooth wird nicht unterstützt.';
-      setBleStatus('WebBluetooth wird von diesem Browser nicht unterstützt. Verwende Chrome, Edge oder Android Chrome.');
+    if (!secureContext) {
+      btnBle.title = 'WebBluetooth benötigt HTTPS oder localhost.';
+      setBleStatus('WebBluetooth benötigt eine sichere Herkunft. Bitte die Seite über https:// oder http://localhost ausliefern (z. B. "python -m http.server" nutzen) und dann erneut versuchen.');
+    } else if (!bleAvailable) {
+      btnBle.title = 'WebBluetooth wird von diesem Browser nicht freigegeben.';
+      setBleStatus('WebBluetooth wird von diesem Browser/Profil nicht unterstützt. Verwende eine aktuelle Chromium-Variante wie Chrome oder Edge.');
     }
 
     updateActionButtons();
