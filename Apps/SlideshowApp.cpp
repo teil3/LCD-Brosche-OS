@@ -827,16 +827,17 @@ void SlideshowApp::drawBleReceiveOverlay_() {
 
   const int16_t line = TextRenderer::lineHeight();
   int16_t y = 24;
-  TextRenderer::drawCentered(y, "BLE Empfang", TFT_WHITE, TFT_BLACK);
-  y += line + 10;
+  TextRenderer::drawCentered(y, "Bluetooth bereit", TFT_WHITE, TFT_BLACK);
+  y += line;
+  y += 4;
 
   String primary;
   String secondary;
 
   switch (bleState_) {
     case BleState::Idle:
-      primary = "Bereit";
-      secondary = "Im Tool \"Senden\" wählen";
+      primary = "\"Per Bluetooth senden\"";
+      secondary = "Im Tool auswählen";
       break;
     case BleState::Receiving: {
       primary = bleLastFilename_.isEmpty() ? String("Empfang läuft") : bleLastFilename_;
@@ -891,7 +892,7 @@ void SlideshowApp::drawBleReceiveOverlay_() {
     footer = "Lang: Auto-Modus";
   }
 
-  TextRenderer::drawCentered(tft.height() - line - 16, footer, TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(tft.height() - line - 36, footer, TFT_WHITE, TFT_BLACK);
 }
 
 bool SlideshowApp::readDirectoryEntries_(fs::FS* fs, const String& basePath, std::vector<String>& out) {
