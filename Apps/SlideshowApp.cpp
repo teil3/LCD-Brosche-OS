@@ -843,7 +843,7 @@ void SlideshowApp::drawBleReceiveOverlay_() {
   bool allowClear = (bleState_ != BleState::Completed);
 
   String header = String("Bluetooth Modus");
-  if (header != bleLastHeader_) {
+  if (!allowClear || header != bleLastHeader_) {
     if (allowClear) {
       tft.fillRect(0, headerY - 4, tft.width(), line + 8, TFT_BLACK);
     }
@@ -885,7 +885,7 @@ void SlideshowApp::drawBleReceiveOverlay_() {
       break;
   }
 
-  if (primary != bleLastPrimary_) {
+  if (!allowClear || primary != bleLastPrimary_) {
     if (allowClear) {
       tft.fillRect(0, primaryY - 4, tft.width(), line + 8, TFT_BLACK);
     }
@@ -893,7 +893,7 @@ void SlideshowApp::drawBleReceiveOverlay_() {
     bleLastPrimary_ = primary;
   }
 
-  if (secondary != bleLastSecondary_) {
+  if (!allowClear || secondary != bleLastSecondary_) {
     if (allowClear) {
       tft.fillRect(0, secondaryY - 4, tft.width(), line + 8, TFT_BLACK);
     }
@@ -936,7 +936,7 @@ void SlideshowApp::drawBleReceiveOverlay_() {
   if (footer.isEmpty()) {
     footer = "Lang: Auto";
   }
-  if (footer != bleLastFooter_) {
+  if (!allowClear || footer != bleLastFooter_) {
     if (allowClear) {
       tft.fillRect(0, footerY - 4, tft.width(), line + 8, TFT_BLACK);
     }
