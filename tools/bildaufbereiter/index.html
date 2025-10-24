@@ -207,15 +207,7 @@
       }
     }
 
-    async function writeBle(characteristic, data, preferNoResponse = false) {
-      if (preferNoResponse && characteristic.properties?.writeWithoutResponse && typeof characteristic.writeValueWithoutResponse === 'function') {
-        try {
-          await characteristic.writeValueWithoutResponse(data);
-          return;
-        } catch (err) {
-          console.warn('writeValueWithoutResponse failed, fallback to writeValue', err);
-        }
-      }
+    async function writeBle(characteristic, data) {
       await characteristic.writeValue(data);
     }
 
@@ -301,7 +293,7 @@
         control.addEventListener('characteristicvaluechanged', notifyHandler);
 
         const startPayload = `START:${bytes.length}:${sanitizedName}`;
-        await writeBle(control, textEncoder.encode(startPayload), false);
+        await writeBle(control, textEncoder.encode(startPayload));
         const startOk = await waitFor(() => startConfirmed || remoteError, 2000);
         if (remoteError) throw new Error(remoteError);
         if (!startOk) {
@@ -312,7 +304,7 @@
         const chunkSize = 20;
         for (let offset = 0; offset < bytes.length; offset += chunkSize) {
           const slice = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
-          await writeBle(chunk, slice, true);
+          await writeBle(chunk, slice);
           if (remoteError) break;
           if ((offset / chunkSize) % 24 === 0) {
             const sent = offset + slice.length;
@@ -324,7 +316,7 @@
 
         if (remoteError) throw new Error(remoteError);
 
-        await writeBle(control, textEncoder.encode('END'), false);
+        await writeBle(control, textEncoder.encode('END'));
         setBleStatus('Übertragung gesendet, warte auf Bestätigung …');
         await waitFor(() => remoteDone || remoteError, 3000);
         if (remoteError) throw new Error(remoteError);
