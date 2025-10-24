@@ -843,10 +843,13 @@ void SlideshowApp::drawBleReceiveOverlay_() {
   bool allowClear = (bleState_ != BleState::Completed);
 
   String header = String("Bluetooth Modus");
-  if (!allowClear || header != bleLastHeader_) {
-    if (allowClear) {
+  if (allowClear) {
+    if (header != bleLastHeader_) {
       tft.fillRect(0, headerY - 4, tft.width(), line + 8, TFT_BLACK);
+      TextRenderer::drawCentered(headerY, header, TFT_WHITE, TFT_BLACK);
+      bleLastHeader_ = header;
     }
+  } else if (header != bleLastHeader_) {
     TextRenderer::drawCentered(headerY, header, TFT_WHITE, TFT_BLACK);
     bleLastHeader_ = header;
   }
@@ -885,22 +888,30 @@ void SlideshowApp::drawBleReceiveOverlay_() {
       break;
   }
 
-  if (!allowClear || primary != bleLastPrimary_) {
-    if (allowClear) {
+  if (allowClear) {
+    if (primary != bleLastPrimary_) {
       tft.fillRect(0, primaryY - 4, tft.width(), line + 8, TFT_BLACK);
+      TextRenderer::drawCentered(primaryY, primary, TFT_WHITE, TFT_BLACK);
+      bleLastPrimary_ = primary;
     }
-    TextRenderer::drawCentered(primaryY, primary, TFT_WHITE, TFT_BLACK);
-    bleLastPrimary_ = primary;
-  }
-
-  if (!allowClear || secondary != bleLastSecondary_) {
-    if (allowClear) {
+    if (secondary != bleLastSecondary_) {
       tft.fillRect(0, secondaryY - 4, tft.width(), line + 8, TFT_BLACK);
+      if (!secondary.isEmpty()) {
+        TextRenderer::drawCentered(secondaryY, secondary, TFT_WHITE, TFT_BLACK);
+      }
+      bleLastSecondary_ = secondary;
     }
-    if (!secondary.isEmpty()) {
-      TextRenderer::drawCentered(secondaryY, secondary, TFT_WHITE, TFT_BLACK);
+  } else {
+    if (primary != bleLastPrimary_) {
+      TextRenderer::drawCentered(primaryY, primary, TFT_WHITE, TFT_BLACK);
+      bleLastPrimary_ = primary;
     }
-    bleLastSecondary_ = secondary;
+    if (secondary != bleLastSecondary_) {
+      if (!secondary.isEmpty()) {
+        TextRenderer::drawCentered(secondaryY, secondary, TFT_WHITE, TFT_BLACK);
+      }
+      bleLastSecondary_ = secondary;
+    }
   }
 
   if (bleState_ == BleState::Receiving && bleLastBytesExpected_ > 0) {
@@ -936,10 +947,13 @@ void SlideshowApp::drawBleReceiveOverlay_() {
   if (footer.isEmpty()) {
     footer = "Lang: Auto";
   }
-  if (!allowClear || footer != bleLastFooter_) {
-    if (allowClear) {
+  if (allowClear) {
+    if (footer != bleLastFooter_) {
       tft.fillRect(0, footerY - 4, tft.width(), line + 8, TFT_BLACK);
+      TextRenderer::drawCentered(footerY, footer, TFT_WHITE, TFT_BLACK);
+      bleLastFooter_ = footer;
     }
+  } else if (footer != bleLastFooter_) {
     TextRenderer::drawCentered(footerY, footer, TFT_WHITE, TFT_BLACK);
     bleLastFooter_ = footer;
   }
