@@ -10,7 +10,7 @@ class SlideshowApp : public App {
 public:
   String dir = "/";
   uint32_t dwell_ms = 5000;
-  bool show_filename = true;
+  bool show_filename = false;
 
   // NEU:
   bool auto_mode = true;  // true=Auto-Slideshow, false=Manuell
@@ -76,6 +76,13 @@ private:
   String bleLastFilename_;
   size_t bleLastBytesReceived_ = 0;
   size_t bleLastBytesExpected_ = 0;
+  bool bleOverlayNeedsClear_ = true;
+  bool bleProgressFrameDrawn_ = false;
+  uint16_t bleBarFill_ = 0;
+  String bleLastHeader_;
+  String bleLastPrimary_;
+  String bleLastSecondary_;
+  String bleLastFooter_;
 
   void setControlMode_(ControlMode mode, bool showToast = true);
   void setSource_(SlideSource src, bool showToast = true);

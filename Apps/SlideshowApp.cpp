@@ -150,6 +150,13 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
     bleState_ = BleState::Idle;
     bleLastBytesExpected_ = 0;
     bleLastBytesReceived_ = 0;
+    bleOverlayNeedsClear_ = true;
+    bleProgressFrameDrawn_ = false;
+    bleBarFill_ = 0;
+    bleLastHeader_.clear();
+    bleLastPrimary_.clear();
+    bleLastSecondary_.clear();
+    bleLastFooter_.clear();
   }
 
   controlMode_ = mode;
@@ -164,6 +171,13 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
     bleLastBytesReceived_ = 0;
     bleOverlayDirty_ = true;
     BleImageTransfer::setTransferEnabled(true);
+    bleOverlayNeedsClear_ = true;
+    bleProgressFrameDrawn_ = false;
+    bleBarFill_ = 0;
+    bleLastHeader_.clear();
+    bleLastPrimary_.clear();
+    bleLastSecondary_.clear();
+    bleLastFooter_.clear();
   }
   switch (controlMode_) {
     case ControlMode::Auto:
@@ -190,6 +204,7 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
       toastText_.clear();
       toastUntil_ = 0;
       bleOverlayDirty_ = true;
+      bleOverlayNeedsClear_ = true;
       break;
   }
   timeSinceSwitch_ = 0;
@@ -784,12 +799,26 @@ void SlideshowApp::drawBleReceiveOverlay_() {
     }
   }
 
-  if (!bleOverlayDirty_) {
-    return;
-  }
-  bleOverlayDirty_ = false;
+  const int16_t line = TextRenderer::lineHeight();
+  const int16_t headerY = 32;
+  const int16_t primaryY = headerY + line + 10;
+  const int16_t secondaryY = primaryY + line + 8;
+  const int16_t barWidth = tft.width() - 40;
+  const int16_t barHeight = 14;
+  const int16_t barX = (tft.width() - barWidth) / 2;
+  const int16_t barY = secondaryY + line + 18;
+  const int16_t footerY = tft.height() - line - 36;
 
-  tft.fillScreen(TFT_BLACK);
+  if (bleOverlayNeedsClear_) {
+    tft.fillScreen(TFT_BLACK);
+    bleOverlayNeedsClear_ = false;
+    bleProgressFrameDrawn_ = false;
+    bleBarFill_ = 0;
+    bleLastHeader_.clear();
+    bleLastPrimary_.clear();
+    bleLastSecondary_.clear();
+    bleLastFooter_.clear();
+  }
 
   auto formatKB = [](size_t bytes) -> String {
     if (bytes < 1024) {
@@ -811,11 +840,12 @@ void SlideshowApp::drawBleReceiveOverlay_() {
     return String(buf);
   };
 
-  const int16_t line = TextRenderer::lineHeight();
-  int16_t y = 24;
-  TextRenderer::drawCentered(y, "Bluetooth bereit", TFT_WHITE, TFT_BLACK);
-  y += line;
-  y += 4;
+  String header = "Bluetooth bereit";
+  if (header != bleLastHeader_) {
+    tft.fillRect(0, headerY - 4, tft.width(), line + 8, TFT_BLACK);
+    TextRenderer::drawCentered(headerY, header, TFT_WHITE, TFT_BLACK);
+    bleLastHeader_ = header;
+  }
 
   String primary;
   String secondary;
@@ -851,23 +881,42 @@ void SlideshowApp::drawBleReceiveOverlay_() {
       break;
   }
 
-  TextRenderer::drawCentered(y, primary, TFT_WHITE, TFT_BLACK);
-  y += line + 6;
-  if (!secondary.isEmpty()) {
-    TextRenderer::drawCentered(y, secondary, TFT_WHITE, TFT_BLACK);
-    y += line + 12;
+  if (primary != bleLastPrimary_) {
+    tft.fillRect(0, primaryY - 4, tft.width(), line + 8, TFT_BLACK);
+    TextRenderer::drawCentered(primaryY, primary, TFT_WHITE, TFT_BLACK);
+    bleLastPrimary_ = primary;
+  }
+
+  if (secondary != bleLastSecondary_) {
+    tft.fillRect(0, secondaryY - 4, tft.width(), line + 8, TFT_BLACK);
+    if (!secondary.isEmpty()) {
+      TextRenderer::drawCentered(secondaryY, secondary, TFT_WHITE, TFT_BLACK);
+    }
+    bleLastSecondary_ = secondary;
   }
 
   if (bleState_ == BleState::Receiving && bleLastBytesExpected_ > 0) {
-    const int16_t barWidth = tft.width() - 40;
-    const int16_t barX = (tft.width() - barWidth) / 2;
-    const int16_t barY = y;
-    tft.drawRect(barX, barY, barWidth, 14, TFT_WHITE);
     size_t denom = bleLastBytesExpected_ ? bleLastBytesExpected_ : 1;
-    int16_t fill = static_cast<int16_t>((barWidth - 2) * bleLastBytesReceived_ / denom);
-    if (fill > barWidth - 2) fill = barWidth - 2;
-    tft.fillRect(barX + 1, barY + 1, fill, 12, TFT_WHITE);
-    y = barY + 22;
+    uint16_t fill = static_cast<uint16_t>(((barWidth - 2) * bleLastBytesReceived_) / denom);
+    if (!bleProgressFrameDrawn_) {
+      tft.drawRect(barX, barY, barWidth, barHeight, TFT_WHITE);
+      bleProgressFrameDrawn_ = true;
+      bleBarFill_ = 0;
+    }
+    if (fill != bleBarFill_) {
+      tft.fillRect(barX + 1, barY + 1, barWidth - 2, barHeight - 2, TFT_BLACK);
+      if (fill > 0) {
+        if (fill > barWidth - 2) fill = barWidth - 2;
+        tft.fillRect(barX + 1, barY + 1, fill, barHeight - 2, TFT_WHITE);
+      }
+      bleBarFill_ = fill;
+    }
+  } else {
+    if (bleProgressFrameDrawn_ || bleBarFill_ != 0) {
+      tft.fillRect(barX, barY, barWidth, barHeight, TFT_BLACK);
+      bleProgressFrameDrawn_ = false;
+      bleBarFill_ = 0;
+    }
   }
 
   String footer;
@@ -877,8 +926,13 @@ void SlideshowApp::drawBleReceiveOverlay_() {
   if (footer.isEmpty()) {
     footer = "Lang: Auto-Modus";
   }
+  if (footer != bleLastFooter_) {
+    tft.fillRect(0, footerY - 4, tft.width(), line + 8, TFT_BLACK);
+    TextRenderer::drawCentered(footerY, footer, TFT_WHITE, TFT_BLACK);
+    bleLastFooter_ = footer;
+  }
 
-  TextRenderer::drawCentered(tft.height() - line - 36, footer, TFT_WHITE, TFT_BLACK);
+  bleOverlayDirty_ = false;
 }
 
 bool SlideshowApp::readDirectoryEntries_(fs::FS* fs, const String& basePath, std::vector<String>& out) {
@@ -971,6 +1025,13 @@ void SlideshowApp::init() {
   bleLastBytesExpected_ = 0;
   bleLastBytesReceived_ = 0;
   BleImageTransfer::setTransferEnabled(false);
+  bleOverlayNeedsClear_ = true;
+  bleProgressFrameDrawn_ = false;
+  bleBarFill_ = 0;
+  bleLastHeader_.clear();
+  bleLastPrimary_.clear();
+  bleLastSecondary_.clear();
+  bleLastFooter_.clear();
 
   applyDwell_();
 
