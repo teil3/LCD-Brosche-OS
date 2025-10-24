@@ -264,7 +264,16 @@
         const service = await server.getPrimaryService(BLE_UUIDS.service);
         control = await service.getCharacteristic(BLE_UUIDS.control);
         chunk = await service.getCharacteristic(BLE_UUIDS.chunk);
-        await control.startNotifications();
+
+        console.debug('BLE control props', control.properties);
+        console.debug('BLE chunk props', chunk.properties);
+
+        setBleStatus('Aktiviere Statusmeldungen …');
+        try {
+          await control.startNotifications();
+        } catch (err) {
+          throw new Error('startNotifications fehlgeschlagen: ' + (err?.message || err));
+        }
 
         notifyHandler = (event) => {
           const value = event.target.value;
@@ -293,7 +302,11 @@
         control.addEventListener('characteristicvaluechanged', notifyHandler);
 
         const startPayload = `START:${bytes.length}:${sanitizedName}`;
-        await writeBle(control, textEncoder.encode(startPayload));
+        try {
+          await writeBle(control, textEncoder.encode(startPayload));
+        } catch (err) {
+          throw new Error('START schreiben fehlgeschlagen: ' + (err?.message || err));
+        }
         const startOk = await waitFor(() => startConfirmed || remoteError, 2000);
         if (remoteError) throw new Error(remoteError);
         if (!startOk) {
@@ -304,7 +317,11 @@
         const chunkSize = 20;
         for (let offset = 0; offset < bytes.length; offset += chunkSize) {
           const slice = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
-          await writeBle(chunk, slice);
+          try {
+            await writeBle(chunk, slice);
+          } catch (err) {
+            throw new Error(`Chunk @${offset} (${slice.length} B) fehlgeschlagen: ${err?.message || err}`);
+          }
           if (remoteError) break;
           if ((offset / chunkSize) % 24 === 0) {
             const sent = offset + slice.length;
@@ -316,7 +333,11 @@
 
         if (remoteError) throw new Error(remoteError);
 
-        await writeBle(control, textEncoder.encode('END'));
+        try {
+          await writeBle(control, textEncoder.encode('END'));
+        } catch (err) {
+          throw new Error('END schreiben fehlgeschlagen: ' + (err?.message || err));
+        }
         setBleStatus('Übertragung gesendet, warte auf Bestätigung …');
         await waitFor(() => remoteDone || remoteError, 3000);
         if (remoteError) throw new Error(remoteError);
