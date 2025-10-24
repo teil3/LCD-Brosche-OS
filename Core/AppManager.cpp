@@ -1,6 +1,7 @@
 #include "AppManager.h"
 #include <Arduino.h>
 #include <TFT_eSPI.h>
+#include "TextRenderer.h"
 
 extern TFT_eSPI tft; // aus Gfx.cpp
 
@@ -15,6 +16,10 @@ void AppManager::setActive(int i) {
     Serial.printf("[APP] activate %s (%d/%d)\n", apps_[active_]->name(), active_ + 1, (int)apps_.size());
   }
   tft.fillScreen(TFT_BLACK);
+  int16_t textY = (tft.height() - TextRenderer::lineHeight()) / 2;
+  if (textY < 0) textY = 0;
+  TextRenderer::drawCentered(textY, String(apps_[active_]->name()), TFT_WHITE, TFT_BLACK);
+  delay(1000);
   apps_[active_]->init();
 }
 

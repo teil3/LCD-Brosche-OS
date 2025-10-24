@@ -5,7 +5,7 @@
 
 class RandomSquareIntoneApp : public App {
 public:
-  const char* name() const override { return "Rechteck-Toene"; }
+  const char* name() const override { return "Rechteck-Töne"; }
   void init() override;
   void tick(uint32_t delta_ms) override;
   void onButton(uint8_t index, BtnEvent e) override;
