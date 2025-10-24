@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <BLEDevice.h>
+#include <BLE2902.h>
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
@@ -445,6 +446,9 @@ void begin() {
       BLECharacteristic::PROPERTY_NOTIFY
   );
   gControlChar->setCallbacks(&gControlCallbacks);
+  BLE2902* cccd = new BLE2902();
+  cccd->setNotifications(true);
+  gControlChar->addDescriptor(cccd);
 
   service->start();
 
