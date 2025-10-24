@@ -1,11 +1,13 @@
 #include "SlideshowApp.h"
 
 #include <algorithm>
+#include <cstdio>
 
 #include "Core/Gfx.h"
 #include "Config.h"
 #include "Core/TextRenderer.h"
 #include "Core/Storage.h"
+#include "Core/BleImageTransfer.h"
 
 namespace {
 constexpr std::array<uint32_t, 5> kDwellSteps{1000, 5000, 10000, 30000, 300000};
@@ -23,14 +25,145 @@ bool SlideshowApp::isJpeg_(const String& n) {
   return l.endsWith(".jpg") || l.endsWith(".jpeg");
 }
 
+void SlideshowApp::onBleTransferStarted(const char* filename, size_t size) {
+  if (copyState_ == CopyState::Running) return;
+  if (controlMode_ != ControlMode::BleReceive) {
+    showToast_("BLE: Modus aktivieren", 1200);
+    return;
+  }
+
+  bleState_ = BleState::Receiving;
+  bleLastFilename_ = filename ? String(filename) : String();
+  bleLastBytesExpected_ = size;
+  bleLastBytesReceived_ = 0;
+  bleLastMessage_ = bleLastFilename_.isEmpty() ? String("Empfang läuft")
+                                               : String("Empfange ") + bleLastFilename_;
+  bleOverlayDirty_ = true;
+}
+
+void SlideshowApp::onBleTransferCompleted(const char* filename, size_t size) {
+  if (copyState_ == CopyState::Running) return;
+
+  bool inBleMode = (controlMode_ == ControlMode::BleReceive);
+  if (!ensureFlashReady_()) {
+    if (inBleMode) {
+      bleState_ = BleState::Error;
+      bleLastMessage_ = "Flash-Fehler";
+      bleOverlayDirty_ = true;
+    } else {
+      showToast_("BLE: Flash Fehler", 1800);
+    }
+    return;
+  }
+
+  if (!rebuildFileListFrom_(SlideSource::Flash)) {
+    if (inBleMode) {
+      bleState_ = BleState::Error;
+      bleLastMessage_ = "Keine Flash-Bilder";
+      bleOverlayDirty_ = true;
+    } else {
+      showToast_("BLE: Keine Flash-Bilder", 1500);
+    }
+    return;
+  }
+
+  source_ = SlideSource::Flash;
+  String target = filename ? String(filename) : String();
+  target.toLowerCase();
+
+  idx_ = 0;
+  if (!target.isEmpty()) {
+    for (size_t i = 0; i < files_.size(); ++i) {
+      String candidate = files_[i];
+      int s = candidate.lastIndexOf('/');
+      if (s >= 0) candidate = candidate.substring(s + 1);
+      candidate.toLowerCase();
+      if (candidate == target) {
+        idx_ = i;
+        break;
+      }
+    }
+  }
+
+  timeSinceSwitch_ = 0;
+  showCurrent_();
+
+  if (inBleMode) {
+    bleState_ = BleState::Completed;
+    bleLastFilename_ = filename ? String(filename) : String();
+    bleLastBytesExpected_ = size;
+    bleLastBytesReceived_ = size;
+    bleLastMessage_ = bleLastFilename_.isEmpty() ? String("Empfang abgeschlossen")
+                                                 : String("Fertig: ") + bleLastFilename_;
+    bleOverlayDirty_ = true;
+  } else {
+    String msg = filename ? String("BLE fertig: ") + filename : String("BLE fertig");
+    if (size > 0) {
+      uint32_t kb = (static_cast<uint32_t>(size) + 1023) / 1024;
+      msg += " (";
+      msg += kb;
+      msg += " KB)";
+    }
+    showToast_(msg, 1800);
+  }
+}
+
+void SlideshowApp::onBleTransferError(const char* message) {
+  if (copyState_ == CopyState::Running) return;
+  if (controlMode_ == ControlMode::BleReceive) {
+    bleState_ = BleState::Error;
+    bleLastMessage_ = message ? String(message) : String("Fehler");
+    bleOverlayDirty_ = true;
+  } else {
+    String msg = "BLE Fehler";
+    if (message && message[0]) {
+      msg += ": ";
+      msg += message;
+    }
+    showToast_(msg, 1800);
+  }
+}
+
+void SlideshowApp::onBleTransferAborted(const char* message) {
+  if (copyState_ == CopyState::Running) return;
+  if (controlMode_ == ControlMode::BleReceive) {
+    bleState_ = BleState::Aborted;
+    bleLastMessage_ = message ? String(message) : String("Abgebrochen");
+    bleOverlayDirty_ = true;
+  } else {
+    String msg = "BLE abgebrochen";
+    if (message && message[0]) {
+      msg += ": ";
+      msg += message;
+    }
+    showToast_(msg, 1200);
+  }
+}
+
 void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
   if (copyState_ == CopyState::Running) return;
   ControlMode previous = controlMode_;
   if (previous == mode) return;
 
+  if (previous == ControlMode::BleReceive) {
+    BleImageTransfer::setTransferEnabled(false);
+    bleState_ = BleState::Idle;
+    bleLastBytesExpected_ = 0;
+    bleLastBytesReceived_ = 0;
+  }
+
   controlMode_ = mode;
   if (controlMode_ == ControlMode::StorageMenu) {
     markStorageMenuDirty_();
+  }
+  if (controlMode_ == ControlMode::BleReceive) {
+    bleState_ = BleState::Idle;
+    bleLastMessage_.clear();
+    bleLastFilename_.clear();
+    bleLastBytesExpected_ = 0;
+    bleLastBytesReceived_ = 0;
+    bleOverlayDirty_ = true;
+    BleImageTransfer::setTransferEnabled(true);
   }
   switch (controlMode_) {
     case ControlMode::Auto:
@@ -51,10 +184,18 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
       storageMenuLastSource_.clear();
       storageMenuLastToastActive_ = false;
       break;
+
+    case ControlMode::BleReceive:
+      auto_mode = false;
+      toastText_.clear();
+      toastUntil_ = 0;
+      bleOverlayDirty_ = true;
+      break;
   }
   timeSinceSwitch_ = 0;
 
-  if (previous == ControlMode::StorageMenu && controlMode_ != ControlMode::StorageMenu) {
+  if ((previous == ControlMode::StorageMenu || previous == ControlMode::BleReceive) &&
+      controlMode_ != ControlMode::StorageMenu && controlMode_ != ControlMode::BleReceive) {
     if (!files_.empty()) {
       showCurrent_();
     }
@@ -440,6 +581,8 @@ String SlideshowApp::modeLabel_() const {
       return String("MANUELL");
     case ControlMode::StorageMenu:
       return String("EINSTELLUNG");
+    case ControlMode::BleReceive:
+      return String("BLE");
   }
   return String("?");
 }
@@ -458,6 +601,8 @@ void SlideshowApp::showToast_(const String& txt, uint32_t duration_ms) {
   toastDirty_ = true;
   if (controlMode_ == ControlMode::StorageMenu) {
     markStorageMenuDirty_();
+  } else if (controlMode_ == ControlMode::BleReceive) {
+    bleOverlayDirty_ = true;
   } else {
     drawToastOverlay_();
   }
@@ -599,7 +744,7 @@ void SlideshowApp::drawStorageMenuOverlay_() {
   }
 
   String sourceLine = String("Quelle: ") + sourceLabel_();
-  String footerLine = toastActive ? toastText_ : String("Lang: Modus");
+  String footerLine = toastActive ? toastText_ : String("Lang: BLE-Modus");
 
   if (!storageMenuDirty_ &&
       storageMenuLastSource_ == sourceLine &&
@@ -637,6 +782,116 @@ void SlideshowApp::markStorageMenuDirty_() {
 void SlideshowApp::markCopyConfirmDirty_() {
   copyConfirmDirty_ = true;
   copyConfirmLastSelection_ = 255;
+}
+
+void SlideshowApp::drawBleReceiveOverlay_() {
+  if (bleState_ == BleState::Receiving) {
+    size_t expected = BleImageTransfer::bytesExpected();
+    size_t received = BleImageTransfer::bytesReceived();
+    if (expected > 0 && expected != bleLastBytesExpected_) {
+      bleLastBytesExpected_ = expected;
+      bleOverlayDirty_ = true;
+    }
+    if (received != bleLastBytesReceived_) {
+      bleLastBytesReceived_ = received;
+      bleOverlayDirty_ = true;
+    }
+  }
+
+  if (!bleOverlayDirty_) {
+    return;
+  }
+  bleOverlayDirty_ = false;
+
+  tft.fillScreen(TFT_BLACK);
+
+  auto formatKB = [](size_t bytes) -> String {
+    if (bytes < 1024) {
+      uint32_t tenth = static_cast<uint32_t>(((bytes * 10UL) + 512UL) / 1024UL);
+      if (tenth >= 10) {
+        return String("1.0");
+      }
+      char buf[16];
+      std::snprintf(buf, sizeof(buf), "0.%u", tenth);
+      return String(buf);
+    }
+    uint32_t whole = bytes / 1024;
+    uint32_t tenth = static_cast<uint32_t>(((bytes % 1024) * 10UL) / 1024UL);
+    if (tenth == 0) {
+      return String(whole);
+    }
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%u.%u", whole, tenth);
+    return String(buf);
+  };
+
+  const int16_t line = TextRenderer::lineHeight();
+  int16_t y = 24;
+  TextRenderer::drawCentered(y, "BLE Empfang", TFT_WHITE, TFT_BLACK);
+  y += line + 10;
+
+  String primary;
+  String secondary;
+
+  switch (bleState_) {
+    case BleState::Idle:
+      primary = "Bereit";
+      secondary = "Im Tool \"Senden\" wählen";
+      break;
+    case BleState::Receiving: {
+      primary = bleLastFilename_.isEmpty() ? String("Empfang läuft") : bleLastFilename_;
+      if (bleLastBytesExpected_ > 0) {
+        uint32_t pct = static_cast<uint32_t>((bleLastBytesReceived_ * 100UL) / bleLastBytesExpected_);
+        String recv = formatKB(bleLastBytesReceived_);
+        String total = formatKB(bleLastBytesExpected_);
+        secondary = String(pct) + String("% (") + recv + String("/") + total + String(" KB)");
+      } else {
+        secondary = String(bleLastBytesReceived_) + String(" B erhalten");
+      }
+      break;
+    }
+    case BleState::Completed:
+      primary = "Empfangen";
+      secondary = bleLastMessage_.isEmpty() ? String("Fertig") : bleLastMessage_;
+      break;
+    case BleState::Error:
+      primary = "Fehler";
+      secondary = bleLastMessage_.isEmpty() ? String("Übertragung fehlgeschlagen") : bleLastMessage_;
+      break;
+    case BleState::Aborted:
+      primary = "Abgebrochen";
+      secondary = bleLastMessage_.isEmpty() ? String("Übertragung abgebrochen") : bleLastMessage_;
+      break;
+  }
+
+  TextRenderer::drawCentered(y, primary, TFT_WHITE, TFT_BLACK);
+  y += line + 6;
+  if (!secondary.isEmpty()) {
+    TextRenderer::drawCentered(y, secondary, TFT_WHITE, TFT_BLACK);
+    y += line + 12;
+  }
+
+  if (bleState_ == BleState::Receiving && bleLastBytesExpected_ > 0) {
+    const int16_t barWidth = tft.width() - 40;
+    const int16_t barX = (tft.width() - barWidth) / 2;
+    const int16_t barY = y;
+    tft.drawRect(barX, barY, barWidth, 14, TFT_WHITE);
+    size_t denom = bleLastBytesExpected_ ? bleLastBytesExpected_ : 1;
+    int16_t fill = static_cast<int16_t>((barWidth - 2) * bleLastBytesReceived_ / denom);
+    if (fill > barWidth - 2) fill = barWidth - 2;
+    tft.fillRect(barX + 1, barY + 1, fill, 12, TFT_WHITE);
+    y = barY + 22;
+  }
+
+  String footer;
+  if (toastUntil_ && millis() < toastUntil_) {
+    footer = toastText_;
+  }
+  if (footer.isEmpty()) {
+    footer = "Lang: Auto-Modus";
+  }
+
+  TextRenderer::drawCentered(tft.height() - line - 16, footer, TFT_WHITE, TFT_BLACK);
 }
 
 bool SlideshowApp::readDirectoryEntries_(fs::FS* fs, const String& basePath, std::vector<String>& out) {
@@ -722,6 +977,13 @@ void SlideshowApp::init() {
   storageMenuLastSource_.clear();
   storageMenuLastFooter_.clear();
   storageMenuLastToastActive_ = false;
+  bleState_ = BleState::Idle;
+  bleOverlayDirty_ = true;
+  bleLastMessage_.clear();
+  bleLastFilename_.clear();
+  bleLastBytesExpected_ = 0;
+  bleLastBytesReceived_ = 0;
+  BleImageTransfer::setTransferEnabled(false);
 
   applyDwell_();
 
@@ -753,6 +1015,21 @@ void SlideshowApp::tick(uint32_t delta_ms) {
     } else if (!files_.empty()) {
       showCurrent_();
     }
+  }
+
+  if (controlMode_ == ControlMode::BleReceive) {
+    if (bleState_ == BleState::Receiving) {
+      size_t expected = BleImageTransfer::bytesExpected();
+      size_t received = BleImageTransfer::bytesReceived();
+      if (expected > 0) {
+        bleLastBytesExpected_ = expected;
+      }
+      if (received != bleLastBytesReceived_) {
+        bleLastBytesReceived_ = received;
+        bleOverlayDirty_ = true;
+      }
+    }
+    return;
   }
 
   if (files_.empty()) return;
@@ -797,6 +1074,11 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
     case BtnEvent::Single:
       if (controlMode_ == ControlMode::StorageMenu) {
         toggleSource_();
+      } else if (controlMode_ == ControlMode::BleReceive) {
+        String msg = (bleState_ == BleState::Receiving)
+                     ? String("Übertragung läuft")
+                     : String("Bereit für Browser");
+        showToast_(msg, kToastShortMs);
       } else {
         advance_(+1);
       }
@@ -805,6 +1087,9 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
     case BtnEvent::Double:
       if (controlMode_ == ControlMode::StorageMenu) {
         requestCopy_();
+      } else if (controlMode_ == ControlMode::BleReceive) {
+        bleOverlayDirty_ = true;
+        showToast_(bleLastMessage_.isEmpty() ? String("Warte auf Senden") : bleLastMessage_, kToastShortMs);
       } else {
         dwellIdx_ = (dwellIdx_ + 1) % kDwellSteps.size();
         applyDwell_();
@@ -817,6 +1102,9 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
     case BtnEvent::Triple:
       if (controlMode_ == ControlMode::StorageMenu) {
         showToast_("Lang: Modus verlassen", kToastShortMs);
+      } else if (controlMode_ == ControlMode::BleReceive) {
+        bleOverlayDirty_ = true;
+        showToast_("Lang: Auto-Modus", kToastShortMs);
       } else {
         show_filename = !show_filename;
         showCurrent_();
@@ -828,6 +1116,8 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
         setControlMode_(ControlMode::Manual);
       } else if (controlMode_ == ControlMode::Manual) {
         setControlMode_(ControlMode::StorageMenu);
+      } else if (controlMode_ == ControlMode::StorageMenu) {
+        setControlMode_(ControlMode::BleReceive);
       } else {
         setControlMode_(ControlMode::Auto);
       }
@@ -852,6 +1142,10 @@ void SlideshowApp::draw() {
     drawStorageMenuOverlay_();
     return;
   }
+  if (controlMode_ == ControlMode::BleReceive) {
+    drawBleReceiveOverlay_();
+    return;
+  }
   drawToastOverlay_();
 }
 
@@ -859,4 +1153,5 @@ void SlideshowApp::shutdown() {
   files_.clear();
   closeCopyFiles_();
   copyQueue_.clear();
+  BleImageTransfer::setTransferEnabled(false);
 }

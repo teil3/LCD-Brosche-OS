@@ -14,6 +14,7 @@
 #include "Apps/RandomChaoticLinesApp.h"
 #include "Apps/RandomStripesIntoneApp.h"
 #include "Core/Storage.h"
+#include "Core/BleImageTransfer.h"
 
 // Buttons
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
@@ -82,8 +83,46 @@ void setup() {
   appman.add(&app_square_intone);
   appman.begin();
   Serial.println("[BOOT] appman.begin done");
+
+  BleImageTransfer::begin();
+  Serial.println("[BOOT] BLE ready");
 }
 
+static void pumpBleEvents() {
+  BleImageTransfer::Event evt;
+  while (BleImageTransfer::pollEvent(&evt)) {
+    const char* typeStr = "";
+    switch (evt.type) {
+      case BleImageTransfer::EventType::Started:   typeStr = "STARTED"; break;
+      case BleImageTransfer::EventType::Completed: typeStr = "DONE"; break;
+      case BleImageTransfer::EventType::Error:     typeStr = "ERROR"; break;
+      case BleImageTransfer::EventType::Aborted:   typeStr = "ABORT"; break;
+    }
+    Serial.printf("[BLE] EVENT %s size=%lu file=%s msg=%s\n",
+                  typeStr,
+                  static_cast<unsigned long>(evt.size),
+                  evt.filename,
+                  evt.message);
+
+    App* active = appman.activeApp();
+    if (active == &app_slideshow) {
+      switch (evt.type) {
+        case BleImageTransfer::EventType::Started:
+          app_slideshow.onBleTransferStarted(evt.filename, evt.size);
+          break;
+        case BleImageTransfer::EventType::Completed:
+          app_slideshow.onBleTransferCompleted(evt.filename, evt.size);
+          break;
+        case BleImageTransfer::EventType::Error:
+          app_slideshow.onBleTransferError(evt.message);
+          break;
+        case BleImageTransfer::EventType::Aborted:
+          app_slideshow.onBleTransferAborted(evt.message);
+          break;
+      }
+    }
+  }
+}
 
 void loop() {
   static bool first=true;
@@ -116,6 +155,9 @@ void loop() {
   appman.tick(dt);
   appman.draw();
 
+  BleImageTransfer::tick();
+  pumpBleEvents();
+
   delay(5);
 }
 
@@ -133,3 +175,4 @@ void loop() {
 #include "Apps/RandomPixelIntoneApp.cpp"
 #include "Apps/RandomChaoticLinesApp.cpp"
 #include "Apps/RandomStripesIntoneApp.cpp"
+#include "Core/BleImageTransfer.cpp"

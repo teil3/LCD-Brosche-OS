@@ -22,9 +22,15 @@ public:
   void draw() override;
   void shutdown() override;
 
+  void onBleTransferStarted(const char* filename, size_t size);
+  void onBleTransferCompleted(const char* filename, size_t size);
+  void onBleTransferError(const char* message);
+  void onBleTransferAborted(const char* message);
+
 private:
-  enum class ControlMode : uint8_t { Auto = 0, Manual = 1, StorageMenu = 2 };
+  enum class ControlMode : uint8_t { Auto = 0, Manual = 1, StorageMenu = 2, BleReceive = 3 };
   enum class CopyState : uint8_t { Idle = 0, Confirm = 1, Running = 2, Done = 3, Error = 4, Aborted = 5 };
+  enum class BleState : uint8_t { Idle = 0, Receiving = 1, Completed = 2, Error = 3, Aborted = 4 };
 
   struct CopyItem {
     String path;
@@ -64,6 +70,12 @@ private:
   String storageMenuLastFooter_;
   bool storageMenuLastToastActive_ = false;
   bool toastDirty_ = false;
+  BleState bleState_ = BleState::Idle;
+  bool bleOverlayDirty_ = true;
+  String bleLastMessage_;
+  String bleLastFilename_;
+  size_t bleLastBytesReceived_ = 0;
+  size_t bleLastBytesExpected_ = 0;
 
   void setControlMode_(ControlMode mode, bool showToast = true);
   void setSource_(SlideSource src, bool showToast = true);
@@ -90,6 +102,7 @@ private:
   void drawCopyOverlay_();
   void drawCopyConfirmOverlay_();
   void drawStorageMenuOverlay_();
+  void drawBleReceiveOverlay_();
   bool rebuildFileList_();
   bool rebuildFileListFrom_(SlideSource src);
   bool readDirectoryEntries_(fs::FS* fs, const String& basePath, std::vector<String>& out);

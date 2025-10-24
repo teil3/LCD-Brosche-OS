@@ -26,6 +26,13 @@ void AppManager::setActive(int i) {
 void AppManager::next() { if (!apps_.empty()) setActive((active_+1)%apps_.size()); }
 void AppManager::prev() { if (!apps_.empty()) setActive((active_+apps_.size()-1)%apps_.size()); }
 
+App* AppManager::activeApp() const {
+  if (active_ < 0 || active_ >= (int)apps_.size()) {
+    return nullptr;
+  }
+  return apps_[active_];
+}
+
 void AppManager::dispatchBtn(uint8_t idx, BtnEvent e) { if (active_>=0) apps_[active_]->onButton(idx,e); }
 void AppManager::tick(uint32_t dt) { if (active_>=0) apps_[active_]->tick(dt); }
 void AppManager::draw() { if (active_>=0) apps_[active_]->draw(); }

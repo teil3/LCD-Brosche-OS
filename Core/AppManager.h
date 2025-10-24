@@ -10,6 +10,7 @@ public:
   void next();
   void prev();
   void setActive(int i);
+  App* activeApp() const;
   void dispatchBtn(uint8_t idx, BtnEvent e);
   void tick(uint32_t dt);
   void draw();
@@ -19,4 +20,3 @@ private:
 };
 
 #endif // CORE_APPMANAGER_H
-
