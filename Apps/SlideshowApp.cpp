@@ -840,9 +840,13 @@ void SlideshowApp::drawBleReceiveOverlay_() {
     return String(buf);
   };
 
-  String header = "Bluetooth bereit";
+  bool allowClear = (bleState_ != BleState::Completed);
+
+  String header = String("Bluetooth Modus");
   if (header != bleLastHeader_) {
-    tft.fillRect(0, headerY - 4, tft.width(), line + 8, TFT_BLACK);
+    if (allowClear) {
+      tft.fillRect(0, headerY - 4, tft.width(), line + 8, TFT_BLACK);
+    }
     TextRenderer::drawCentered(headerY, header, TFT_WHITE, TFT_BLACK);
     bleLastHeader_ = header;
   }
@@ -852,8 +856,8 @@ void SlideshowApp::drawBleReceiveOverlay_() {
 
   switch (bleState_) {
     case BleState::Idle:
-      primary = "\"Per Bluetooth senden\"";
-      secondary = "Im Tool auswählen";
+      primary = "Im Tool auswählen";
+      secondary = "Per Bluetooth senden";
       break;
     case BleState::Receiving: {
       primary = bleLastFilename_.isEmpty() ? String("Empfang läuft") : bleLastFilename_;
@@ -868,8 +872,8 @@ void SlideshowApp::drawBleReceiveOverlay_() {
       break;
     }
     case BleState::Completed:
-      primary = "Empfangen";
-      secondary = bleLastMessage_.isEmpty() ? String("Fertig") : bleLastMessage_;
+      primary = "Empfangen fertig";
+      secondary = bleLastFilename_.isEmpty() ? bleLastMessage_ : bleLastFilename_;
       break;
     case BleState::Error:
       primary = "Fehler";
@@ -882,13 +886,17 @@ void SlideshowApp::drawBleReceiveOverlay_() {
   }
 
   if (primary != bleLastPrimary_) {
-    tft.fillRect(0, primaryY - 4, tft.width(), line + 8, TFT_BLACK);
+    if (allowClear) {
+      tft.fillRect(0, primaryY - 4, tft.width(), line + 8, TFT_BLACK);
+    }
     TextRenderer::drawCentered(primaryY, primary, TFT_WHITE, TFT_BLACK);
     bleLastPrimary_ = primary;
   }
 
   if (secondary != bleLastSecondary_) {
-    tft.fillRect(0, secondaryY - 4, tft.width(), line + 8, TFT_BLACK);
+    if (allowClear) {
+      tft.fillRect(0, secondaryY - 4, tft.width(), line + 8, TFT_BLACK);
+    }
     if (!secondary.isEmpty()) {
       TextRenderer::drawCentered(secondaryY, secondary, TFT_WHITE, TFT_BLACK);
     }
@@ -913,7 +921,9 @@ void SlideshowApp::drawBleReceiveOverlay_() {
     }
   } else {
     if (bleProgressFrameDrawn_ || bleBarFill_ != 0) {
-      tft.fillRect(barX, barY, barWidth, barHeight, TFT_BLACK);
+      if (allowClear) {
+        tft.fillRect(barX, barY, barWidth, barHeight, TFT_BLACK);
+      }
       bleProgressFrameDrawn_ = false;
       bleBarFill_ = 0;
     }
@@ -927,7 +937,9 @@ void SlideshowApp::drawBleReceiveOverlay_() {
     footer = "Lang: Auto";
   }
   if (footer != bleLastFooter_) {
-    tft.fillRect(0, footerY - 4, tft.width(), line + 8, TFT_BLACK);
+    if (allowClear) {
+      tft.fillRect(0, footerY - 4, tft.width(), line + 8, TFT_BLACK);
+    }
     TextRenderer::drawCentered(footerY, footer, TFT_WHITE, TFT_BLACK);
     bleLastFooter_ = footer;
   }
