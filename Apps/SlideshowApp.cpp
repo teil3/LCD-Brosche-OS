@@ -96,6 +96,10 @@ void SlideshowApp::onBleTransferCompleted(const char* filename, size_t size) {
     bleLastMessage_ = bleLastFilename_.isEmpty() ? String("Empfang abgeschlossen")
                                                  : String("Fertig: ") + bleLastFilename_;
     bleOverlayDirty_ = true;
+    bleLastHeader_.clear();
+    bleLastPrimary_.clear();
+    bleLastSecondary_.clear();
+    bleLastFooter_.clear();
   } else {
     String msg = filename ? String("BLE fertig: ") + filename : String("BLE fertig");
     if (size > 0) {
