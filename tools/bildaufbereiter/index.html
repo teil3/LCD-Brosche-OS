@@ -7,7 +7,15 @@
   <style>
     :root { color-scheme: light; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; background: #f8f9fb; color: #1f252d; }
-    header { margin-bottom: 1rem; }
+    header { margin-bottom: 1rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+    .header__text { flex: 1 1 320px; min-width: 0; }
+    .header__logo { display: block; flex: 0 0 auto; width: 160px; margin-left: auto; order: 0; }
+    .header__logo img { display: block; width: 100%; max-width: 100%; height: auto; }
+    @media (max-width: 680px) {
+      header { flex-direction: column; align-items: center; text-align: center; }
+      .header__text { flex: 1 1 auto; }
+      .header__logo { order: -1; margin-left: 0; margin-bottom: .75rem; }
+    }
     h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem; }
     .muted { opacity: .75; }
     .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin: .75rem 0; }
@@ -34,8 +42,13 @@
 <body>
   <div class="drop-overlay" aria-hidden="true">Bilddatei hier ablegen, um sie zu laden</div>
   <header>
-    <h1>Bilderaufbereiter für die LCD-Brosche</h1>
-    <p class="muted">Mit dieser Anwendung kannst du deine Bilder so vorbereiten, dass sie perfekt auf der Brosche angezeigt werden. Du kannst sie anschliessend per Bluetooth, USB oder über eine SD-Karte auf die Brosche übertragen.</p>
+    <div class="header__text">
+      <h1>Bilderaufbereiter für die LCD-Brosche</h1>
+      <p class="muted">Mit dieser Anwendung kannst du deine Bilder so vorbereiten, dass sie perfekt auf der Brosche angezeigt werden. Du kannst sie anschliessend per Bluetooth, USB oder über eine SD-Karte auf die Brosche übertragen.</p>
+    </div>
+    <a class="header__logo" href="https://www.teil3.ch" target="_blank" rel="noopener">
+      <img src="teil3_logo.svg" alt="Teil3 Logo" width="160" height="95" />
+    </a>
   </header>
 
   <div class="row">
