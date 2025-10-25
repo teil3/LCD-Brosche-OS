@@ -776,7 +776,7 @@ void SlideshowApp::drawStorageMenuOverlay_() {
   TextRenderer::drawCentered(top, "Setup", TFT_WHITE, TFT_BLACK);
   TextRenderer::drawCentered(sourceY, sourceLine, TFT_WHITE, TFT_BLACK);
   TextRenderer::drawCentered(singleY, "Klick: Quelle", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(doubleY, "Doppel: Kopieren", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(doubleY, "Doppel: SD-Kopie", TFT_WHITE, TFT_BLACK);
   TextRenderer::drawCentered(footerY, footerLine, TFT_WHITE, TFT_BLACK);
 }
 
