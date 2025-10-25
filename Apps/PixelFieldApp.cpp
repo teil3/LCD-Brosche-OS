@@ -4,6 +4,8 @@
 
 #include "Config.h"
 #include "Core/Gfx.h"
+#include "Core/Palette.h"
+#include "Core/TextRenderer.h"
 
 namespace {
 constexpr uint8_t kVariation = 4;
@@ -49,10 +51,11 @@ uint16_t PixelFieldApp::randomColor_() const {
     int span = 2 * kVariation + 1;
     return static_cast<int>(esp_random() % span) - kVariation;
   };
-  int r = clamp(base_r_ + randOffset());
-  int g = clamp(base_g_ + randOffset());
-  int b = clamp(base_b_ + randOffset());
-  return pack565(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
+  uint8_t r = static_cast<uint8_t>(clamp(base_r_ + randOffset()));
+  uint8_t g = static_cast<uint8_t>(clamp(base_g_ + randOffset()));
+  uint8_t b = static_cast<uint8_t>(clamp(base_b_ + randOffset()));
+  Palette::apply(palette_mode_, r, g, b, r, g, b);
+  return pack565(r, g, b);
 }
 
 void PixelFieldApp::drawBurst_() {
@@ -67,12 +70,20 @@ void PixelFieldApp::drawBurst_() {
 
 void PixelFieldApp::init() {
   timeAccum_ = 0;
+  pause_until_ = 0;
+  palette_mode_ = 0;
   tft.fillScreen(TFT_BLACK);
   reseedBaseColor_();
   drawBurst_();
 }
 
 void PixelFieldApp::tick(uint32_t delta_ms) {
+  if (pause_until_) {
+    uint32_t now = millis();
+    if (now < pause_until_) return;
+    pause_until_ = 0;
+  }
+
   timeAccum_ += delta_ms;
   while (timeAccum_ >= kBurstIntervalMs) {
     timeAccum_ -= kBurstIntervalMs;
@@ -93,9 +104,11 @@ void PixelFieldApp::onButton(uint8_t index, BtnEvent e) {
       drawBurst_();
       break;
     case BtnEvent::Long:
+      nextPalette_();
       tft.fillScreen(TFT_BLACK);
       reseedBaseColor_();
       drawBurst_();
+      showStatus_(String("Palette ") + paletteName_());
       break;
     default:
       break;
@@ -104,4 +117,20 @@ void PixelFieldApp::onButton(uint8_t index, BtnEvent e) {
 
 void PixelFieldApp::shutdown() {
   // Nothing persistent to clean up.
+}
+
+void PixelFieldApp::nextPalette_() {
+  palette_mode_ = Palette::nextMode(palette_mode_);
+}
+
+void PixelFieldApp::showStatus_(const String& msg) {
+  int16_t textY = static_cast<int16_t>((TFT_H - TextRenderer::lineHeight()) / 2);
+  if (textY < 0) textY = 0;
+  TextRenderer::drawCentered(textY, msg, TFT_WHITE, TFT_BLACK);
+  pause_until_ = millis() + 1000;
+  timeAccum_ = 0;
+}
+
+const char* PixelFieldApp::paletteName_() const {
+  return Palette::modeName(palette_mode_);
 }

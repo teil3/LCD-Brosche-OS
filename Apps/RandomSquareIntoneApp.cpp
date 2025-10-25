@@ -5,6 +5,7 @@
 
 #include "Config.h"
 #include "Core/Gfx.h"
+#include "Core/Palette.h"
 #include "Core/TextRenderer.h"
 
 namespace {
@@ -16,7 +17,6 @@ constexpr uint16_t kSqMaxSizeOptions[] = {14, 22, 32, 44, 64, 92};
 constexpr uint8_t kSqMaxSizeCount = sizeof(kSqMaxSizeOptions) / sizeof(kSqMaxSizeOptions[0]);
 constexpr uint32_t kSqIntervals[] = {14, 28, 56, 112, 180, 260, 380, 520, 760, 1120};
 constexpr uint8_t kSqIntervalCount = sizeof(kSqIntervals) / sizeof(kSqIntervals[0]);
-constexpr uint8_t kSqPaletteMinComponent = 48;
 
 inline uint8_t clamp8sq(int v) {
   if (v < 0) return 0;
@@ -29,15 +29,6 @@ inline uint16_t randCoordSq(uint16_t max) { return static_cast<uint16_t>(esp_ran
 inline int randOffsetSq(uint8_t max_delta) {
   int span = static_cast<int>(max_delta) * 2 + 1;
   return static_cast<int>(esp_random() % span) - static_cast<int>(max_delta);
-}
-inline uint8_t ensureMinSq(uint8_t value) {
-  if (value >= kSqPaletteMinComponent) {
-    return value;
-  }
-  uint8_t spread = kSqBaseDrift + kSqColorVariation;
-  uint16_t boosted = static_cast<uint16_t>(kSqPaletteMinComponent) + (esp_random() % (spread + 1));
-  if (boosted > 255) boosted = 255;
-  return static_cast<uint8_t>(boosted);
 }
 
 uint16_t pack565sq(uint8_t r, uint8_t g, uint8_t b) {
@@ -61,35 +52,8 @@ uint16_t RandomSquareIntoneApp::randomColor_() const {
   uint8_t r = clamp8sq(static_cast<int>(base_r_) + randOffsetSq(kSqColorVariation));
   uint8_t g = clamp8sq(static_cast<int>(base_g_) + randOffsetSq(kSqColorVariation));
   uint8_t b = clamp8sq(static_cast<int>(base_b_) + randOffsetSq(kSqColorVariation));
-
-  switch (palette_mode_) {
-    case 1: { // Rot
-      uint8_t primary = clamp8sq(static_cast<int>(base_r_) + randOffsetSq(kSqBaseDrift));
-      primary = ensureMinSq(primary);
-      return pack565sq(primary, 0, 0);
-    }
-    case 2: { // Grün
-      uint8_t primary = clamp8sq(static_cast<int>(base_g_) + randOffsetSq(kSqBaseDrift));
-      primary = ensureMinSq(primary);
-      return pack565sq(0, primary, 0);
-    }
-    case 3: { // Blau
-      uint8_t primary = clamp8sq(static_cast<int>(base_b_) + randOffsetSq(kSqBaseDrift));
-      primary = ensureMinSq(primary);
-      return pack565sq(0, 0, primary);
-    }
-    case 4: { // Graustufen
-      int base = (static_cast<int>(base_r_) + base_g_ + base_b_) / 3;
-      uint8_t v = clamp8sq(base + randOffsetSq(kSqBaseDrift));
-      v = ensureMinSq(v);
-      return pack565sq(v, v, v);
-    }
-    case 5: { // Bunt
-      return pack565sq(rand8sq(), rand8sq(), rand8sq());
-    }
-    default:
-      return pack565sq(r, g, b);
-  }
+  Palette::apply(palette_mode_, r, g, b, r, g, b);
+  return pack565sq(r, g, b);
 }
 
 void RandomSquareIntoneApp::drawBurst_() {
@@ -213,7 +177,7 @@ void RandomSquareIntoneApp::nextInterval_() {
 }
 
 void RandomSquareIntoneApp::nextPalette_() {
-  palette_mode_ = (palette_mode_ + 1) % 6;
+  palette_mode_ = Palette::nextMode(palette_mode_);
 }
 
 void RandomSquareIntoneApp::showStatus_(const String& msg) {
@@ -224,14 +188,7 @@ void RandomSquareIntoneApp::showStatus_(const String& msg) {
 }
 
 const char* RandomSquareIntoneApp::paletteName_() const {
-  switch (palette_mode_) {
-    case 1: return "Rot";
-    case 2: return "Grün";
-    case 3: return "Blau";
-    case 4: return "Graustufen";
-    case 5: return "Bunt";
-    default: return "Alle Farben";
-  }
+  return Palette::modeName(palette_mode_);
 }
 
 uint16_t RandomSquareIntoneApp::currentMaxSize_() const {

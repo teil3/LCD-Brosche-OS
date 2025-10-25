@@ -19,6 +19,7 @@ private:
   uint8_t stepIndex_ = 0;
   uint8_t intervalIndex_ = 0;
   uint32_t pauseUntil_ = 0;
+  uint8_t palette_mode_ = 0; // 0=Alle Farben, 1=Rot, 2=Grün, 3=Blau, 4=Graustufen, 5=Bunt
 
   void reseed_();
   void drift_();
@@ -26,7 +27,9 @@ private:
   void drawBurst_();
   void nextStep_();
   void slower_();
+  void nextPalette_();
   void showStatus_(const String& msg);
   uint16_t currentStep_() const;
   uint32_t currentInterval_() const;
+  const char* paletteName_() const;
 };

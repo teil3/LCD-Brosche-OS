@@ -6,6 +6,8 @@
 
 #include "Config.h"
 #include "Core/Gfx.h"
+#include "Core/Palette.h"
+#include "Core/TextRenderer.h"
 
 namespace {
 constexpr float kTwoPi = 6.28318530718f;
@@ -167,6 +169,8 @@ void RandomImagerApp::drawBurst_(Blob& blob) {
       b = clamp8(b + 70);
     }
 
+    Palette::apply(palette_mode_, r, g, b, r, g, b);
+
     tft.drawPixel(px, py, pack565_(r, g, b));
   }
 }
@@ -177,6 +181,8 @@ void RandomImagerApp::clearCanvas_() {
 
 void RandomImagerApp::init() {
   time_accum_ = 0;
+  pause_until_ = 0;
+  palette_mode_ = 0;
   clearCanvas_();
   reseedAll_();
 
@@ -189,6 +195,11 @@ void RandomImagerApp::init() {
 }
 
 void RandomImagerApp::tick(uint32_t delta_ms) {
+  if (pause_until_) {
+    uint32_t now = millis();
+    if (now < pause_until_) return;
+    pause_until_ = 0;
+  }
   time_accum_ += delta_ms;
   while (time_accum_ >= kBurstIntervalMs) {
     time_accum_ -= kBurstIntervalMs;
@@ -220,8 +231,10 @@ void RandomImagerApp::onButton(uint8_t index, BtnEvent e) {
       clearCanvas_();
       break;
     case BtnEvent::Long:
+      nextPalette_();
       clearCanvas_();
       reseedAll_();
+      showStatus_(String("Palette ") + paletteName_());
       break;
     default:
       break;
@@ -230,4 +243,20 @@ void RandomImagerApp::onButton(uint8_t index, BtnEvent e) {
 
 void RandomImagerApp::shutdown() {
   // No persistent state.
+}
+
+void RandomImagerApp::nextPalette_() {
+  palette_mode_ = Palette::nextMode(palette_mode_);
+}
+
+void RandomImagerApp::showStatus_(const String& msg) {
+  int16_t textY = static_cast<int16_t>((TFT_H - TextRenderer::lineHeight()) / 2);
+  if (textY < 0) textY = 0;
+  TextRenderer::drawCentered(textY, msg, TFT_WHITE, TFT_BLACK);
+  pause_until_ = millis() + 1000;
+  time_accum_ = 0;
+}
+
+const char* RandomImagerApp::paletteName_() const {
+  return Palette::modeName(palette_mode_);
 }

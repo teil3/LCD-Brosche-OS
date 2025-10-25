@@ -34,6 +34,8 @@ private:
 
   Blob blobs_[kBlobCount];
   uint32_t time_accum_ = 0;
+  uint32_t pause_until_ = 0;
+  uint8_t palette_mode_ = 0; // 0=Alle Farben, 1=Rot, 2=Grün, 3=Blau, 4=Graustufen, 5=Bunt
 
   static float randUnit_();          // [0,1)
   static int32_t randInt_(int32_t max_exclusive);
@@ -44,4 +46,7 @@ private:
   void driftBlob_(Blob& blob);
   void drawBurst_(Blob& blob);
   void clearCanvas_();
+  void nextPalette_();
+  void showStatus_(const String& msg);
+  const char* paletteName_() const;
 };

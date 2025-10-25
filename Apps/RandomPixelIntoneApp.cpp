@@ -5,6 +5,7 @@
 
 #include "Config.h"
 #include "Core/Gfx.h"
+#include "Core/Palette.h"
 #include "Core/TextRenderer.h"
 
 namespace {
@@ -55,10 +56,11 @@ uint16_t RandomPixelIntoneApp::colorForPixel_() const {
     int span = 2 * kIntoneVariation + 1;
     return static_cast<int>(esp_random() % span) - kIntoneVariation;
   };
-  int r = clamp(base_r_ + randOffset());
-  int g = clamp(base_g_ + randOffset());
-  int b = clamp(base_b_ + randOffset());
-  return pack565Intone(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
+  uint8_t r = static_cast<uint8_t>(clamp(base_r_ + randOffset()));
+  uint8_t g = static_cast<uint8_t>(clamp(base_g_ + randOffset()));
+  uint8_t b = static_cast<uint8_t>(clamp(base_b_ + randOffset()));
+  Palette::apply(palette_mode_, r, g, b, r, g, b);
+  return pack565Intone(r, g, b);
 }
 
 void RandomPixelIntoneApp::drawBurst_() {
@@ -90,6 +92,7 @@ void RandomPixelIntoneApp::init() {
   stepIndex_ = 0;
   intervalIndex_ = 0;
   pauseUntil_ = 0;
+  palette_mode_ = 0;
   tft.fillScreen(TFT_BLACK);
   reseed_();
   drawBurst_();
@@ -133,12 +136,11 @@ void RandomPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
       showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");
       break;
     case BtnEvent::Long:
-      intervalIndex_ = 0;
-      Serial.printf("[PixelIntone] interval reset to %lums\n", static_cast<unsigned long>(currentInterval_()));
+      nextPalette_();
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
-      showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");
+      showStatus_(String("Palette ") + paletteName_());
       break;
     default:
       break;
@@ -163,6 +165,10 @@ void RandomPixelIntoneApp::slower_() {
   }
 }
 
+void RandomPixelIntoneApp::nextPalette_() {
+  palette_mode_ = Palette::nextMode(palette_mode_);
+}
+
 void RandomPixelIntoneApp::showStatus_(const String& msg) {
   int16_t textY = static_cast<int16_t>((TFT_H - TextRenderer::lineHeight()) / 2);
   if (textY < 0) textY = 0;
@@ -176,4 +182,8 @@ uint16_t RandomPixelIntoneApp::currentStep_() const {
 
 uint32_t RandomPixelIntoneApp::currentInterval_() const {
   return kIntoneIntervals[intervalIndex_];
+}
+
+const char* RandomPixelIntoneApp::paletteName_() const {
+  return Palette::modeName(palette_mode_);
 }

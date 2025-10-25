@@ -16,9 +16,14 @@ private:
   uint8_t base_g_ = 0;
   uint8_t base_b_ = 0;
   uint32_t timeAccum_ = 0;
+  uint32_t pause_until_ = 0;
+  uint8_t palette_mode_ = 0; // 0=Alle Farben, 1=Rot, 2=Grün, 3=Blau, 4=Graustufen, 5=Bunt
 
   void reseedBaseColor_();
   void driftBaseColor_();
   uint16_t randomColor_() const;
   void drawBurst_();
+  void nextPalette_();
+  void showStatus_(const String& msg);
+  const char* paletteName_() const;
 };

@@ -5,6 +5,7 @@
 
 #include "Config.h"
 #include "Core/Gfx.h"
+#include "Core/Palette.h"
 #include "Core/TextRenderer.h"
 
 namespace {
@@ -56,10 +57,11 @@ uint16_t RandomStripesIntoneApp::colorForStripe_() const {
     int span = 2 * kStripesVariation + 1;
     return static_cast<int>(esp_random() % span) - kStripesVariation;
   };
-  int r = clamp(base_r_ + randOffset());
-  int g = clamp(base_g_ + randOffset());
-  int b = clamp(base_b_ + randOffset());
-  return pack565Stripes(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
+  uint8_t r = static_cast<uint8_t>(clamp(base_r_ + randOffset()));
+  uint8_t g = static_cast<uint8_t>(clamp(base_g_ + randOffset()));
+  uint8_t b = static_cast<uint8_t>(clamp(base_b_ + randOffset()));
+  Palette::apply(palette_mode_, r, g, b, r, g, b);
+  return pack565Stripes(r, g, b);
 }
 
 void RandomStripesIntoneApp::drawBurst_() {
@@ -87,6 +89,7 @@ void RandomStripesIntoneApp::init() {
   pauseUntil_ = 0;
   stepIndex_ = 0;
   intervalIndex_ = 0;
+  palette_mode_ = 0;
   tft.fillScreen(TFT_BLACK);
   reseed_();
   drawBurst_();
@@ -130,12 +133,11 @@ void RandomStripesIntoneApp::onButton(uint8_t index, BtnEvent e) {
       showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");
       break;
     case BtnEvent::Long:
-      intervalIndex_ = 0;
-      Serial.printf("[StripesIntone] interval reset to %lums\n", static_cast<unsigned long>(currentInterval_()));
+      nextPalette_();
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
-      showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");
+      showStatus_(String("Palette ") + paletteName_());
       break;
     default:
       break;
@@ -158,6 +160,10 @@ void RandomStripesIntoneApp::slower_() {
   }
 }
 
+void RandomStripesIntoneApp::nextPalette_() {
+  palette_mode_ = Palette::nextMode(palette_mode_);
+}
+
 void RandomStripesIntoneApp::showStatus_(const String& msg) {
   int16_t textY = static_cast<int16_t>((TFT_H - TextRenderer::lineHeight()) / 2);
   if (textY < 0) textY = 0;
@@ -173,4 +179,6 @@ uint32_t RandomStripesIntoneApp::currentInterval_() const {
   return kStripeIntervals[intervalIndex_];
 }
 
-uint16_t RandomStripesIntoneApp::colorForStripe_() const;
+const char* RandomStripesIntoneApp::paletteName_() const {
+  return Palette::modeName(palette_mode_);
+}

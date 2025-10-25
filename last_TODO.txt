@@ -1,0 +1,7 @@
+alles gut bis auf die app chaos-linien. da kann man mit lang noch nicht die
+  farbpaletten verändern. es wird auto an und auto aus mit lang gestuert. das
+  kann gelöscht werden. es soll in dieser app kein auto an und auto aus geben.
+  mit lang soll die farb palette geändert werden, so wie du es vorher bei den
+  anderen apss umgestzt hast
+
+
