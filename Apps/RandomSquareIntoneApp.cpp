@@ -16,6 +16,7 @@ constexpr uint16_t kSqMaxSizeOptions[] = {14, 22, 32, 44, 64, 92};
 constexpr uint8_t kSqMaxSizeCount = sizeof(kSqMaxSizeOptions) / sizeof(kSqMaxSizeOptions[0]);
 constexpr uint32_t kSqIntervals[] = {14, 28, 56, 112, 180, 260, 380, 520, 760, 1120};
 constexpr uint8_t kSqIntervalCount = sizeof(kSqIntervals) / sizeof(kSqIntervals[0]);
+constexpr uint8_t kSqPaletteMinComponent = 48;
 
 inline uint8_t clamp8sq(int v) {
   if (v < 0) return 0;
@@ -25,6 +26,19 @@ inline uint8_t clamp8sq(int v) {
 
 inline uint8_t rand8sq() { return static_cast<uint8_t>(esp_random() & 0xFF); }
 inline uint16_t randCoordSq(uint16_t max) { return static_cast<uint16_t>(esp_random() % max); }
+inline int randOffsetSq(uint8_t max_delta) {
+  int span = static_cast<int>(max_delta) * 2 + 1;
+  return static_cast<int>(esp_random() % span) - static_cast<int>(max_delta);
+}
+inline uint8_t ensureMinSq(uint8_t value) {
+  if (value >= kSqPaletteMinComponent) {
+    return value;
+  }
+  uint8_t spread = kSqBaseDrift + kSqColorVariation;
+  uint16_t boosted = static_cast<uint16_t>(kSqPaletteMinComponent) + (esp_random() % (spread + 1));
+  if (boosted > 255) boosted = 255;
+  return static_cast<uint8_t>(boosted);
+}
 
 uint16_t pack565sq(uint8_t r, uint8_t g, uint8_t b) {
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
@@ -38,49 +52,44 @@ void RandomSquareIntoneApp::reseed_() {
 }
 
 void RandomSquareIntoneApp::drift_() {
-  auto randOffset = []() {
-    int span = 2 * kSqBaseDrift + 1;
-    return static_cast<int>(esp_random() % span) - kSqBaseDrift;
-  };
-  base_r_ = clamp8sq(base_r_ + randOffset());
-  base_g_ = clamp8sq(base_g_ + randOffset());
-  base_b_ = clamp8sq(base_b_ + randOffset());
+  base_r_ = clamp8sq(static_cast<int>(base_r_) + randOffsetSq(kSqBaseDrift));
+  base_g_ = clamp8sq(static_cast<int>(base_g_) + randOffsetSq(kSqBaseDrift));
+  base_b_ = clamp8sq(static_cast<int>(base_b_) + randOffsetSq(kSqBaseDrift));
 }
 
 uint16_t RandomSquareIntoneApp::randomColor_() const {
-  auto randOffset = []() {
-    int span = 2 * kSqColorVariation + 1;
-    return static_cast<int>(esp_random() % span) - kSqColorVariation;
-  };
-  uint8_t r = clamp8sq(base_r_ + randOffset());
-  uint8_t g = clamp8sq(base_g_ + randOffset());
-  uint8_t b = clamp8sq(base_b_ + randOffset());
+  uint8_t r = clamp8sq(static_cast<int>(base_r_) + randOffsetSq(kSqColorVariation));
+  uint8_t g = clamp8sq(static_cast<int>(base_g_) + randOffsetSq(kSqColorVariation));
+  uint8_t b = clamp8sq(static_cast<int>(base_b_) + randOffsetSq(kSqColorVariation));
+
   switch (palette_mode_) {
-    case 1: // reds
-      r = clamp8sq(base_r_ + randOffset());
-      g = clamp8sq(40 + (randOffset() >> 1));
-      b = clamp8sq(30 + (randOffset() >> 1));
-      break;
-    case 2: // greens
-      g = clamp8sq(base_g_ + randOffset());
-      r = clamp8sq(30 + (randOffset() >> 1));
-      b = clamp8sq(40 + (randOffset() >> 1));
-      break;
-    case 3: // blues
-      b = clamp8sq(base_b_ + randOffset());
-      r = clamp8sq(40 + (randOffset() >> 1));
-      g = clamp8sq(30 + (randOffset() >> 1));
-      break;
-    case 4: { // grayscale
+    case 1: { // Rot
+      uint8_t primary = clamp8sq(static_cast<int>(base_r_) + randOffsetSq(kSqBaseDrift));
+      primary = ensureMinSq(primary);
+      return pack565sq(primary, 0, 0);
+    }
+    case 2: { // Grün
+      uint8_t primary = clamp8sq(static_cast<int>(base_g_) + randOffsetSq(kSqBaseDrift));
+      primary = ensureMinSq(primary);
+      return pack565sq(0, primary, 0);
+    }
+    case 3: { // Blau
+      uint8_t primary = clamp8sq(static_cast<int>(base_b_) + randOffsetSq(kSqBaseDrift));
+      primary = ensureMinSq(primary);
+      return pack565sq(0, 0, primary);
+    }
+    case 4: { // Graustufen
       int base = (static_cast<int>(base_r_) + base_g_ + base_b_) / 3;
-      int v = clamp8sq(base + randOffset());
-      r = g = b = static_cast<uint8_t>(v);
-      break;
+      uint8_t v = clamp8sq(base + randOffsetSq(kSqBaseDrift));
+      v = ensureMinSq(v);
+      return pack565sq(v, v, v);
+    }
+    case 5: { // Bunt
+      return pack565sq(rand8sq(), rand8sq(), rand8sq());
     }
     default:
-      break; // already full spectrum
+      return pack565sq(r, g, b);
   }
-  return pack565sq(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
 }
 
 void RandomSquareIntoneApp::drawBurst_() {
@@ -204,7 +213,7 @@ void RandomSquareIntoneApp::nextInterval_() {
 }
 
 void RandomSquareIntoneApp::nextPalette_() {
-  palette_mode_ = (palette_mode_ + 1) % 5;
+  palette_mode_ = (palette_mode_ + 1) % 6;
 }
 
 void RandomSquareIntoneApp::showStatus_(const String& msg) {
@@ -220,6 +229,7 @@ const char* RandomSquareIntoneApp::paletteName_() const {
     case 2: return "Grün";
     case 3: return "Blau";
     case 4: return "Graustufen";
+    case 5: return "Bunt";
     default: return "Alle Farben";
   }
 }

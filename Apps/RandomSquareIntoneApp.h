@@ -20,7 +20,7 @@ private:
   uint8_t size_index_ = 0;
   uint8_t interval_index_ = 0;
   uint32_t pause_until_ = 0;
-  uint8_t palette_mode_ = 0; // 0=full, 1=reds, 2=greens, 3=blues, 4=grayscale
+  uint8_t palette_mode_ = 0; // 0=Alle Farben, 1=Rot, 2=Grün, 3=Blau, 4=Graustufen, 5=Bunt
 
   void reseed_();
   void drift_();
