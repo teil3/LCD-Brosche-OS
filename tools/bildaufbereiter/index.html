@@ -390,11 +390,28 @@
         const startLine = `START ${totalSize} ${sanitizedName}\n`;
         await writer.write(textEncoder.encode(startLine));
 
-        const startAck = await waitForUsbLine(
-          lineReader,
-          (payload) => payload.startsWith('OK START'),
-          4000
-        );
+        let startAck;
+        try {
+          startAck = await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK START'),
+            4000
+          );
+        } catch (err) {
+          // Wenn das Gerät noch im Menü hängt, nach dem gewünschten Dateinamen filtern
+          // und den START erneut senden.
+          try { await writer.releaseLock(); } catch (_) {}
+          writer = port.writable.getWriter();
+          const filterLine = `FILTER ${sanitizedName}\n`;
+          await writer.write(textEncoder.encode(filterLine));
+          await delay(200);
+          await writer.write(textEncoder.encode(startLine));
+          startAck = await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK START'),
+            4000
+          );
+        }
         let deviceFilename = sanitizedName;
         const startParts = startAck.split(/\s+/);
         if (startParts.length >= 3) {
@@ -420,11 +437,21 @@
 
         await writer.write(textEncoder.encode('END\n'));
 
-        const endAck = await waitForUsbLine(
-          lineReader,
-          (payload) => payload.startsWith('OK END'),
-          6000
-        );
+        let endAck;
+        try {
+          endAck = await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK END'),
+            6000
+          );
+        } catch (err) {
+          await writer.write(textEncoder.encode('STATUS\n'));
+          endAck = await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK END'),
+            6000
+          );
+        }
         const endParts = endAck.split(/\s+/);
         if (endParts.length >= 3) {
           setUsbStatus(`Übertragung abgeschlossen ✅ (${endParts[2]})`);
