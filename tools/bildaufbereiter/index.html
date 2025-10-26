@@ -37,6 +37,7 @@
     .file-picker { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
     .file-picker__button { display: inline-flex; align-items: center; justify-content: center; padding: .55rem .9rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: canvas; cursor: pointer; font-weight: 400; }
     .file-picker__button:focus-visible { outline: 2px solid #4a90e2; outline-offset: 2px; }
+    .version-tag { font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; margin-top: .4rem; color: #4a90e2; }
   </style>
 </head>
 <body>
@@ -45,6 +46,7 @@
     <div class="header__text">
       <h1>Bilderaufbereiter für die LCD-Brosche</h1>
       <p class="muted">Mit dieser Anwendung kannst du deine Bilder so vorbereiten, dass sie perfekt auf der Brosche angezeigt werden. Du kannst sie anschliessend per Bluetooth, USB oder über eine SD-Karte auf die Brosche übertragen.</p>
+      <p class="muted version-tag" id="tool-version"></p>
     </div>
     <a class="header__logo" href="https://www.teil3.ch" target="_blank" rel="noopener">
       <img src="teil3_logo.svg" alt="Teil3 Logo" width="160" height="95" />
@@ -89,6 +91,7 @@
     // Dokumentation/Quelle: https://github.com/jamsinclair/jSquash (encode API) –
     // und Typdefinitionen der Optionen (mozjpeg_enc.d.ts)
     const moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
+    const TOOL_VERSION = 'USB Debug build 2025-02-20';
     //const moduleFactory = (await import('./mozjpeg/mozjpeg_enc.js?module')).default;
 
     // Fallback: Wenn du die WASM/JS lokal ausliefern willst, lege sie in ./mozjpeg/ ab
@@ -101,6 +104,7 @@
     const btnSave   = document.getElementById('save');
     const btnUsb    = document.getElementById('send-usb');
     const btnBle    = document.getElementById('send-ble');
+    const versionLabel = document.getElementById('tool-version');
     const usbStatus = document.getElementById('usb-status');
     const bleStatus = document.getElementById('ble-status');
     const cv        = document.getElementById('cv');
@@ -127,6 +131,10 @@
     let bleSending = false;
     let usbSending = false;
     const usbDebugLog = [];
+
+    if (versionLabel) {
+      versionLabel.textContent = TOOL_VERSION;
+    }
 
     const secureContextHosts = new Set(['localhost', '127.0.0.1', '::1']);
     const secureContext = window.isSecureContext || secureContextHosts.has(location.hostname);
@@ -156,6 +164,7 @@
     function alertUsbError(message) {
       const log = usbLogSnapshot();
       const detail = log ? `\n\nLetzte USB-Meldungen:\n${log}` : '';
+      console.error('USB ERROR:', message, { log: usbDebugLog.slice() });
       alert(`${message}${detail}`);
     }
 
