@@ -367,17 +367,17 @@
 
         setUsbStatus('Seriellen Port auswählen …');
         port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+        await port.open({ baudRate: 921600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
         if (typeof port.setSignals === 'function') {
           try {
-            await port.setSignals({ dataTerminalReady: true, requestToSend: false, break: false });
+            await port.setSignals({ dataTerminalReady: true, requestToSend: true, break: false });
           } catch (_) {
-            // Manche Browser/Plattformen lassen setSignals nicht zu.
+            // Ignorieren: nicht jede Plattform unterstützt setSignals.
           }
         }
 
-        await delay(400);
+        await delay(500);
 
         if (!port.writable) {
           throw new Error('Port bietet keinen Schreibstream.');
@@ -396,15 +396,15 @@
 
         writer = port.writable.getWriter();
 
-        // Optional: Warten auf READY-Nachricht (wird gesendet, wenn der Transfer-Modus aktiv ist)
+        // Optional: Warten auf READY-Nachricht (Transfer-Modus aktiv)
         try {
           await waitForUsbLine(
             lineReader,
             (payload) => payload.startsWith('OK READY'),
-            2000
+            2500
           );
         } catch (_) {
-          // Kein READY empfangen – wir versuchen es dennoch mit START.
+          setUsbStatus('Keine READY-Meldung – stelle sicher, dass die Brosche im Transfer-Modus ist.');
         }
 
         const startLine = `START ${totalSize} ${sanitizedName}\n`;
@@ -457,7 +457,7 @@
           return false;
         };
 
-        const endAck = await waitForUsbLine(lineReader, endPredicate, 10000);
+        const endAck = await waitForUsbLine(lineReader, endPredicate, 12000);
         if (endAck.startsWith('OK PROG')) {
           setUsbStatus('Übertragung abgeschlossen ✅ (Bestätigung über Fortschrittsmeldung)');
         } else {
