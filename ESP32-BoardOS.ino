@@ -15,6 +15,7 @@
 #include "Apps/RandomStripesIntoneApp.h"
 #include "Core/Storage.h"
 #include "Core/BleImageTransfer.h"
+#include "Core/SerialImageTransfer.h"
 
 // Buttons
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
@@ -42,7 +43,7 @@ RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(921600);
   delay(100);
   // Warten, bis der Monitor dran ist (nur kurz)
   for (int i=0;i<20;i++){ if (Serial) break; delay(10); }
@@ -86,6 +87,8 @@ void setup() {
 
   BleImageTransfer::begin();
   Serial.println("[BOOT] BLE ready");
+  SerialImageTransfer::begin();
+  Serial.println("[BOOT] USB ready");
 }
 
 static void pumpBleEvents() {
@@ -124,6 +127,42 @@ static void pumpBleEvents() {
   }
 }
 
+static void pumpUsbEvents() {
+  SerialImageTransfer::Event evt;
+  while (SerialImageTransfer::pollEvent(&evt)) {
+    const char* typeStr = "";
+    switch (evt.type) {
+      case SerialImageTransfer::EventType::Started:   typeStr = "STARTED"; break;
+      case SerialImageTransfer::EventType::Completed: typeStr = "DONE"; break;
+      case SerialImageTransfer::EventType::Error:     typeStr = "ERROR"; break;
+      case SerialImageTransfer::EventType::Aborted:   typeStr = "ABORT"; break;
+    }
+    Serial.printf("[USB] EVENT %s size=%lu file=%s msg=%s\n",
+                  typeStr,
+                  static_cast<unsigned long>(evt.size),
+                  evt.filename,
+                  evt.message);
+
+    App* active = appman.activeApp();
+    if (active == &app_slideshow) {
+      switch (evt.type) {
+        case SerialImageTransfer::EventType::Started:
+          app_slideshow.onUsbTransferStarted(evt.filename, evt.size);
+          break;
+        case SerialImageTransfer::EventType::Completed:
+          app_slideshow.onUsbTransferCompleted(evt.filename, evt.size);
+          break;
+        case SerialImageTransfer::EventType::Error:
+          app_slideshow.onUsbTransferError(evt.message);
+          break;
+        case SerialImageTransfer::EventType::Aborted:
+          app_slideshow.onUsbTransferAborted(evt.message);
+          break;
+      }
+    }
+  }
+}
+
 void loop() {
   static bool first=true;
   if (first) { Serial.println("[LOOP] enter"); first=false; }
@@ -155,6 +194,8 @@ void loop() {
   appman.tick(dt);
   appman.draw();
 
+  SerialImageTransfer::tick();
+  pumpUsbEvents();
   BleImageTransfer::tick();
   pumpBleEvents();
 
@@ -176,3 +217,4 @@ void loop() {
 #include "Apps/RandomChaoticLinesApp.cpp"
 #include "Apps/RandomStripesIntoneApp.cpp"
 #include "Core/BleImageTransfer.cpp"
+#include "Core/SerialImageTransfer.cpp"

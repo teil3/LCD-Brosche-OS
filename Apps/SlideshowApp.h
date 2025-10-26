@@ -26,11 +26,16 @@ public:
   void onBleTransferCompleted(const char* filename, size_t size);
   void onBleTransferError(const char* message);
   void onBleTransferAborted(const char* message);
+  void onUsbTransferStarted(const char* filename, size_t size);
+  void onUsbTransferCompleted(const char* filename, size_t size);
+  void onUsbTransferError(const char* message);
+  void onUsbTransferAborted(const char* message);
 
 private:
   enum class ControlMode : uint8_t { Auto = 0, Manual = 1, StorageMenu = 2, BleReceive = 3 };
   enum class CopyState : uint8_t { Idle = 0, Confirm = 1, Running = 2, Done = 3, Error = 4, Aborted = 5 };
   enum class BleState : uint8_t { Idle = 0, Receiving = 1, Completed = 2, Error = 3, Aborted = 4 };
+  enum class TransferSource : uint8_t { None = 0, Ble = 1, Usb = 2 };
 
   struct CopyItem {
     String path;
@@ -71,6 +76,7 @@ private:
   bool storageMenuLastToastActive_ = false;
   bool toastDirty_ = false;
   BleState bleState_ = BleState::Idle;
+  TransferSource transferSource_ = TransferSource::None;
   bool bleOverlayDirty_ = true;
   String bleLastMessage_;
   String bleLastFilename_;
@@ -118,4 +124,9 @@ private:
   bool ensureSdReady_();
   void markStorageMenuDirty_();
   void markCopyConfirmDirty_();
+  const char* transferLabel_(TransferSource src) const;
+  void handleTransferStarted_(TransferSource src, const char* filename, size_t size);
+  void handleTransferCompleted_(TransferSource src, const char* filename, size_t size);
+  void handleTransferError_(TransferSource src, const char* message);
+  void handleTransferAborted_(TransferSource src, const char* message);
 };

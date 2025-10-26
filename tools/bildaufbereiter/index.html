@@ -77,7 +77,9 @@
 
   <div class="actions">
     <button id="save" disabled>Als JPEG speichern</button>
+    <button id="send-usb" disabled>Über USB senden</button>
     <button id="send-ble" disabled>Per Bluetooth senden</button>
+    <p id="usb-status" class="muted" aria-live="polite"></p>
     <p id="ble-status" class="muted" aria-live="polite"></p>
     <p class="muted" id="ble-hint">Hinweis: Auf der Brosche den BLE-Empfangsmodus aktivieren (BTN2 in der Diashow App mehrmals lang drücken, bis "Bluetooth Modus" angezeigt wird).</p>
   </div>
@@ -97,7 +99,9 @@
     const modeSel   = document.getElementById('mode');
     const qInput    = document.getElementById('quality');
     const btnSave   = document.getElementById('save');
+    const btnUsb    = document.getElementById('send-usb');
     const btnBle    = document.getElementById('send-ble');
+    const usbStatus = document.getElementById('usb-status');
     const bleStatus = document.getElementById('ble-status');
     const cv        = document.getElementById('cv');
     const ctx       = cv.getContext('2d', { willReadFrequently: true });
@@ -121,11 +125,19 @@
     let dropDepth = 0;
     let currentDownloadName = 'image_240.jpg';
     let bleSending = false;
+    let usbSending = false;
 
     const secureContextHosts = new Set(['localhost', '127.0.0.1', '::1']);
     const secureContext = window.isSecureContext || secureContextHosts.has(location.hostname);
     const bleAvailable = 'bluetooth' in navigator;
     const bleSupported = secureContext && bleAvailable;
+    const serialAvailable = 'serial' in navigator;
+    const usbSupported = secureContext && serialAvailable;
+
+    function setUsbStatus(text) {
+      if (!usbStatus) return;
+      usbStatus.textContent = text || '';
+    }
 
     function setBleStatus(text) {
       if (!bleStatus) return;
@@ -134,11 +146,13 @@
 
     function updateActionButtons() {
       const ready = !!currentBitmap && mozReady;
-      btnSave.disabled = !ready || bleSending;
-      btnBle.disabled = !ready || !bleSupported || bleSending;
+      const busy = bleSending || usbSending;
+      if (btnSave) btnSave.disabled = !ready || busy;
+      if (btnUsb) btnUsb.disabled = !ready || !usbSupported || busy;
+      if (btnBle) btnBle.disabled = !ready || !bleSupported || busy;
     }
 
-    function sanitizeFilenameForBle(name) {
+    function sanitizeFilenameForTransfer(name) {
       const fallback = 'ble_image.jpg';
       if (!name) return fallback;
       let base = name.split(/[\\/]/).pop() || fallback;
@@ -233,12 +247,231 @@
       return predicate();
     }
 
+    function createLineReader(reader) {
+      let buffer = '';
+      return {
+        async readLine(timeoutMs) {
+          const deadline = (typeof timeoutMs === 'number')
+            ? performance.now() + timeoutMs
+            : null;
+          while (true) {
+            const newlineIdx = buffer.indexOf('\n');
+            if (newlineIdx >= 0) {
+              const line = buffer.slice(0, newlineIdx);
+              buffer = buffer.slice(newlineIdx + 1);
+              return line.replace(/\r$/, '');
+            }
+
+            const readPromise = reader.read();
+            let result;
+            if (deadline !== null) {
+              const remaining = deadline - performance.now();
+              if (remaining <= 0) {
+                throw new Error('Timeout beim Lesen von Gerätedaten');
+              }
+              result = await Promise.race([
+                readPromise,
+                delay(Math.max(remaining, 0)).then(() => ({ timeout: true })),
+              ]);
+              if (result?.timeout) {
+                throw new Error('Timeout beim Lesen von Gerätedaten');
+              }
+            } else {
+              result = await readPromise;
+            }
+
+            if (result.done) {
+              if (buffer.length > 0) {
+                const line = buffer;
+                buffer = '';
+                return line.replace(/\r$/, '');
+              }
+              throw new Error('Verbindung geschlossen');
+            }
+            if (result.value) {
+              buffer += result.value;
+            }
+          }
+        }
+      };
+    }
+
+    async function waitForUsbLine(lineReader, predicate, timeoutMs) {
+      const deadline = performance.now() + timeoutMs;
+      while (true) {
+        const remaining = deadline - performance.now();
+        if (remaining <= 0) {
+          throw new Error('Timeout beim Warten auf Antwort des Geräts');
+        }
+        const line = (await lineReader.readLine(Math.max(remaining, 50))).trim();
+        if (!line) continue;
+        console.debug('[USB] <=', line);
+        if (!line.startsWith('USB')) {
+          continue;
+        }
+        const payload = line.slice(3).trimStart();
+        if (payload.startsWith('ERR')) {
+          const message = payload.substring(3).trim();
+          throw new Error(message || 'Gerätefehler');
+        }
+        if (payload.startsWith('OK PROG')) {
+          const parts = payload.split(/\s+/);
+          if (parts.length >= 4) {
+            const received = Number(parts[2]);
+            const total = Number(parts[3]);
+            if (Number.isFinite(received) && Number.isFinite(total) && total > 0) {
+              const pct = Math.min(100, Math.round((received / total) * 100));
+              setUsbStatus(`Gerät empfängt ${pct}% (${humanReadableSize(received)} / ${humanReadableSize(total)})`);
+            }
+          }
+          continue;
+        }
+        if (payload.startsWith('OK MSG')) {
+          const msg = payload.substring(6).trim();
+          if (msg) setUsbStatus(msg);
+          continue;
+        }
+        if (predicate(payload)) {
+          return payload;
+        }
+      }
+    }
+
+    async function sendViaUsb() {
+      if (!usbSupported) {
+        alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge auf dem Desktop verwenden.');
+        return;
+      }
+      if (usbSending || bleSending) return;
+      if (!currentBitmap) {
+        alert('Bitte zuerst ein Bild auswählen.');
+        return;
+      }
+
+      let port = null;
+      let writer = null;
+      let reader = null;
+      let readableClosed = null;
+      let lineReader = null;
+
+      try {
+        usbSending = true;
+        updateActionButtons();
+        setUsbStatus('Bild wird vorbereitet …');
+
+        const { bytes, filename } = await encodeCurrentImage();
+        const sanitizedName = sanitizeFilenameForTransfer(filename);
+        const totalSize = bytes.length;
+        const totalLabel = humanReadableSize(totalSize);
+
+        setUsbStatus('Seriellen Port auswählen …');
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 921600 });
+
+        if (!port.writable) {
+          throw new Error('Port bietet keinen Schreibstream.');
+        }
+        if (!port.readable) {
+          throw new Error('Port bietet keinen Lesestream.');
+        }
+
+        if (typeof TextDecoderStream === 'undefined') {
+          throw new Error('TextDecoderStream wird nicht unterstützt. Bitte einen aktuellen Chromium-Browser verwenden.');
+        }
+        const decoder = new TextDecoderStream();
+        readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
+        reader = decoder.readable.getReader();
+        lineReader = createLineReader(reader);
+
+        writer = port.writable.getWriter();
+
+        const startLine = `START ${totalSize} ${sanitizedName}\n`;
+        await writer.write(textEncoder.encode(startLine));
+
+        const startAck = await waitForUsbLine(
+          lineReader,
+          (payload) => payload.startsWith('OK START'),
+          2000
+        );
+        let deviceFilename = sanitizedName;
+        const startParts = startAck.split(/\s+/);
+        if (startParts.length >= 3) {
+          deviceFilename = startParts[2];
+        }
+        setUsbStatus(`Übertragung gestartet (${deviceFilename})`);
+
+        const chunkSize = 1024;
+        let sent = 0;
+        setUsbStatus(`Sende 0% (0 / ${totalLabel})`);
+
+        for (let offset = 0; offset < totalSize; offset += chunkSize) {
+          const slice = bytes.subarray(offset, Math.min(offset + chunkSize, totalSize));
+          await writer.write(slice);
+          sent += slice.length;
+
+          if (sent === totalSize || sent <= chunkSize || (sent % (chunkSize * 12)) === 0) {
+            const pct = Math.min(100, Math.round((sent / totalSize) * 100));
+            setUsbStatus(`Sende ${pct}% (${humanReadableSize(sent)} / ${totalLabel})`);
+          }
+        }
+
+        await writer.write(textEncoder.encode('END\n'));
+
+        const endAck = await waitForUsbLine(
+          lineReader,
+          (payload) => payload.startsWith('OK END'),
+          4000
+        );
+        const endParts = endAck.split(/\s+/);
+        if (endParts.length >= 3) {
+          setUsbStatus(`Übertragung abgeschlossen ✅ (${endParts[2]})`);
+        } else {
+          setUsbStatus('Übertragung abgeschlossen ✅');
+        }
+      } catch (error) {
+        console.error(error);
+        const name = error?.name;
+        if (name === 'NotFoundError') {
+          setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
+        } else if (name === 'AbortError') {
+          setUsbStatus('USB-Senden abgebrochen.');
+        } else {
+          const message = error?.message || error?.toString() || 'Unbekannter Fehler';
+          setUsbStatus(`Fehler: ${message}`);
+          alert('Fehler beim USB-Senden: ' + message);
+        }
+      } finally {
+        try {
+          if (writer) {
+            await writer.close();
+          }
+        } catch (_) { /* ignore */ }
+        try {
+          if (reader) {
+            await reader.cancel();
+          }
+        } catch (_) { /* ignore */ }
+        try {
+          if (readableClosed) {
+            await readableClosed.catch(() => {});
+          }
+        } catch (_) { /* ignore */ }
+        try {
+          if (port) {
+            await port.close();
+          }
+        } catch (_) { /* ignore */ }
+        usbSending = false;
+        updateActionButtons();
+      }
+    }
+
     async function sendViaBle() {
       if (!bleSupported) {
         alert('WebBluetooth wird von diesem Browser nicht unterstützt. Bitte Chrome, Edge oder Android Chrome verwenden.');
         return;
       }
-      if (bleSending) return;
+      if (bleSending || usbSending) return;
       if (!currentBitmap) {
         alert('Bitte zuerst ein Bild auswählen.');
         return;
@@ -259,7 +492,7 @@
         setBleStatus('Bild wird vorbereitet …');
 
         const { bytes, filename } = await encodeCurrentImage();
-        const sanitizedName = sanitizeFilenameForBle(filename);
+        const sanitizedName = sanitizeFilenameForTransfer(filename);
 
         setBleStatus('Bitte Brosche auswählen …');
         device = await navigator.bluetooth.requestDevice({
@@ -457,6 +690,9 @@
       if (!bleSending) {
         setBleStatus('');
       }
+      if (!usbSending) {
+        setUsbStatus('');
+      }
     }
 
     // JPEG header scan to verify non-progressive:
@@ -632,7 +868,7 @@
     cv.addEventListener('pointercancel', endDrag);
 
     btnSave.addEventListener('click', async () => {
-      if (bleSending) return;
+      if (bleSending || usbSending) return;
       btnSave.disabled = true;
       try {
         const { bytes, filename } = await encodeCurrentImage();
@@ -651,6 +887,17 @@
         updateActionButtons();
       }
     });
+
+    if (btnUsb) {
+      btnUsb.addEventListener('click', sendViaUsb);
+      if (!secureContext) {
+        btnUsb.title = 'WebSerial benötigt HTTPS oder localhost.';
+        setUsbStatus('WebSerial benötigt eine sichere Herkunft. Bitte die Seite über https:// oder http://localhost ausliefern (z. B. \"python -m http.server\" nutzen) und dann erneut versuchen.');
+      } else if (!serialAvailable) {
+        btnUsb.title = 'WebSerial wird von diesem Browser nicht freigegeben.';
+        setUsbStatus('WebSerial wird von diesem Browser/Profil nicht unterstützt. Verwende eine aktuelle Chromium-Variante wie Chrome oder Edge auf dem Desktop.');
+      }
+    }
 
     btnBle.addEventListener('click', sendViaBle);
 

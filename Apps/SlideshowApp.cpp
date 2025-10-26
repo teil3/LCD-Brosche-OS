@@ -8,6 +8,7 @@
 #include "Core/TextRenderer.h"
 #include "Core/Storage.h"
 #include "Core/BleImageTransfer.h"
+#include "Core/SerialImageTransfer.h"
 
 namespace {
 constexpr std::array<uint32_t, 5> kDwellSteps{1000, 5000, 10000, 30000, 300000};
@@ -26,43 +27,91 @@ bool SlideshowApp::isJpeg_(const String& n) {
 }
 
 void SlideshowApp::onBleTransferStarted(const char* filename, size_t size) {
+  handleTransferStarted_(TransferSource::Ble, filename, size);
+}
+
+void SlideshowApp::onUsbTransferStarted(const char* filename, size_t size) {
+  handleTransferStarted_(TransferSource::Usb, filename, size);
+}
+
+void SlideshowApp::onBleTransferCompleted(const char* filename, size_t size) {
+  handleTransferCompleted_(TransferSource::Ble, filename, size);
+}
+
+void SlideshowApp::onUsbTransferCompleted(const char* filename, size_t size) {
+  handleTransferCompleted_(TransferSource::Usb, filename, size);
+}
+
+void SlideshowApp::onBleTransferError(const char* message) {
+  handleTransferError_(TransferSource::Ble, message);
+}
+
+void SlideshowApp::onBleTransferAborted(const char* message) {
+  handleTransferAborted_(TransferSource::Ble, message);
+}
+
+void SlideshowApp::onUsbTransferError(const char* message) {
+  handleTransferError_(TransferSource::Usb, message);
+}
+
+void SlideshowApp::onUsbTransferAborted(const char* message) {
+  handleTransferAborted_(TransferSource::Usb, message);
+}
+
+const char* SlideshowApp::transferLabel_(TransferSource src) const {
+  switch (src) {
+    case TransferSource::Usb: return "USB";
+    case TransferSource::Ble: return "BLE";
+    default:                  return "Transfer";
+  }
+}
+
+void SlideshowApp::handleTransferStarted_(TransferSource src, const char* filename, size_t size) {
   if (copyState_ == CopyState::Running) return;
+  const char* label = transferLabel_(src);
   if (controlMode_ != ControlMode::BleReceive) {
-    showToast_("BLE: Modus aktivieren", 1200);
+    showToast_(String(label) + String(": Modus aktivieren"), 1200);
     return;
   }
 
+  transferSource_ = src;
   bleState_ = BleState::Receiving;
   bleLastFilename_ = filename ? String(filename) : String();
   bleLastBytesExpected_ = size;
   bleLastBytesReceived_ = 0;
-  bleLastMessage_ = bleLastFilename_.isEmpty() ? String("Empfang läuft")
-                                               : String("Empfange ") + bleLastFilename_;
+  if (bleLastFilename_.isEmpty()) {
+    bleLastMessage_ = String(label) + String(": Empfang läuft");
+  } else {
+    bleLastMessage_ = String(label) + String(": ") + bleLastFilename_;
+  }
   bleOverlayDirty_ = true;
 }
 
-void SlideshowApp::onBleTransferCompleted(const char* filename, size_t size) {
+void SlideshowApp::handleTransferCompleted_(TransferSource src, const char* filename, size_t size) {
   if (copyState_ == CopyState::Running) return;
 
-  bool inBleMode = (controlMode_ == ControlMode::BleReceive);
+  const char* label = transferLabel_(src);
+  bool inTransferMode = (controlMode_ == ControlMode::BleReceive);
   if (!ensureFlashReady_()) {
-    if (inBleMode) {
+    if (inTransferMode) {
+      transferSource_ = src;
       bleState_ = BleState::Error;
       bleLastMessage_ = "Flash-Fehler";
       bleOverlayDirty_ = true;
     } else {
-      showToast_("BLE: Flash Fehler", 1800);
+      showToast_(String(label) + String(": Flash Fehler"), 1800);
     }
     return;
   }
 
   if (!rebuildFileListFrom_(SlideSource::Flash)) {
-    if (inBleMode) {
+    if (inTransferMode) {
+      transferSource_ = src;
       bleState_ = BleState::Error;
       bleLastMessage_ = "Keine Flash-Bilder";
       bleOverlayDirty_ = true;
     } else {
-      showToast_("BLE: Keine Flash-Bilder", 1500);
+      showToast_(String(label) + String(": Keine Flash-Bilder"), 1500);
     }
     return;
   }
@@ -88,7 +137,8 @@ void SlideshowApp::onBleTransferCompleted(const char* filename, size_t size) {
   timeSinceSwitch_ = 0;
   showCurrent_();
 
-  if (inBleMode) {
+  if (inTransferMode) {
+    transferSource_ = src;
     bleState_ = BleState::Completed;
     bleLastFilename_ = filename ? String(filename) : String();
     bleLastBytesExpected_ = size;
@@ -101,7 +151,11 @@ void SlideshowApp::onBleTransferCompleted(const char* filename, size_t size) {
     bleLastSecondary_.clear();
     bleLastFooter_.clear();
   } else {
-    String msg = filename ? String("BLE fertig: ") + filename : String("BLE fertig");
+    String msg = String(label) + String(" fertig");
+    if (filename && filename[0]) {
+      msg += ": ";
+      msg += filename;
+    }
     if (size > 0) {
       uint32_t kb = (static_cast<uint32_t>(size) + 1023) / 1024;
       msg += " (";
@@ -112,14 +166,16 @@ void SlideshowApp::onBleTransferCompleted(const char* filename, size_t size) {
   }
 }
 
-void SlideshowApp::onBleTransferError(const char* message) {
+void SlideshowApp::handleTransferError_(TransferSource src, const char* message) {
   if (copyState_ == CopyState::Running) return;
+  const char* label = transferLabel_(src);
   if (controlMode_ == ControlMode::BleReceive) {
+    transferSource_ = src;
     bleState_ = BleState::Error;
     bleLastMessage_ = message ? String(message) : String("Fehler");
     bleOverlayDirty_ = true;
   } else {
-    String msg = "BLE Fehler";
+    String msg = String(label) + String(" Fehler");
     if (message && message[0]) {
       msg += ": ";
       msg += message;
@@ -128,14 +184,16 @@ void SlideshowApp::onBleTransferError(const char* message) {
   }
 }
 
-void SlideshowApp::onBleTransferAborted(const char* message) {
+void SlideshowApp::handleTransferAborted_(TransferSource src, const char* message) {
   if (copyState_ == CopyState::Running) return;
+  const char* label = transferLabel_(src);
   if (controlMode_ == ControlMode::BleReceive) {
+    transferSource_ = src;
     bleState_ = BleState::Aborted;
     bleLastMessage_ = message ? String(message) : String("Abgebrochen");
     bleOverlayDirty_ = true;
   } else {
-    String msg = "BLE abgebrochen";
+    String msg = String(label) + String(" abgebrochen");
     if (message && message[0]) {
       msg += ": ";
       msg += message;
@@ -151,6 +209,7 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
 
   if (previous == ControlMode::BleReceive) {
     BleImageTransfer::setTransferEnabled(false);
+    SerialImageTransfer::setTransferEnabled(false);
     bleState_ = BleState::Idle;
     bleLastBytesExpected_ = 0;
     bleLastBytesReceived_ = 0;
@@ -161,6 +220,7 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
     bleLastPrimary_.clear();
     bleLastSecondary_.clear();
     bleLastFooter_.clear();
+    transferSource_ = TransferSource::None;
   }
 
   controlMode_ = mode;
@@ -169,12 +229,14 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
   }
   if (controlMode_ == ControlMode::BleReceive) {
     bleState_ = BleState::Idle;
+    transferSource_ = TransferSource::None;
     bleLastMessage_.clear();
     bleLastFilename_.clear();
     bleLastBytesExpected_ = 0;
     bleLastBytesReceived_ = 0;
     bleOverlayDirty_ = true;
     BleImageTransfer::setTransferEnabled(true);
+    SerialImageTransfer::setTransferEnabled(true);
     bleOverlayNeedsClear_ = true;
     bleProgressFrameDrawn_ = false;
     bleBarFill_ = 0;
@@ -587,7 +649,7 @@ String SlideshowApp::modeLabel_() const {
     case ControlMode::StorageMenu:
       return String("EINSTELLUNG");
     case ControlMode::BleReceive:
-      return String("BLE");
+      return String("TRANSFER");
   }
   return String("?");
 }
@@ -749,7 +811,7 @@ void SlideshowApp::drawStorageMenuOverlay_() {
   }
 
   String sourceLine = String("Quelle: ") + sourceLabel_();
-  String footerLine = toastActive ? toastText_ : String("Lang: BLE-Modus");
+  String footerLine = toastActive ? toastText_ : String("Lang: Transfer-Modus");
 
   if (!storageMenuDirty_ &&
       storageMenuLastSource_ == sourceLine &&
@@ -791,8 +853,15 @@ void SlideshowApp::markCopyConfirmDirty_() {
 
 void SlideshowApp::drawBleReceiveOverlay_() {
   if (bleState_ == BleState::Receiving) {
-    size_t expected = BleImageTransfer::bytesExpected();
-    size_t received = BleImageTransfer::bytesReceived();
+    size_t expected = 0;
+    size_t received = 0;
+    if (transferSource_ == TransferSource::Usb) {
+      expected = SerialImageTransfer::bytesExpected();
+      received = SerialImageTransfer::bytesReceived();
+    } else {
+      expected = BleImageTransfer::bytesExpected();
+      received = BleImageTransfer::bytesReceived();
+    }
     if (expected > 0 && expected != bleLastBytesExpected_) {
       bleLastBytesExpected_ = expected;
       bleOverlayDirty_ = true;
@@ -846,7 +915,18 @@ void SlideshowApp::drawBleReceiveOverlay_() {
 
   bool allowClear = (bleState_ != BleState::Completed);
 
-  String header = String("Bluetooth Modus");
+  String header;
+  switch (transferSource_) {
+    case TransferSource::Usb:
+      header = "USB-Transfer";
+      break;
+    case TransferSource::Ble:
+      header = "Bluetooth Transfer";
+      break;
+    default:
+      header = "Übertragung (USB/BLE)";
+      break;
+  }
   if (allowClear) {
     if (header != bleLastHeader_) {
       tft.fillRect(0, headerY - 4, tft.width(), line + 8, TFT_BLACK);
@@ -863,11 +943,14 @@ void SlideshowApp::drawBleReceiveOverlay_() {
 
   switch (bleState_) {
     case BleState::Idle:
-      primary = "Im Tool auswählen";
-      secondary = "Per Bluetooth senden";
+      primary = "Im Tool \"Über USB\" oder \"Per Bluetooth\" starten";
+      secondary = "Gerät wartet auf neue Übertragung";
       break;
     case BleState::Receiving: {
-      primary = bleLastFilename_.isEmpty() ? String("Empfang läuft") : bleLastFilename_;
+      const char* label = transferLabel_(transferSource_);
+      primary = bleLastFilename_.isEmpty()
+                  ? String(label) + String(": Empfang läuft")
+                  : String(label) + String(": ") + bleLastFilename_;
       if (bleLastBytesExpected_ > 0) {
         uint32_t pct = static_cast<uint32_t>((bleLastBytesReceived_ * 100UL) / bleLastBytesExpected_);
         String recv = formatKB(bleLastBytesReceived_);
@@ -878,18 +961,24 @@ void SlideshowApp::drawBleReceiveOverlay_() {
       }
       break;
     }
-    case BleState::Completed:
-      primary = "Empfangen fertig";
+    case BleState::Completed: {
+      const char* label = transferLabel_(transferSource_);
+      primary = String(label) + String(": Empfangen fertig");
       secondary = bleLastFilename_.isEmpty() ? bleLastMessage_ : bleLastFilename_;
       break;
-    case BleState::Error:
-      primary = "Fehler";
+    }
+    case BleState::Error: {
+      const char* label = transferLabel_(transferSource_);
+      primary = String(label) + String(": Fehler");
       secondary = bleLastMessage_.isEmpty() ? String("Übertragung fehlgeschlagen") : bleLastMessage_;
       break;
-    case BleState::Aborted:
-      primary = "Abgebrochen";
+    }
+    case BleState::Aborted: {
+      const char* label = transferLabel_(transferSource_);
+      primary = String(label) + String(": Abgebrochen");
       secondary = bleLastMessage_.isEmpty() ? String("Übertragung abgebrochen") : bleLastMessage_;
       break;
+    }
   }
 
   if (allowClear) {
@@ -1055,6 +1144,7 @@ void SlideshowApp::init() {
   bleLastBytesExpected_ = 0;
   bleLastBytesReceived_ = 0;
   BleImageTransfer::setTransferEnabled(false);
+  SerialImageTransfer::setTransferEnabled(false);
   bleOverlayNeedsClear_ = true;
   bleProgressFrameDrawn_ = false;
   bleBarFill_ = 0;
@@ -1062,6 +1152,7 @@ void SlideshowApp::init() {
   bleLastPrimary_.clear();
   bleLastSecondary_.clear();
   bleLastFooter_.clear();
+  transferSource_ = TransferSource::None;
 
   applyDwell_();
 
@@ -1097,8 +1188,15 @@ void SlideshowApp::tick(uint32_t delta_ms) {
 
   if (controlMode_ == ControlMode::BleReceive) {
     if (bleState_ == BleState::Receiving) {
-      size_t expected = BleImageTransfer::bytesExpected();
-      size_t received = BleImageTransfer::bytesReceived();
+      size_t expected = 0;
+      size_t received = 0;
+      if (transferSource_ == TransferSource::Usb) {
+        expected = SerialImageTransfer::bytesExpected();
+        received = SerialImageTransfer::bytesReceived();
+      } else {
+        expected = BleImageTransfer::bytesExpected();
+        received = BleImageTransfer::bytesReceived();
+      }
       if (expected > 0) {
         bleLastBytesExpected_ = expected;
       }
@@ -1232,4 +1330,6 @@ void SlideshowApp::shutdown() {
   closeCopyFiles_();
   copyQueue_.clear();
   BleImageTransfer::setTransferEnabled(false);
+  SerialImageTransfer::setTransferEnabled(false);
+  transferSource_ = TransferSource::None;
 }
