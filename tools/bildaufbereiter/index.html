@@ -126,6 +126,7 @@
     let currentDownloadName = 'image_240.jpg';
     let bleSending = false;
     let usbSending = false;
+    const usbDebugLog = [];
 
     const secureContextHosts = new Set(['localhost', '127.0.0.1', '::1']);
     const secureContext = window.isSecureContext || secureContextHosts.has(location.hostname);
@@ -137,6 +138,25 @@
     function setUsbStatus(text) {
       if (!usbStatus) return;
       usbStatus.textContent = text || '';
+    }
+
+    function usbLog(direction, message) {
+      const entry = `${direction} ${message}`;
+      if (usbDebugLog.length >= 80) {
+        usbDebugLog.shift();
+      }
+      usbDebugLog.push(entry);
+      console.debug('[USB LOG]', entry);
+    }
+
+    function usbLogSnapshot() {
+      return usbDebugLog.slice(-12).join('\n');
+    }
+
+    function alertUsbError(message) {
+      const log = usbLogSnapshot();
+      const detail = log ? `\n\nLetzte USB-Meldungen:\n${log}` : '';
+      alert(`${message}${detail}`);
     }
 
     function setBleStatus(text) {
@@ -305,7 +325,7 @@
         }
         const line = (await lineReader.readLine(Math.max(remaining, 50))).trim();
         if (!line) continue;
-        console.debug('[USB] <=', line);
+        usbLog('<=', line);
         if (!line.startsWith('USB')) {
           continue;
         }
@@ -348,6 +368,8 @@
         return;
       }
 
+      usbDebugLog.length = 0;
+
       let port = null;
       let writer = null;
       let reader = null;
@@ -359,6 +381,7 @@
         usbSending = true;
         updateActionButtons();
         setUsbStatus('Bild wird vorbereitet …');
+        usbLog('<>', 'Beginne USB-Transfer');
 
         const { bytes, filename } = await encodeCurrentImage();
         const sanitizedName = sanitizeFilenameForTransfer(filename);
@@ -391,6 +414,7 @@
         // Optional: READY-Meldung ignorieren – START funktioniert auch ohne.
 
         const startLine = `START ${totalSize} ${sanitizedName}\n`;
+        usbLog('->', startLine.trim());
         await writer.write(textEncoder.encode(startLine));
 
         const startAck = await waitForUsbLine(
@@ -404,6 +428,7 @@
           deviceFilename = startParts[2];
         }
         setUsbStatus(`Übertragung gestartet (${deviceFilename})`);
+        usbLog('<>', `Transfer bestätigt: ${deviceFilename}`);
 
         const chunkSize = 1024;
         let sent = 0;
@@ -411,6 +436,9 @@
 
         for (let offset = 0; offset < totalSize; offset += chunkSize) {
           const slice = bytes.subarray(offset, Math.min(offset + chunkSize, totalSize));
+          if (offset === 0 || (offset % (chunkSize * 32) === 0)) {
+            usbLog('->', `DATA ${offset}/${totalSize}`);
+          }
           await writer.write(slice);
           sent += slice.length;
 
@@ -421,6 +449,7 @@
           await delay(3);
         }
 
+        usbLog('->', 'END');
         await writer.write(textEncoder.encode('END\n'));
 
         const endPredicate = (payload) => {
@@ -457,41 +486,47 @@
           const name = error?.name;
           if (name === 'NotFoundError') {
             setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
+            alertUsbError('USB-Senden abgebrochen – kein Port ausgewählt.');
           } else if (name === 'AbortError') {
             setUsbStatus('USB-Senden abgebrochen.');
+            alertUsbError('USB-Senden abgebrochen.');
           } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
             if (transferCompleted) {
               setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat den Port getrennt).');
             } else {
               setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und Transfer-Modus erneut aktivieren.');
-              alert('USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.');
+              alertUsbError('USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.');
             }
           } else if (/timeout beim warten/i.test(error?.message || '')) {
             setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv (BTN2 lang in der Diashow)?');
-            alert('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.');
+            alertUsbError('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.');
           } else {
             const message = error?.message || error?.toString() || 'Unbekannter Fehler';
             setUsbStatus(`Fehler: ${message}`);
-            alert('Fehler beim USB-Senden: ' + message);
+            alertUsbError('Fehler beim USB-Senden: ' + message);
           }
       } finally {
         try {
           if (writer) {
+            usbLog('<>', 'release writer');
             await writer.releaseLock();
           }
         } catch (_) { /* ignore */ }
         try {
           if (reader) {
+            usbLog('<>', 'cancel reader');
             await reader.cancel();
           }
         } catch (_) { /* ignore */ }
         try {
           if (readableClosed) {
+            usbLog('<>', 'await readable close');
             await readableClosed.catch(() => {});
           }
         } catch (_) { /* ignore */ }
         try {
           if (port) {
+            usbLog('<>', 'close port');
             await port.close();
           }
         } catch (_) { /* ignore */ }
