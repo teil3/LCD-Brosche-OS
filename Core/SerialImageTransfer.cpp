@@ -18,7 +18,7 @@
 namespace SerialTransferInternal {
 
 constexpr size_t   kMaxImageSize      = 320 * 1024;   // 320 KB Sicherheitslimit
-constexpr uint32_t kTransferTimeoutMs = 6000;         // 6s Inaktivität -> Abbruch
+constexpr uint32_t kTransferTimeoutMs = 15000;        // 15s Inaktivität -> Abbruch
 constexpr size_t   kFilenameCapacity  = sizeof(SerialImageTransfer::Event::filename);
 constexpr size_t   kLineBufferSize    = 160;
 
