@@ -367,17 +367,17 @@
 
         setUsbStatus('Seriellen Port auswählen …');
         port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 921600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+        await port.open({ baudRate: 460800, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
         if (typeof port.setSignals === 'function') {
           try {
-            await port.setSignals({ dataTerminalReady: true, requestToSend: true, break: false });
+            await port.setSignals({ dataTerminalReady: true, requestToSend: false, break: false });
           } catch (_) {
             // Ignorieren: nicht jede Plattform unterstützt setSignals.
           }
         }
 
-        await delay(500);
+        await delay(600);
 
         if (!port.writable) {
           throw new Error('Port bietet keinen Schreibstream.');
