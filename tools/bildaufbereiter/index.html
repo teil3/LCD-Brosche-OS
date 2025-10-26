@@ -91,7 +91,7 @@
     // Dokumentation/Quelle: https://github.com/jamsinclair/jSquash (encode API) –
     // und Typdefinitionen der Optionen (mozjpeg_enc.d.ts)
     const moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
-    const TOOL_VERSION = 'USB Debug build 2025-02-21 00:23Z (ignore debug serial)';
+    const TOOL_VERSION = 'USB Debug build 2025-02-21 00:27Z (READY filter)';
     //const moduleFactory = (await import('./mozjpeg/mozjpeg_enc.js?module')).default;
 
     // Fallback: Wenn du die WASM/JS lokal ausliefern willst, lege sie in ./mozjpeg/ ab
@@ -452,34 +452,46 @@
         try {
           startAck = await waitForUsbLine(
             lineReader,
-            (payload) => payload.startsWith('OK START') || payload.startsWith('OK READY'),
+            // Wir ziehen die relevanten USB-Zeilen heraus und lassen Debug-Text ignorieren.
+            (payload) => payload.startsWith('USB OK READY') ||
+                         payload.startsWith('USB OK START') ||
+                         payload.startsWith('USB ERR') ||
+                         payload.startsWith('USB ABORT') ||
+                         payload.startsWith('[USB]'),
             6000
           );
         } catch (err) {
           usbLog('!!', `Keine START-Bestätigung innerhalb 6s: ${err?.message || err}`);
         }
-        if (startAck && startAck.startsWith('OK READY')) {
-          usbLog('<>', 'READY kam nach START; warte optional auf OK START');
-          try {
-            const follow = await waitForUsbLine(
-              lineReader,
-              (payload) => payload.startsWith('OK START'),
-              4000
-            );
-            startAck = follow;
-          } catch (err) {
-            usbLog('!!', `Kein OK START nach READY: ${err?.message || err}`);
+
+        if (startAck) {
+          usbLog('<=', startAck);
+          if (startAck.startsWith('USB OK READY')) {
+            usbLog('<>', 'READY bestätigt – warte auf OK START');
+            try {
+              startAck = await waitForUsbLine(
+                lineReader,
+                (payload) => payload.startsWith('USB OK START') || payload.startsWith('USB ERR'),
+                6000
+              );
+              usbLog('<=', startAck);
+            } catch (err) {
+              usbLog('!!', `Kein OK START nach READY: ${err?.message || err}`);
+            }
           }
         }
 
-        if (startAck && startAck.startsWith('OK START')) {
+        if (startAck && startAck.startsWith('USB OK START')) {
           let deviceFilename = sanitizedName;
-          const startParts = startAck.split(/\s+/);
-          if (startParts.length >= 3) {
-            deviceFilename = startParts[2];
+          const parts = startAck.split(/\s+/);
+          if (parts.length >= 3) {
+            deviceFilename = parts[2];
           }
           setUsbStatus(`Übertragung gestartet (${deviceFilename})`);
           usbLog('<>', `Transfer bestätigt: ${deviceFilename}`);
+        } else if (startAck && startAck.startsWith('USB ERR')) {
+          usbLog('!!', `Gerät meldet Fehler vor Datenstart: ${startAck}`);
+          setUsbStatus(`Gerätefehler: ${startAck}`);
         } else {
           setUsbStatus('Starte Übertragung (keine Bestätigung erhalten – sende trotzdem)…');
           usbLog('!!', 'Sende Daten ohne Start-Bestätigung');
@@ -524,7 +536,7 @@
           return false;
         };
 
-        const endAck = await waitForUsbLine(lineReader, endPredicate, 14000);
+        const endAck = await waitForUsbLine(lineReader, endPredicate, 16000);
         if (endAck.startsWith('OK PROG')) {
           setUsbStatus('Übertragung abgeschlossen ✅ (Bestätigung über Fortschrittsmeldung)');
         } else {
