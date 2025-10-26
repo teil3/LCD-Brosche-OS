@@ -368,15 +368,7 @@
         port = await navigator.serial.requestPort();
         await port.open({ baudRate: 921600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
-        try {
-          await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-          await delay(30);
-          await port.setSignals({ dataTerminalReady: true, requestToSend: false });
-        } catch (_) {
-          // Manche Browser/Plattformen unterstützen setSignals nicht.
-        }
-
-        await delay(120);
+        await delay(350);
 
         if (!port.writable) {
           throw new Error('Port bietet keinen Schreibstream.');
@@ -401,7 +393,7 @@
         const startAck = await waitForUsbLine(
           lineReader,
           (payload) => payload.startsWith('OK START'),
-          2000
+          4000
         );
         let deviceFilename = sanitizedName;
         const startParts = startAck.split(/\s+/);
@@ -431,7 +423,7 @@
         const endAck = await waitForUsbLine(
           lineReader,
           (payload) => payload.startsWith('OK END'),
-          4000
+          6000
         );
         const endParts = endAck.split(/\s+/);
         if (endParts.length >= 3) {
@@ -439,18 +431,24 @@
         } else {
           setUsbStatus('Übertragung abgeschlossen ✅');
         }
-      } catch (error) {
-        console.error(error);
-        const name = error?.name;
-        if (name === 'NotFoundError') {
-          setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
-        } else if (name === 'AbortError') {
-          setUsbStatus('USB-Senden abgebrochen.');
-        } else {
-          const message = error?.message || error?.toString() || 'Unbekannter Fehler';
-          setUsbStatus(`Fehler: ${message}`);
-          alert('Fehler beim USB-Senden: ' + message);
-        }
+        } catch (error) {
+          console.error(error);
+          const name = error?.name;
+          if (name === 'NotFoundError') {
+            setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
+          } else if (name === 'AbortError') {
+            setUsbStatus('USB-Senden abgebrochen.');
+          } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
+            setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und erneut versuchen.');
+            alert('USB-Verbindung verloren. Bitte den ESP32 erneut verbinden, Transfer-Modus aktivieren und noch einmal senden.');
+          } else if (/timeout beim warten/i.test(error?.message || '')) {
+            setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv?');
+            alert('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist und erneut versuchen.');
+          } else {
+            const message = error?.message || error?.toString() || 'Unbekannter Fehler';
+            setUsbStatus(`Fehler: ${message}`);
+            alert('Fehler beim USB-Senden: ' + message);
+          }
       } finally {
         try {
           if (writer) {
