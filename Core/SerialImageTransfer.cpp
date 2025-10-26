@@ -473,6 +473,7 @@ void processIncoming() {
 namespace SerialImageTransfer {
 
 void begin() {
+  Serial.setRxBufferSize(4096);
   SerialTransferInternal::ensureQueue();
   SerialTransferInternal::gLineLength = 0;
   SerialTransferInternal::resetSession();

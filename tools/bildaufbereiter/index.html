@@ -367,9 +367,9 @@
 
         setUsbStatus('Seriellen Port auswählen …');
         port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 921600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+        await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
-        await delay(500);
+        await delay(400);
 
         if (!port.writable) {
           throw new Error('Port bietet keinen Schreibstream.');
@@ -388,16 +388,7 @@
 
         writer = port.writable.getWriter();
 
-        // Optional: Warten auf READY-Nachricht (Transfer-Modus aktiv)
-        try {
-          await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK READY'),
-            2500
-          );
-        } catch (_) {
-          setUsbStatus('Keine READY-Meldung – stelle sicher, dass die Brosche im Transfer-Modus ist.');
-        }
+        // Optional: READY-Meldung ignorieren – START funktioniert auch ohne.
 
         const startLine = `START ${totalSize} ${sanitizedName}\n`;
         await writer.write(textEncoder.encode(startLine));
@@ -427,7 +418,7 @@
             const pct = Math.min(100, Math.round((sent / totalSize) * 100));
             setUsbStatus(`Sende ${pct}% (${humanReadableSize(sent)} / ${totalLabel})`);
           }
-          await delay(1);
+          await delay(3);
         }
 
         await writer.write(textEncoder.encode('END\n'));
@@ -449,7 +440,7 @@
           return false;
         };
 
-        const endAck = await waitForUsbLine(lineReader, endPredicate, 12000);
+        const endAck = await waitForUsbLine(lineReader, endPredicate, 10000);
         if (endAck.startsWith('OK PROG')) {
           setUsbStatus('Übertragung abgeschlossen ✅ (Bestätigung über Fortschrittsmeldung)');
         } else {

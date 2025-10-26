@@ -43,7 +43,7 @@ RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
 
 void setup() {
-  Serial.begin(921600);
+  Serial.begin(115200);
   delay(100);
   // Warten, bis der Monitor dran ist (nur kurz)
   for (int i=0;i<20;i++){ if (Serial) break; delay(10); }
