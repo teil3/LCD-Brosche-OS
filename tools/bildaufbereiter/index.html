@@ -481,6 +481,7 @@
           } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
             if (transferCompleted) {
               setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat die Verbindung beendet).');
+              alert('Übertragung abgeschlossen. Das Gerät hat die Verbindung getrennt, was normal ist.');
             } else {
               setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und erneut versuchen.');
               alert('USB-Verbindung verloren. Bitte den ESP32 erneut verbinden, Transfer-Modus aktivieren und noch einmal senden.');
