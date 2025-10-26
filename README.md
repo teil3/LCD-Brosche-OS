@@ -94,6 +94,13 @@ arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 - Nutzt Toast-Overlays, um Moduswechsel sichtbar zu machen.
 - Medien muessen im JPEG-Format mit korrekter SOI-Signatur (`0xFF 0xD8`) vorliegen.
 
+### Bildaufbereiter (Web-Tool)
+- Online-Tool zum Zuschneiden (240×240), Encoden und Uebertragen von Bildern:
+  [https://teil3.github.io/LCD-Brosche-OS/tools/bildaufbereiter/](https://teil3.github.io/LCD-Brosche-OS/tools/bildaufbereiter/)
+- Unterstuetzt Download als JPEG, Bluetooth-LE-Transfer sowie USB-WebSerial (921600 Baud).
+- Funktioniert in Chromium-basierten Desktop-Browsern (HTTPS oder `localhost` erforderlich).
+- USB-Senden: Browser fragt nach dem USB-Port, uebertraegt das JPEG in 1 KB-Blöcken, zeigt den Fortschritt an und schickt das Bild direkt in den Flash der Brosche.
+
 ## Dokumentation
 - [Datenblatt (DE)](<docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf>) - Boarddatenblatt und Anschlussplan
 - [User Manual (EN)](<docs/1.28ESP32-Round-TFT-Board_User-Manual_V1.12_EN.pdf>) - Englische Referenz zum Basismodul
