@@ -399,7 +399,12 @@
 
         setUsbStatus('Seriellen Port auswählen …');
         port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+        try {
+          await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+        } catch (err) {
+          usbLog('!!', `open failed: ${err?.message || err}`);
+          throw err;
+        }
 
         if (typeof port.setSignals === 'function') {
           try {
