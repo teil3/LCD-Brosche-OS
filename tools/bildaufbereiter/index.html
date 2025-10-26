@@ -353,6 +353,7 @@
       let reader = null;
       let readableClosed = null;
       let lineReader = null;
+      let transferCompleted = false;
 
       try {
         usbSending = true;
@@ -469,6 +470,7 @@
             setUsbStatus('Übertragung abgeschlossen ✅');
           }
         }
+        transferCompleted = true;
         } catch (error) {
           console.error(error);
           const name = error?.name;
@@ -477,8 +479,12 @@
           } else if (name === 'AbortError') {
             setUsbStatus('USB-Senden abgebrochen.');
           } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
-            setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und erneut versuchen.');
-            alert('USB-Verbindung verloren. Bitte den ESP32 erneut verbinden, Transfer-Modus aktivieren und noch einmal senden.');
+            if (transferCompleted) {
+              setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat die Verbindung beendet).');
+            } else {
+              setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und erneut versuchen.');
+              alert('USB-Verbindung verloren. Bitte den ESP32 erneut verbinden, Transfer-Modus aktivieren und noch einmal senden.');
+            }
           } else if (/timeout beim warten/i.test(error?.message || '')) {
             setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv?');
             alert('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist und erneut versuchen.');
