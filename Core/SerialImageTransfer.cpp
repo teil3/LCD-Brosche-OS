@@ -43,6 +43,11 @@ bool gTransfersEnabled = false;
 char gLineBuffer[kLineBufferSize];
 size_t gLineLength = 0;
 
+constexpr size_t kLogLineCount = 32;
+constexpr size_t kLogLineLength = 96;
+char gLogBuffer[kLogLineCount][kLogLineLength];
+size_t gLogHead = 0;
+
 void ensureQueue() {
   if (!gEventQueue) {
     gEventQueue = xQueueCreate(8, sizeof(SerialImageTransfer::Event));
@@ -102,6 +107,30 @@ void sendErr(const char* code, const char* fmt = nullptr, ...) {
   va_end(args);
 }
 
+void logLine(const char* tag, const char* fmt = nullptr, ...) {
+  char line[kLogLineLength];
+  size_t pos = 0;
+  if (tag && tag[0]) {
+    pos = std::snprintf(line, sizeof(line), "%s", tag);
+  }
+  if (fmt && fmt[0]) {
+    if (pos < sizeof(line) - 2) {
+      line[pos++] = ' ';
+    }
+    va_list args;
+    va_start(args, fmt);
+    std::vsnprintf(line + pos, sizeof(line) - pos, fmt, args);
+    va_end(args);
+  }
+  line[sizeof(line) - 1] = '\0';
+
+  std::snprintf(gLogBuffer[gLogHead], sizeof gLogBuffer[gLogHead], "%s", line);
+  gLogHead = (gLogHead + 1) % kLogLineCount;
+
+  Serial.print("USB LOG ");
+  Serial.println(line);
+}
+
 void cleanupFileOnError() {
   if (!gSession.filename[0]) return;
   String path = String(kFlashSlidesDir) + "/" + gSession.filename;
@@ -131,6 +160,9 @@ void resetSession() {
   gSession.lastActivity = 0;
   gSession.endHintSent = false;
   std::memset(gSession.filename, 0, sizeof(gSession.filename));
+  for (auto &line : gLogBuffer) {
+    line[0] = '\0';
+  }
 }
 
 bool validateSize(size_t sz) {
@@ -277,6 +309,8 @@ bool beginTransfer(size_t size, const char* requestedName) {
   gSession.endHintSent = false;
   std::snprintf(gSession.filename, sizeof(gSession.filename), "%s", filename);
 
+  logLine("START", "%s %lu", gSession.filename, static_cast<unsigned long>(size));
+
   sendOk("START", "%s %lu", gSession.filename, static_cast<unsigned long>(size));
 
   char msg[96];
@@ -305,6 +339,7 @@ void abortTransfer(const char* reason, SerialImageTransfer::EventType evtType) {
   resetSession();
 
   sendErr(reason ? reason : "ABORT");
+  logLine("ABORT", "%s %lu", reason ? reason : "?", static_cast<unsigned long>(received));
   postEvent(evtType, fname, received, reason ? reason : "");
   Serial.printf("[USB] ABORT (%s) after %lu bytes\n",
                 reason ? reason : "no-reason",
@@ -385,6 +420,9 @@ void processData() {
       sendOk("PROG", "%lu %lu",
              static_cast<unsigned long>(gSession.received),
              static_cast<unsigned long>(gSession.expected));
+      logLine("PROG", "%lu %lu",
+              static_cast<unsigned long>(gSession.received),
+              static_cast<unsigned long>(gSession.expected));
     }
   }
 
@@ -452,6 +490,20 @@ void processLine(const char* line) {
     return;
   }
 
+  if (std::strcmp(line, "LOG") == 0 || std::strcmp(line, "DUMPLOG") == 0) {
+    sendOk("LOG", "%u", static_cast<unsigned>(kLogLineCount));
+    size_t idx = gLogHead;
+    for (size_t i = 0; i < kLogLineCount; ++i) {
+      const char* entry = gLogBuffer[idx];
+      if (entry[0]) {
+        Serial.print("USB LOG ");
+        Serial.println(entry);
+      }
+      idx = (idx + 1) % kLogLineCount;
+    }
+    return;
+  }
+
   if (!line[0] || std::strlen(line) <= 2 || line[0] == '[' || line[0] == '<' || line[0] == '!' || line[0] == '=') {
     Serial.printf("[USB] IGN %s\n", line);
     return;
@@ -497,6 +549,7 @@ void begin() {
   SerialTransferInternal::ensureQueue();
   SerialTransferInternal::gLineLength = 0;
   SerialTransferInternal::resetSession();
+  SerialTransferInternal::gLogHead = 0;
 }
 
 void tick() {
