@@ -440,7 +440,7 @@
         usbLog('->', startLine.trim());
         await writer.write(textEncoder.encode(startLine));
 
-        let startAck;
+        let startAck = null;
         try {
           startAck = await waitForUsbLine(
             lineReader,
@@ -448,24 +448,34 @@
             6000
           );
         } catch (err) {
-          usbLog('!!', `Timeout auf OK START: ${err?.message || err}`);
-          throw err;
+          usbLog('!!', `Keine START-Bestätigung innerhalb 6s: ${err?.message || err}`);
         }
-        if (startAck.startsWith('OK READY')) {
-          usbLog('<>', 'READY kam nach START; warte auf OK START');
-          startAck = await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK START'),
-            6000
-          );
+        if (startAck && startAck.startsWith('OK READY')) {
+          usbLog('<>', 'READY kam nach START; warte optional auf OK START');
+          try {
+            const follow = await waitForUsbLine(
+              lineReader,
+              (payload) => payload.startsWith('OK START'),
+              4000
+            );
+            startAck = follow;
+          } catch (err) {
+            usbLog('!!', `Kein OK START nach READY: ${err?.message || err}`);
+          }
         }
-        let deviceFilename = sanitizedName;
-        const startParts = startAck.split(/\s+/);
-        if (startParts.length >= 3) {
-          deviceFilename = startParts[2];
+
+        if (startAck && startAck.startsWith('OK START')) {
+          let deviceFilename = sanitizedName;
+          const startParts = startAck.split(/\s+/);
+          if (startParts.length >= 3) {
+            deviceFilename = startParts[2];
+          }
+          setUsbStatus(`Übertragung gestartet (${deviceFilename})`);
+          usbLog('<>', `Transfer bestätigt: ${deviceFilename}`);
+        } else {
+          setUsbStatus('Starte Übertragung (keine Bestätigung erhalten – sende trotzdem)…');
+          usbLog('!!', 'Sende Daten ohne Start-Bestätigung');
         }
-        setUsbStatus(`Übertragung gestartet (${deviceFilename})`);
-        usbLog('<>', `Transfer bestätigt: ${deviceFilename}`);
 
         const chunkSize = 1024;
         let sent = 0;
