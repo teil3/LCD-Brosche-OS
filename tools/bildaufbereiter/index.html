@@ -161,11 +161,19 @@
       return usbDebugLog.slice(-12).join('\n');
     }
 
-    function alertUsbError(message) {
+    async function alertUsbError(message) {
       const log = usbLogSnapshot();
-      const detail = log ? `\n\nLetzte USB-Meldungen:\n${log}` : '';
+      const fullMessage = log ? `${message}\n\nLetzte USB-Meldungen:\n${log}` : message;
       console.error('USB ERROR:', message, { log: usbDebugLog.slice() });
-      alert(`${message}${detail}`);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(fullMessage);
+          usbLog('<>', 'Fehlerdetails in die Zwischenablage kopiert.');
+        } catch (err) {
+          usbLog('!!', `Clipboard write failed: ${err?.message || err}`);
+        }
+      }
+      alert(fullMessage);
     }
 
     function setBleStatus(text) {
