@@ -104,7 +104,15 @@ void sendErr(const char* code, const char* fmt = nullptr, ...) {
 void cleanupFileOnError() {
   if (!gSession.filename[0]) return;
   String path = String(kFlashSlidesDir) + "/" + gSession.filename;
-  if (LittleFS.exists(path)) {
+  if (!LittleFS.exists(path)) {
+    return;
+  }
+  // Datei nur löschen, wenn sie aktuell nicht geöffnet ist. Falls open() scheitert (z. B. weil
+  // gerade eine Slideshow sie verwendet), lassen wir den unlink aus und generieren später einen
+  // neuen Dateinamen.
+  File test = LittleFS.open(path.c_str(), FILE_READ);
+  if (test) {
+    test.close();
     LittleFS.remove(path);
   }
 }
