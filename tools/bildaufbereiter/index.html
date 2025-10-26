@@ -439,12 +439,20 @@
         try {
           startAck = await waitForUsbLine(
             lineReader,
-            (payload) => payload.startsWith('OK START'),
+            (payload) => payload.startsWith('OK START') || payload.startsWith('OK READY'),
             6000
           );
         } catch (err) {
           usbLog('!!', `Timeout auf OK START: ${err?.message || err}`);
           throw err;
+        }
+        if (startAck.startsWith('OK READY')) {
+          usbLog('<>', 'READY kam nach START; warte auf OK START');
+          startAck = await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK START'),
+            6000
+          );
         }
         let deviceFilename = sanitizedName;
         const startParts = startAck.split(/\s+/);
@@ -493,13 +501,7 @@
           return false;
         };
 
-        let endAck;
-        try {
-          endAck = await waitForUsbLine(lineReader, endPredicate, 10000);
-        } catch (err) {
-          usbLog('!!', `Timeout auf OK END: ${err?.message || err}`);
-          throw err;
-        }
+        const endAck = await waitForUsbLine(lineReader, endPredicate, 14000);
         if (endAck.startsWith('OK PROG')) {
           setUsbStatus('Übertragung abgeschlossen ✅ (Bestätigung über Fortschrittsmeldung)');
         } else {
