@@ -452,7 +452,13 @@ void processLine(const char* line) {
     return;
   }
 
-  sendErr("UNKNOWN", "Unbekannter Befehl");
+  if (!line[0] || std::strlen(line) <= 2 || line[0] == '[' || line[0] == '<' || line[0] == '!' || line[0] == '=') {
+    Serial.printf("[USB] IGN %s\n", line);
+    return;
+  }
+
+  Serial.printf("[USB] UNKNOWN CMD %s\n", line);
+  // Kein sendErr, damit Browser-Transfers nicht abgebrochen werden.
 }
 
 void processIncoming() {
