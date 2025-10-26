@@ -369,7 +369,15 @@
         port = await navigator.serial.requestPort();
         await port.open({ baudRate: 921600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
-        await delay(350);
+        if (typeof port.setSignals === 'function') {
+          try {
+            await port.setSignals({ dataTerminalReady: false, requestToSend: false, break: false });
+          } catch (_) {
+            // Ignorieren: nicht jede Plattform unterstützt setSignals
+          }
+        }
+
+        await delay(600);
 
         if (!port.writable) {
           throw new Error('Port bietet keinen Schreibstream.');
@@ -391,26 +399,11 @@
         const startLine = `START ${totalSize} ${sanitizedName}\n`;
         await writer.write(textEncoder.encode(startLine));
 
-        let startAck;
-        try {
-          startAck = await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK START'),
-            4000
-          );
-        } catch (err) {
-          try { await writer.releaseLock(); } catch (_) {}
-          writer = port.writable.getWriter();
-          const filterLine = `FILTER ${sanitizedName}\n`;
-          await writer.write(textEncoder.encode(filterLine));
-          await delay(200);
-          await writer.write(textEncoder.encode(startLine));
-          startAck = await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK START'),
-            4000
-          );
-        }
+        const startAck = await waitForUsbLine(
+          lineReader,
+          (payload) => payload.startsWith('OK START'),
+          6000
+        );
         let deviceFilename = sanitizedName;
         const startParts = startAck.split(/\s+/);
         if (startParts.length >= 3) {
@@ -453,13 +446,7 @@
           return false;
         };
 
-        let endAck;
-        try {
-          endAck = await waitForUsbLine(lineReader, endPredicate, 6000);
-        } catch (err) {
-          await writer.write(textEncoder.encode('STATUS\n'));
-          endAck = await waitForUsbLine(lineReader, endPredicate, 6000);
-        }
+        const endAck = await waitForUsbLine(lineReader, endPredicate, 8000);
         if (endAck.startsWith('OK PROG')) {
           setUsbStatus('Übertragung abgeschlossen ✅ (Bestätigung über Fortschrittsmeldung)');
         } else {
@@ -479,16 +466,11 @@
           } else if (name === 'AbortError') {
             setUsbStatus('USB-Senden abgebrochen.');
           } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
-            if (transferCompleted) {
-              setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat die Verbindung beendet).');
-              alert('Übertragung abgeschlossen. Das Gerät hat die Verbindung getrennt, was normal ist.');
-            } else {
-              setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und erneut versuchen.');
-              alert('USB-Verbindung verloren. Bitte den ESP32 erneut verbinden, Transfer-Modus aktivieren und noch einmal senden.');
-            }
+            setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und erneut versuchen.');
+            alert('USB-Verbindung verloren. Bitte den ESP32 erneut verbinden, Transfer-Modus aktivieren und noch einmal senden.');
           } else if (/timeout beim warten/i.test(error?.message || '')) {
-            setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv?');
-            alert('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist und erneut versuchen.');
+            setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv (BTN2 lang in der Diashow)?');
+            alert('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.');
           } else {
             const message = error?.message || error?.toString() || 'Unbekannter Fehler';
             setUsbStatus(`Fehler: ${message}`);
