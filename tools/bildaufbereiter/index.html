@@ -371,13 +371,13 @@
 
         if (typeof port.setSignals === 'function') {
           try {
-            await port.setSignals({ dataTerminalReady: false, requestToSend: false, break: false });
+            await port.setSignals({ dataTerminalReady: true, requestToSend: false, break: false });
           } catch (_) {
-            // Ignorieren: nicht jede Plattform unterstützt setSignals
+            // Manche Browser/Plattformen lassen setSignals nicht zu.
           }
         }
 
-        await delay(600);
+        await delay(400);
 
         if (!port.writable) {
           throw new Error('Port bietet keinen Schreibstream.');
@@ -395,6 +395,17 @@
         lineReader = createLineReader(reader);
 
         writer = port.writable.getWriter();
+
+        // Optional: Warten auf READY-Nachricht (wird gesendet, wenn der Transfer-Modus aktiv ist)
+        try {
+          await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK READY'),
+            2000
+          );
+        } catch (_) {
+          // Kein READY empfangen – wir versuchen es dennoch mit START.
+        }
 
         const startLine = `START ${totalSize} ${sanitizedName}\n`;
         await writer.write(textEncoder.encode(startLine));
@@ -446,7 +457,7 @@
           return false;
         };
 
-        const endAck = await waitForUsbLine(lineReader, endPredicate, 8000);
+        const endAck = await waitForUsbLine(lineReader, endPredicate, 10000);
         if (endAck.startsWith('OK PROG')) {
           setUsbStatus('Übertragung abgeschlossen ✅ (Bestätigung über Fortschrittsmeldung)');
         } else {
@@ -466,8 +477,12 @@
           } else if (name === 'AbortError') {
             setUsbStatus('USB-Senden abgebrochen.');
           } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
-            setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und erneut versuchen.');
-            alert('USB-Verbindung verloren. Bitte den ESP32 erneut verbinden, Transfer-Modus aktivieren und noch einmal senden.');
+            if (transferCompleted) {
+              setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat den Port getrennt).');
+            } else {
+              setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und Transfer-Modus erneut aktivieren.');
+              alert('USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.');
+            }
           } else if (/timeout beim warten/i.test(error?.message || '')) {
             setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv (BTN2 lang in der Diashow)?');
             alert('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.');
