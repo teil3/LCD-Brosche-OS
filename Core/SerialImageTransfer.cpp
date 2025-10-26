@@ -21,7 +21,7 @@ constexpr size_t   kMaxImageSize      = 320 * 1024;   // 320 KB Sicherheitslimit
 constexpr uint32_t kTransferTimeoutMs = 15000;        // 15s Inaktivität -> Abbruch
 constexpr size_t   kChunkBufferSize   = 1024;         // Puffer für eingehende Blöcke
 constexpr size_t   kFilenameCapacity  = sizeof(SerialImageTransfer::Event::filename);
-constexpr size_t   kLineBufferSize    = 160;
+constexpr size_t   kLineBufferSize    = 512;
 
 enum class RxState : uint8_t { Idle = 0, Receiving, AwaitEnd };
 
