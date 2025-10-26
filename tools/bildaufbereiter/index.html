@@ -398,8 +398,6 @@
             4000
           );
         } catch (err) {
-          // Wenn das Gerät noch im Menü hängt, nach dem gewünschten Dateinamen filtern
-          // und den START erneut senden.
           try { await writer.releaseLock(); } catch (_) {}
           writer = port.writable.getWriter();
           const filterLine = `FILTER ${sanitizedName}\n`;
@@ -437,26 +435,39 @@
 
         await writer.write(textEncoder.encode('END\n'));
 
+        const endPredicate = (payload) => {
+          if (payload.startsWith('OK END')) {
+            return true;
+          }
+          if (payload.startsWith('OK PROG')) {
+            const parts = payload.split(/\s+/);
+            if (parts.length >= 4) {
+              const received = Number(parts[2]);
+              const total = Number(parts[3]);
+              if (Number.isFinite(received) && Number.isFinite(total) && total > 0 && received >= total) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+
         let endAck;
         try {
-          endAck = await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK END'),
-            6000
-          );
+          endAck = await waitForUsbLine(lineReader, endPredicate, 6000);
         } catch (err) {
           await writer.write(textEncoder.encode('STATUS\n'));
-          endAck = await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK END'),
-            6000
-          );
+          endAck = await waitForUsbLine(lineReader, endPredicate, 6000);
         }
-        const endParts = endAck.split(/\s+/);
-        if (endParts.length >= 3) {
-          setUsbStatus(`Übertragung abgeschlossen ✅ (${endParts[2]})`);
+        if (endAck.startsWith('OK PROG')) {
+          setUsbStatus('Übertragung abgeschlossen ✅ (Bestätigung über Fortschrittsmeldung)');
         } else {
-          setUsbStatus('Übertragung abgeschlossen ✅');
+          const endParts = endAck.split(/\s+/);
+          if (endParts.length >= 3) {
+            setUsbStatus(`Übertragung abgeschlossen ✅ (${endParts[2]})`);
+          } else {
+            setUsbStatus('Übertragung abgeschlossen ✅');
+          }
         }
         } catch (error) {
           console.error(error);
