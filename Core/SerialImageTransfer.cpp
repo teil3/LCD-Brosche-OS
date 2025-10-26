@@ -291,6 +291,11 @@ bool beginTransfer(size_t size, const char* requestedName) {
 void abortTransfer(const char* reason, SerialImageTransfer::EventType evtType) {
   if (gSession.state == RxState::Idle) return;
 
+  if (gSession.file) {
+    gSession.file.close();
+    gSession.file = File();
+  }
+
   cleanupFileOnError();
   char fname[sizeof(gSession.filename)];
   std::snprintf(fname, sizeof(fname), "%s", gSession.filename);
