@@ -19,6 +19,7 @@ namespace SerialTransferInternal {
 
 constexpr size_t   kMaxImageSize      = 320 * 1024;   // 320 KB Sicherheitslimit
 constexpr uint32_t kTransferTimeoutMs = 15000;        // 15s Inaktivität -> Abbruch
+constexpr size_t   kChunkBufferSize   = 1024;         // Puffer für eingehende Blöcke
 constexpr size_t   kFilenameCapacity  = sizeof(SerialImageTransfer::Event::filename);
 constexpr size_t   kLineBufferSize    = 160;
 
@@ -359,7 +360,7 @@ void processData() {
   }
   size_t toRead = std::min<size_t>(remaining, static_cast<size_t>(available));
 
-  uint8_t buffer[128];
+  uint8_t buffer[1024];
   while (toRead > 0) {
     size_t chunk = std::min<size_t>(sizeof(buffer), toRead);
     size_t readCount = Serial.readBytes(buffer, chunk);
