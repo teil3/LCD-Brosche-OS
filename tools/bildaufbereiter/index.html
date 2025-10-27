@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 13:45Z (skip setSignals reset)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:05Z (DTR guard)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -606,9 +606,23 @@
           throw err;
         }
 
-        // Einige ESP32-Boards resetten sofort, sobald WebSerial DTR/RTS toggelt.
-        // Deshalb verzichten wir auf setSignals – die Standardwerte reichen für die Brosche.
-        usbLog('<>', 'skip setSignals (halten bestehende DTR/RTS Pegel)');
+        // Versuche nur DTR auf HIGH zu setzen. Einige Systeme melden zwar Fehler,
+        // aber wenn es klappt, bleibt die Brosche im Transfer-Modus.
+        let dtrPinned = false;
+        if (typeof port.setSignals === 'function') {
+          try {
+            await port.setSignals({ dataTerminalReady: true });
+            usbLog('<>', 'setSignals DTR=1');
+            dtrPinned = true;
+          } catch (err) {
+            usbLog('!!', `setSignals(DTR) fehlgeschlagen: ${err?.message || err}`);
+          }
+        } else {
+          usbLog('<>', 'setSignals nicht verfügbar – behalten Standardpegel bei');
+        }
+        if (!dtrPinned) {
+          setUsbStatus('USB-Port geöffnet – falls die Brosche neu startet, Transfer-Modus erneut aktivieren.');
+        }
 
         await delay(400);
 
