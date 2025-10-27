@@ -90,13 +90,33 @@
     // --- Import der MozJPEG-WASM-Codec-Factory (jSquash, auf UNPKG gehostet) ---
     // Dokumentation/Quelle: https://github.com/jamsinclair/jSquash (encode API) –
     // und Typdefinitionen der Optionen (mozjpeg_enc.d.ts)
-    const moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
-    const TOOL_VERSION = 'USB Debug build 2025-02-21 00:27Z (READY filter)';
-    //const moduleFactory = (await import('./mozjpeg/mozjpeg_enc.js?module')).default;
-
-    // Fallback: Wenn du die WASM/JS lokal ausliefern willst, lege sie in ./mozjpeg/ ab
-    // und ersetze die URL oben durch: './mozjpeg/mozjpeg_enc.js'
-    // (Achte darauf, dass mozjpeg_enc.wasm im selben Ordner liegt.)
+    let moduleFactory = null;
+    let mozModuleSource = 'cdn';
+    const mozModuleErrors = [];
+    try {
+      moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
+      console.info('[MozJPEG] Encoder via CDN geladen.');
+    } catch (cdnError) {
+      mozModuleErrors.push(cdnError);
+      console.warn('[MozJPEG] CDN-Import fehlgeschlagen, versuche lokalen Fallback …', cdnError);
+      try {
+        moduleFactory = (await import('./mozjpeg/mozjpeg_enc.js?module')).default;
+        mozModuleSource = 'local';
+        console.info('[MozJPEG] Encoder aus ./mozjpeg/ geladen.');
+      } catch (localError) {
+        mozModuleErrors.push(localError);
+        console.error('[MozJPEG] Lokaler Fallback fehlgeschlagen.', localError);
+      }
+    }
+    if (!moduleFactory) {
+      const combinedError = mozModuleErrors.pop() || new Error('Unbekannter Importfehler');
+      const message = 'MozJPEG-WASM konnte nicht geladen werden. Bitte Internetverbindung prüfen oder ./mozjpeg/ bereitstellen.';
+      console.error(message, { mozModuleErrors });
+      alert(message);
+      throw combinedError;
+    }
+    window.__mozjpegSource = mozModuleSource;
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 08:00Z (MozJPEG fallback)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -133,7 +153,7 @@
     const usbDebugLog = [];
 
     if (versionLabel) {
-      versionLabel.textContent = TOOL_VERSION;
+      versionLabel.textContent = `${TOOL_VERSION} · mozjpeg: ${mozModuleSource}`;
     }
 
     const secureContextHosts = new Set(['localhost', '127.0.0.1', '::1']);
