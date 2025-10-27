@@ -499,6 +499,11 @@ void processLine(const char* line) {
 
   if (std::strcmp(line, "LOG") == 0 || std::strcmp(line, "DUMPLOG") == 0) {
     sendOk("LOG", "%u", static_cast<unsigned>(kLogLineCount));
+    Serial.println("USB LOG STATUS DISABLED");
+    Serial.printf("USB LOG STATUS STATE=%u ACTIVE=%u ENABLED=%u\n",
+                  static_cast<unsigned>(gSession.state),
+                  SerialImageTransfer::isTransferActive(),
+                  gTransfersEnabled);
     size_t idx = gLogHead;
     for (size_t i = 0; i < kLogLineCount; ++i) {
       const char* entry = gLogBuffer[idx];
@@ -523,6 +528,19 @@ void processLine(const char* line) {
 void processIncoming() {
   if (gSession.state == RxState::Receiving) {
     processData();
+    return;
+  }
+
+  if (!gTransfersEnabled) {
+    while (Serial.available() > 0) {
+      int byteVal = Serial.read();
+      if (byteVal < 0) break;
+      char c = static_cast<char>(byteVal);
+      if (c == '\n') {
+        Serial.println("USB LOG IGNORE (disabled)\n");
+        break;
+      }
+    }
     return;
   }
 
