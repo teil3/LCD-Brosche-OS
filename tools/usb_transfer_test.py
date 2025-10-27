@@ -50,6 +50,8 @@ def main() -> None:
     parser.add_argument("--size", type=int, default=DEFAULT_SIZE)
     parser.add_argument("--name", default=DEFAULT_NAME)
     parser.add_argument("--file", type=Path)
+    parser.add_argument("--chunk", type=int, default=None, help="chunk size for paced writes (default: single write)")
+    parser.add_argument("--delay", type=float, default=0.0, help="delay in seconds between chunk writes")
     args = parser.parse_args()
 
     if args.file:
@@ -75,8 +77,23 @@ def main() -> None:
         ser.flush()
         expect_ok(" START", iter_lines(ser, timeout=4))
 
-        ser.write(data)
-        ser.flush()
+        if args.chunk and args.chunk > 0:
+            offset = 0
+            while offset < len(data):
+                end = min(offset + args.chunk, len(data))
+                written = ser.write(data[offset:end])
+                ser.flush()
+                await_empty_start = time.time()
+                while ser.out_waiting:
+                    if time.time() - await_empty_start > 2:
+                        raise RuntimeError("Serial out_waiting did not drain")
+                    time.sleep(0.01)
+                offset += written
+                if args.delay:
+                    time.sleep(args.delay)
+        else:
+            ser.write(data)
+            ser.flush()
         expect_ok(" PROG", iter_lines(ser, timeout=4))
 
         ser.write(b"END\n")
