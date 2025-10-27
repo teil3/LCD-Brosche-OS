@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 11:25Z (Log modal)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 11:40Z (PING handshake)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -630,7 +630,26 @@
 
         writer = port.writable.getWriter();
 
-        // Optional: READY-Meldung ignorieren – START funktioniert auch ohne.
+        // Vorab Verbindung prüfen (PING). Wenn wir keine Antwort erhalten,
+        // brechen wir ab, weil das Gerät vermutlich im falschen Modus ist.
+        usbLog('->', 'PING');
+        await writer.write(textEncoder.encode('PING\n'));
+        try {
+          const pong = await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK PONG') || payload.startsWith('ERR'),
+            3000
+          );
+          if (pong.startsWith('ERR')) {
+            usbLog('!!', `Gerät meldet Fehler auf PING: ${pong}`);
+            throw new Error('Gerät reagiert nicht auf PING. Bitte Transfer-Modus erneut aktivieren (BTN2 lang, bis "Transfer" angezeigt wird).');
+          }
+          usbLog('<=', pong);
+          setUsbStatus('Gerät antwortet – Übertragung wird vorbereitet …');
+        } catch (err) {
+          usbLog('!!', `PING fehlgeschlagen: ${err?.message || err}`);
+          throw new Error('Kein PING von der Brosche empfangen. Bitte Transfer-Modus (BTN2 lang halten) und USB-Kabel prüfen.');
+        }
 
         const startLine = `START ${totalSize} ${sanitizedName}\n`;
         usbLog('->', startLine.trim());
