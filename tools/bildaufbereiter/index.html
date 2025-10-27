@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:46Z (reset detection v3)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:51Z (reset detection v4)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -662,10 +662,14 @@
               bootLines.push(trimmed);
               continue;
             }
-            strayLines.push(trimmed);
-            if (strayLines.length >= 5) {
-              break;
+            if (trimmed.startsWith('[')) {
+              strayLines.push(trimmed);
+              if (strayLines.length >= 3) {
+                break;
+              }
+              continue;
             }
+            // Andere kurze oder kryptische Zeilen (z. B. "=1") ignorieren wir einfach.
           } catch (err) {
             const msg = err?.message || '';
             if (msg.includes('Timeout beim Lesen')) {
