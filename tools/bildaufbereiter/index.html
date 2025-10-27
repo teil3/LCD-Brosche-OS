@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:05Z (DTR guard)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:20Z (reset detection)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -625,6 +625,33 @@
         }
 
         await delay(400);
+
+        const bootLines = [];
+        const bootDeadline = performance.now() + 1000;
+        while (performance.now() < bootDeadline) {
+          try {
+            const remaining = bootDeadline - performance.now();
+            const line = await lineReader.readLine(Math.max(remaining, 50));
+            if (!line) continue;
+            usbLog('<=', line);
+            const trimmed = line.trim();
+            const looksLikeReset = trimmed.startsWith('ets ') ||
+                                   trimmed.startsWith('rst:') ||
+                                   trimmed.includes('[BOOT]');
+            if (looksLikeReset) {
+              bootLines.push(trimmed);
+            }
+          } catch (err) {
+            if ((err?.message || '').includes('Timeout beim Lesen')) {
+              break;
+            }
+            throw err;
+          }
+        }
+        if (bootLines.length > 0) {
+          setUsbStatus('Brosche hat neu gestartet – bitte BTN2 lang halten, bis \"USB-Transfer\" angezeigt wird.');
+          throw new Error('Gerät hat neu gestartet. Transfer-Modus erneut aktivieren und noch einmal versuchen.');
+        }
 
         if (!port.writable) {
           throw new Error('Port bietet keinen Schreibstream.');
