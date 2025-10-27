@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 12:20Z (Host sent guard)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 13:45Z (skip setSignals reset)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -606,14 +606,9 @@
           throw err;
         }
 
-        if (typeof port.setSignals === 'function') {
-          try {
-            await port.setSignals({ dataTerminalReady: true, requestToSend: true, break: false });
-            usbLog('<>', 'setSignals DTR=1 RTS=1');
-          } catch (err) {
-            usbLog('<>', `setSignals failed: ${err?.message || err}`);
-          }
-        }
+        // Einige ESP32-Boards resetten sofort, sobald WebSerial DTR/RTS toggelt.
+        // Deshalb verzichten wir auf setSignals – die Standardwerte reichen für die Brosche.
+        usbLog('<>', 'skip setSignals (halten bestehende DTR/RTS Pegel)');
 
         await delay(400);
 
