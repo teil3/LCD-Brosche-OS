@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 12:10Z (Host sent log)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 12:15Z (Host sent guard)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -581,6 +581,8 @@
       let readableClosed = null;
       let lineReader = null;
       let transferCompleted = false;
+      const chunkSize = 1024;
+      let sent = 0;
 
       try {
         usbSending = true;
@@ -708,8 +710,6 @@
           throw new Error(noAckMsg);
         }
 
-        const chunkSize = 1024;
-        let sent = 0;
         setUsbStatus(`Sende 0% (0 / ${totalLabel})`);
 
         for (let offset = 0; offset < totalSize; offset += chunkSize) {
