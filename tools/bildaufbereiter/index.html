@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:53Z (reset detection rollback)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:59Z (ignore app logs)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -660,6 +660,16 @@
                                    trimmed.includes('[BOOT]');
             if (looksLikeReset) {
               bootLines.push(trimmed);
+              continue;
+            }
+            const looksLikeAppLog = trimmed.startsWith('[') ||
+                                     trimmed.startsWith('logical=') ||
+                                     trimmed.includes(' logical=') ||
+                                     trimmed.startsWith('USB LOG ') ||
+                                     trimmed.startsWith('USB OK ') ||
+                                     trimmed.startsWith('USB ERR ');
+            if (looksLikeAppLog) {
+              // Debug- oder Statusausgaben ignorieren – sie stammen typischerweise von BTN/Slideshow.
               continue;
             }
             strayLines.push(trimmed);
