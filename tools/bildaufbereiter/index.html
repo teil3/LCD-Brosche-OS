@@ -80,6 +80,7 @@
   <div class="actions">
     <button id="save" disabled>Als JPEG speichern</button>
     <button id="send-usb" disabled>Über USB senden</button>
+    <button id="send-usb-log" disabled>USB-Log abrufen</button>
     <button id="send-ble" disabled>Per Bluetooth senden</button>
     <p id="usb-status" class="muted" aria-live="polite"></p>
     <p id="ble-status" class="muted" aria-live="polite"></p>
@@ -116,13 +117,14 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 10:05Z (Handshake fix)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 10:40Z (Log fetch)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
     const qInput    = document.getElementById('quality');
     const btnSave   = document.getElementById('save');
     const btnUsb    = document.getElementById('send-usb');
+    const btnUsbLog = document.getElementById('send-usb-log');
     const btnBle    = document.getElementById('send-ble');
     const versionLabel = document.getElementById('tool-version');
     const usbStatus = document.getElementById('usb-status');
@@ -206,6 +208,7 @@
       const busy = bleSending || usbSending;
       if (btnSave) btnSave.disabled = !ready || busy;
       if (btnUsb) btnUsb.disabled = !ready || !usbSupported || busy;
+      if (btnUsbLog) btnUsbLog.disabled = !usbSupported || busy;
       if (btnBle) btnBle.disabled = !ready || !bleSupported || busy;
     }
 
@@ -394,6 +397,63 @@
       }
     }
 
+    async function dumpDeviceLog(lineReader, writer, maxEntries = 16) {
+      if (!writer || !lineReader) return [];
+      try {
+        usbLog('->', 'LOG');
+        await writer.write(textEncoder.encode('LOG\n'));
+      } catch (err) {
+        usbLog('!!', `LOG senden fehlgeschlagen: ${err?.message || err}`);
+        return [];
+      }
+
+      let ack;
+      try {
+        ack = await waitForUsbLine(
+          lineReader,
+          (payload) => payload.startsWith('OK LOG') || payload.startsWith('ERR'),
+          2000
+        );
+      } catch (err) {
+        usbLog('!!', `LOG-Antwort ausstehend: ${err?.message || err}`);
+        return [];
+      }
+
+      if (ack.startsWith('ERR')) {
+        usbLog('!!', `Gerät meldet LOG-Fehler: ${ack}`);
+        return [];
+      }
+
+      const parts = ack.split(/\s+/);
+      let count = Number(parts[2]);
+      if (!Number.isFinite(count) || count <= 0) {
+        count = maxEntries;
+      }
+      const limit = Math.min(count, Math.max(1, maxEntries));
+      const entries = [];
+      let guard = 0;
+
+      while (entries.length < limit && guard < limit + 8) {
+        guard += 1;
+        try {
+          const raw = (await lineReader.readLine(800)).trim();
+          if (!raw) continue;
+          usbLog('<=', raw);
+          if (raw.startsWith('USB LOG')) {
+            entries.push(raw.substring(7).trim());
+          }
+        } catch (err) {
+          usbLog('!!', `LOG lesen fehlgeschlagen: ${err?.message || err}`);
+          break;
+        }
+      }
+
+      if (!entries.length) {
+        usbLog('<>', 'Keine LOG-Einträge vom Gerät erhalten.');
+      }
+      return entries;
+    }
+
     async function sendViaUsb() {
       if (!usbSupported) {
         alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge auf dem Desktop verwenden.');
@@ -572,26 +632,45 @@
         } catch (error) {
           console.error(error);
           const name = error?.name;
+          let userMessage = '';
+          let fetchLog = false;
+
           if (name === 'NotFoundError') {
             setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
-            alertUsbError('USB-Senden abgebrochen – kein Port ausgewählt.');
+            userMessage = 'USB-Senden abgebrochen – kein Port ausgewählt.';
           } else if (name === 'AbortError') {
             setUsbStatus('USB-Senden abgebrochen.');
-            alertUsbError('USB-Senden abgebrochen.');
+            userMessage = 'USB-Senden abgebrochen.';
           } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
             if (transferCompleted) {
               setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat den Port getrennt).');
+              userMessage = '';
             } else {
               setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und Transfer-Modus erneut aktivieren.');
-              alertUsbError('USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.');
+              userMessage = 'USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.';
+              fetchLog = true;
             }
           } else if (/timeout beim warten/i.test(error?.message || '')) {
             setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv (BTN2 lang in der Diashow)?');
-            alertUsbError('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.');
+            userMessage = 'Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.';
+            fetchLog = true;
           } else {
             const message = error?.message || error?.toString() || 'Unbekannter Fehler';
             setUsbStatus(`Fehler: ${message}`);
-            alertUsbError('Fehler beim USB-Senden: ' + message);
+            userMessage = 'Fehler beim USB-Senden: ' + message;
+            fetchLog = true;
+          }
+
+          if (fetchLog && writer && lineReader) {
+            try {
+              await dumpDeviceLog(lineReader, writer, 20);
+            } catch (logErr) {
+              console.warn('Dump device log failed', logErr);
+            }
+          }
+
+          if (userMessage) {
+            await alertUsbError(userMessage);
           }
       } finally {
         try {
@@ -765,8 +844,91 @@
           }
         } catch (_) { /* noop */ }
         bleSending = false;
+      updateActionButtons();
+    }
+
+    async function fetchUsbLogManually() {
+      if (!usbSupported) {
+        alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge auf dem Desktop verwenden.');
+        return;
+      }
+      if (usbSending || bleSending) return;
+
+      let port = null;
+      let writer = null;
+      let reader = null;
+      let readableClosed = null;
+      let lineReader = null;
+
+      try {
+        usbSending = true;
+        updateActionButtons();
+        setUsbStatus('USB-Log wird angefordert …');
+
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+
+        if (typeof port.setSignals === 'function') {
+          try {
+            await port.setSignals({ dataTerminalReady: true, requestToSend: true, break: false });
+            usbLog('<>', 'setSignals DTR=1 RTS=1 (log fetch)');
+          } catch (err) {
+            usbLog('<>', `setSignals failed (log fetch): ${err?.message || err}`);
+          }
+        }
+
+        await delay(200);
+
+        if (!port.writable || !port.readable) {
+          throw new Error('Port bietet keine Lese-/Schreibstreams.');
+        }
+
+        const decoder = new TextDecoderStream();
+        readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
+        reader = decoder.readable.getReader();
+        lineReader = createLineReader(reader);
+        writer = port.writable.getWriter();
+
+        const entries = await dumpDeviceLog(lineReader, writer, 24);
+        if (entries.length > 0) {
+          const text = entries.map((line, idx) => `${idx + 1}. ${line || '(leer)'}`).join('\n');
+          console.log('[USB LOG FETCH]\n' + text);
+          alert(`Letzte USB-Logeinträge (${entries.length}):\n\n${text}`);
+          setUsbStatus(`USB-Log erhalten (${entries.length} Einträge).`);
+        } else {
+          setUsbStatus('USB-Log: Keine Einträge verfügbar.');
+          alert('USB-Log: Keine Einträge verfügbar.');
+        }
+      } catch (error) {
+        console.error(error);
+        const message = error?.message || error?.toString() || 'Unbekannter Fehler';
+        setUsbStatus(`USB-Log abrufen fehlgeschlagen: ${message}`);
+        await alertUsbError('USB-Log abrufen fehlgeschlagen: ' + message);
+      } finally {
+        try {
+          if (writer) {
+            await writer.releaseLock();
+          }
+        } catch (_) { /* noop */ }
+        try {
+          if (reader) {
+            await reader.cancel();
+          }
+        } catch (_) { /* noop */ }
+        try {
+          if (readableClosed) {
+            await readableClosed.catch(() => {});
+          }
+        } catch (_) { /* noop */ }
+        try {
+          if (port) {
+            await port.close();
+          }
+        } catch (_) { /* noop */ }
+        usbSending = false;
         updateActionButtons();
       }
+    }
     }
 
     function hasFilePayload(evt) {
@@ -1053,6 +1215,15 @@
       } else if (!serialAvailable) {
         btnUsb.title = 'WebSerial wird von diesem Browser nicht freigegeben.';
         setUsbStatus('WebSerial wird von diesem Browser/Profil nicht unterstützt. Verwende eine aktuelle Chromium-Variante wie Chrome oder Edge auf dem Desktop.');
+      }
+    }
+
+    if (btnUsbLog) {
+      btnUsbLog.addEventListener('click', fetchUsbLogManually);
+      if (!secureContext) {
+        btnUsbLog.title = 'WebSerial benötigt HTTPS oder localhost.';
+      } else if (!serialAvailable) {
+        btnUsbLog.title = 'WebSerial wird von diesem Browser nicht freigegeben.';
       }
     }
 
