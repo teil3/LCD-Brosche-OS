@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:30Z (reset detection v2)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:46Z (reset detection v3)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -642,23 +642,38 @@
         await delay(400);
 
         const bootLines = [];
+        const strayLines = [];
         const bootDeadline = performance.now() + 1000;
         while (performance.now() < bootDeadline) {
           try {
-            const remaining = bootDeadline - performance.now();
-            const line = await lineReader.readLine(Math.max(remaining, 50));
+            const remaining = Math.max(bootDeadline - performance.now(), 50);
+            const line = await lineReader.readLine(remaining);
             if (!line) continue;
             usbLog('<=', line);
             const trimmed = line.trim();
+            if (!trimmed) continue;
+            if (trimmed.startsWith('USB')) {
+              continue;
+            }
             const looksLikeReset = trimmed.startsWith('ets ') ||
                                    trimmed.startsWith('rst:') ||
                                    trimmed.includes('[BOOT]');
             if (looksLikeReset) {
               bootLines.push(trimmed);
+              continue;
+            }
+            strayLines.push(trimmed);
+            if (strayLines.length >= 5) {
+              break;
             }
           } catch (err) {
-            if ((err?.message || '').includes('Timeout beim Lesen')) {
+            const msg = err?.message || '';
+            if (msg.includes('Timeout beim Lesen')) {
               break;
+            }
+            if (msg.includes('Verbindung geschlossen')) {
+              setUsbStatus('USB-Verbindung verloren – vermutlich hat die Brosche neu gestartet.');
+              throw new Error('Gerät hat den Port unmittelbar nach dem Öffnen geschlossen (vermutlich Reset). Bitte BTN2 lang halten, bis \"USB-Transfer\" angezeigt wird, und erneut versuchen.');
             }
             throw err;
           }
@@ -666,6 +681,11 @@
         if (bootLines.length > 0) {
           setUsbStatus('Brosche hat neu gestartet – bitte BTN2 lang halten, bis \"USB-Transfer\" angezeigt wird.');
           throw new Error('Gerät hat neu gestartet. Transfer-Modus erneut aktivieren und noch einmal versuchen.');
+        }
+        if (strayLines.length > 0) {
+          const preview = strayLines.slice(0, 2).join(' | ');
+          setUsbStatus('Gerät meldet andere Logs – Transfer-Modus erneut aktivieren.');
+          throw new Error(`Gerät meldet andere Logs vor dem Handshake (${preview}). Bitte BTN2 lang halten, bis \"USB-Transfer\" angezeigt wird, und erneut versuchen.`);
         }
 
         writer = port.writable.getWriter();
