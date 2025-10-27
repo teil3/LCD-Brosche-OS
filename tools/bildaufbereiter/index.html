@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:20Z (reset detection)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:30Z (reset detection v2)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -620,6 +620,21 @@
         } else {
           usbLog('<>', 'setSignals nicht verfügbar – behalten Standardpegel bei');
         }
+        if (!port.writable) {
+          throw new Error('Port bietet keinen Schreibstream.');
+        }
+        if (!port.readable) {
+          throw new Error('Port bietet keinen Lesestream.');
+        }
+
+        if (typeof TextDecoderStream === 'undefined') {
+          throw new Error('TextDecoderStream wird nicht unterstützt. Bitte einen aktuellen Chromium-Browser verwenden.');
+        }
+        const decoder = new TextDecoderStream();
+        readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
+        reader = decoder.readable.getReader();
+        lineReader = createLineReader(reader);
+
         if (!dtrPinned) {
           setUsbStatus('USB-Port geöffnet – falls die Brosche neu startet, Transfer-Modus erneut aktivieren.');
         }
@@ -652,21 +667,6 @@
           setUsbStatus('Brosche hat neu gestartet – bitte BTN2 lang halten, bis \"USB-Transfer\" angezeigt wird.');
           throw new Error('Gerät hat neu gestartet. Transfer-Modus erneut aktivieren und noch einmal versuchen.');
         }
-
-        if (!port.writable) {
-          throw new Error('Port bietet keinen Schreibstream.');
-        }
-        if (!port.readable) {
-          throw new Error('Port bietet keinen Lesestream.');
-        }
-
-        if (typeof TextDecoderStream === 'undefined') {
-          throw new Error('TextDecoderStream wird nicht unterstützt. Bitte einen aktuellen Chromium-Browser verwenden.');
-        }
-        const decoder = new TextDecoderStream();
-        readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
-        reader = decoder.readable.getReader();
-        lineReader = createLineReader(reader);
 
         writer = port.writable.getWriter();
 
