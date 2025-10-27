@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 11:55Z (Data logging)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 12:05Z (Host sent log)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -762,6 +762,7 @@
           const name = error?.name;
           let userMessage = '';
           let fetchLog = false;
+          usbLog('<>', `HOST SENT ${sent}/${totalSize}`);
 
           if (name === 'NotFoundError') {
             setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
