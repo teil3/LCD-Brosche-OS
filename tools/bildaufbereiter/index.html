@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 12:15Z (Host sent guard)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 12:20Z (Host sent guard)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -583,6 +583,8 @@
       let transferCompleted = false;
       const chunkSize = 1024;
       let sent = 0;
+      let totalSize = 0;
+      let totalLabel = '0 B';
 
       try {
         usbSending = true;
@@ -592,8 +594,8 @@
 
         const { bytes, filename } = await encodeCurrentImage();
         const sanitizedName = sanitizeFilenameForTransfer(filename);
-        const totalSize = bytes.length;
-        const totalLabel = humanReadableSize(totalSize);
+        totalSize = bytes.length;
+        totalLabel = humanReadableSize(totalSize);
 
         setUsbStatus('Seriellen Port auswählen …');
         port = await navigator.serial.requestPort();
