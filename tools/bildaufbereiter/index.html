@@ -116,7 +116,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 08:00Z (MozJPEG fallback)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 10:05Z (Handshake fix)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -473,11 +473,9 @@
           startAck = await waitForUsbLine(
             lineReader,
             // Wir ziehen die relevanten USB-Zeilen heraus und lassen Debug-Text ignorieren.
-            (payload) => payload.startsWith('USB OK READY') ||
-                         payload.startsWith('USB OK START') ||
-                         payload.startsWith('USB ERR') ||
-                         payload.startsWith('USB ABORT') ||
-                         payload.startsWith('[USB]'),
+            (payload) => payload.startsWith('OK READY') ||
+                         payload.startsWith('OK START') ||
+                         payload.startsWith('ERR'),
             6000
           );
         } catch (err) {
@@ -486,12 +484,12 @@
 
         if (startAck) {
           usbLog('<=', startAck);
-          if (startAck.startsWith('USB OK READY')) {
+          if (startAck.startsWith('OK READY')) {
             usbLog('<>', 'READY bestätigt – warte auf OK START');
             try {
               startAck = await waitForUsbLine(
                 lineReader,
-                (payload) => payload.startsWith('USB OK START') || payload.startsWith('USB ERR'),
+                (payload) => payload.startsWith('OK START') || payload.startsWith('ERR'),
                 6000
               );
               usbLog('<=', startAck);
@@ -501,7 +499,7 @@
           }
         }
 
-        if (startAck && startAck.startsWith('USB OK START')) {
+        if (startAck && startAck.startsWith('OK START')) {
           let deviceFilename = sanitizedName;
           const parts = startAck.split(/\s+/);
           if (parts.length >= 3) {
@@ -509,12 +507,15 @@
           }
           setUsbStatus(`Übertragung gestartet (${deviceFilename})`);
           usbLog('<>', `Transfer bestätigt: ${deviceFilename}`);
-        } else if (startAck && startAck.startsWith('USB ERR')) {
+        } else if (startAck && startAck.startsWith('ERR')) {
           usbLog('!!', `Gerät meldet Fehler vor Datenstart: ${startAck}`);
           setUsbStatus(`Gerätefehler: ${startAck}`);
+          throw new Error(startAck);
         } else {
-          setUsbStatus('Starte Übertragung (keine Bestätigung erhalten – sende trotzdem)…');
-          usbLog('!!', 'Sende Daten ohne Start-Bestätigung');
+          const noAckMsg = 'Keine START-Bestätigung vom Gerät empfangen. Bitte sicherstellen, dass der Transfer-Modus aktiv ist (BTN2 lang halten, bis \"Transfer\" erscheint).';
+          usbLog('!!', noAckMsg);
+          setUsbStatus(noAckMsg);
+          throw new Error(noAckMsg);
         }
 
         const chunkSize = 1024;
