@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 11:45Z (PING delay)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 11:55Z (Data logging)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -714,11 +714,9 @@
 
         for (let offset = 0; offset < totalSize; offset += chunkSize) {
           const slice = bytes.subarray(offset, Math.min(offset + chunkSize, totalSize));
-          if (offset === 0 || (offset % (chunkSize * 32) === 0)) {
-            usbLog('->', `DATA ${offset}/${totalSize}`);
-          }
           await writer.write(slice);
           sent += slice.length;
+          usbLog('->', `DATA ${sent}/${totalSize} (+${slice.length})`);
 
           if (sent === totalSize || sent <= chunkSize || (sent % (chunkSize * 12)) === 0) {
             const pct = Math.min(100, Math.round((sent / totalSize) * 100));
