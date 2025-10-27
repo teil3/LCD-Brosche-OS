@@ -22,6 +22,7 @@ constexpr uint32_t kTransferTimeoutMs = 15000;        // 15s Inaktivität -> Abb
 constexpr size_t   kChunkBufferSize   = 1024;         // Puffer für eingehende Blöcke
 constexpr size_t   kFilenameCapacity  = sizeof(SerialImageTransfer::Event::filename);
 constexpr size_t   kLineBufferSize    = 512;
+constexpr size_t   kProgressNotifyMin = 1024;         // mind. alle 1 KB Fortschritt melden
 
 enum class RxState : uint8_t { Idle = 0, Receiving, AwaitEnd };
 
@@ -410,10 +411,16 @@ void processData() {
     gSession.received += written;
     gSession.lastActivity = millis();
     toRead -= written;
+
+    logLine("READ", "%lu/%lu chunk=%u avail=%u",
+            static_cast<unsigned long>(gSession.received),
+            static_cast<unsigned long>(gSession.expected),
+            static_cast<unsigned>(written),
+            static_cast<unsigned>(Serial.available()));
   }
 
   if (gSession.expected > 0 && gSession.received <= gSession.expected) {
-    size_t notifyStep = std::max<size_t>(gSession.expected / 10, 4096);
+    size_t notifyStep = std::max<size_t>(gSession.expected / 16, kProgressNotifyMin);
     if (gSession.received - gSession.lastNotified >= notifyStep ||
         gSession.received == gSession.expected) {
       gSession.lastNotified = gSession.received;
