@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 11:40Z (PING handshake)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 11:45Z (PING delay)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -632,6 +632,9 @@
 
         // Vorab Verbindung prüfen (PING). Wenn wir keine Antwort erhalten,
         // brechen wir ab, weil das Gerät vermutlich im falschen Modus ist.
+        usbLog('<>', 'Warte auf Gerätebereit (post-open delay)…');
+        await delay(1100);
+
         usbLog('->', 'PING');
         await writer.write(textEncoder.encode('PING\n'));
         try {
