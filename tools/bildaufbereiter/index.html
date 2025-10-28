@@ -715,7 +715,22 @@
 
         await writer.write(bytes);
         sent = totalSize;
-        setUsbStatus(`Gesendet: ${totalLabel}`);
+        setUsbStatus(`Daten gesendet, warte auf Bestätigung vom ESP32...`);
+
+        // CRITICAL: Wait for PROG response BEFORE sending END (like Python test does!)
+        // The ESP32 needs time to process all data and send PROG
+        usbLog('<>', 'Waiting for PROG confirmation...');
+        try {
+          await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK PROG') || payload.startsWith('OK MSG'),
+            20000  // Give ESP32 plenty of time to process
+          );
+          usbLog('<>', 'PROG received, ESP32 has processed all data');
+        } catch (err) {
+          usbLog('!!', `No PROG received: ${err?.message || err}`);
+          // Continue anyway, maybe ESP32 is ready
+        }
 
         usbLog('->', 'END');
         await writer.write(textEncoder.encode('END\n'));
