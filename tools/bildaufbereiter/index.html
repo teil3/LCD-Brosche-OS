@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-28 20:20Z (ping retries)';
+    const TOOL_VERSION = 'V0.1';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -283,9 +283,11 @@
     }
 
     async function alertUsbError(message) {
+      const header = `Version ${TOOL_VERSION}`;
+      const baseMessage = header ? `${header}\n${message}` : message;
       const log = usbLogSnapshot();
-      const fullMessage = log ? `${message}\n\nLetzte USB-Meldungen:\n${log}` : message;
-      console.error('USB ERROR:', message, { log: usbDebugLog.slice() });
+      const fullMessage = log ? `${baseMessage}\n\nLetzte USB-Meldungen:\n${log}` : baseMessage;
+      console.error('USB ERROR:', baseMessage, { log: usbDebugLog.slice() });
       if (navigator.clipboard && navigator.clipboard.writeText) {
         try {
           await navigator.clipboard.writeText(fullMessage);
