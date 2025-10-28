@@ -45,6 +45,16 @@
     .error-modal__textarea { width: 100%; min-height: 220px; font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: .9rem; line-height: 1.35; border-radius: .6rem; border: 1px solid #ccd3dd; padding: .75rem; resize: vertical; box-sizing: border-box; }
     .error-modal__textarea:focus-visible { outline: 2px solid #4a90e2; outline-offset: 2px; }
     .error-modal__actions { display: flex; justify-content: flex-end; gap: .75rem; }
+    #manual-port-tools { margin-top: 3rem; padding: 1.5rem; border: 1px solid #d8dee9; border-radius: .9rem; background: #fff; box-shadow: 0 10px 25px rgba(15,23,42,.08); }
+    #manual-port-tools h2 { margin-top: 0; margin-bottom: .75rem; font-size: 1.15rem; }
+    #manual-port-tools .manual-buttons { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1rem; }
+    #manual-port-tools button { padding: .45rem .75rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: #f8f9fb; cursor: pointer; }
+    #manual-port-tools button:disabled { opacity: .5; cursor: not-allowed; }
+    #manual-port-tools .manual-input { margin-bottom: 1rem; }
+    #manual-port-tools .manual-input-row { display: flex; gap: .5rem; margin-top: .35rem; }
+    #manual-port-tools input[type="text"] { flex: 1 1 auto; padding: .45rem .6rem; border-radius: .6rem; border: 1px solid #c9c9c9; }
+    #manual-port-tools textarea { width: 100%; margin-top: .5rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; border-radius: .6rem; border: 1px solid #ccd3dd; padding: .65rem; box-sizing: border-box; background: #0f172a; color: #f8fafc; }
+    #manual-port-tools textarea:focus-visible { outline: 2px solid #4a90e2; outline-offset: 2px; }
   </style>
 </head>
 <body>
@@ -166,6 +176,21 @@
     let usbErrorModalCloseBtn = null;
     let usbErrorModalKeyHandlerAttached = false;
 
+    const manualLogEntries = [];
+    let manualLogOutput = null;
+    let manualCmdInput = null;
+    let manualCmdButton = null;
+    let manualOpenButton = null;
+    let manualPingButton = null;
+    let manualStartButton = null;
+    let manualEndButton = null;
+    let manualLogButton = null;
+    let manualCloseButton = null;
+    let manualPort = null;
+    let manualReader = null;
+    let manualWriter = null;
+    let manualReadableClosed = null;
+
     if (versionLabel) {
       versionLabel.textContent = `${TOOL_VERSION} · mozjpeg: ${mozModuleSource}`;
     }
@@ -182,6 +207,19 @@
       usbStatus.textContent = text || '';
     }
 
+    function appendManualLog(line) {
+      const timestamp = new Date().toISOString().replace('T', ' ').replace(/\..+$/, '');
+      const entry = `[${timestamp}] ${line}`;
+      manualLogEntries.push(entry);
+      if (manualLogEntries.length > 400) {
+        manualLogEntries.shift();
+      }
+      if (manualLogOutput) {
+        manualLogOutput.value = manualLogEntries.join('\n');
+        manualLogOutput.scrollTop = manualLogOutput.scrollHeight;
+      }
+    }
+
     function usbLog(direction, message) {
       const entry = `${direction} ${message}`;
       if (usbDebugLog.length >= 80) {
@@ -189,6 +227,7 @@
       }
       usbDebugLog.push(entry);
       console.debug('[USB LOG]', entry);
+      appendManualLog(entry);
     }
 
     function usbLogSnapshot() {
@@ -307,6 +346,174 @@
     function setBleStatus(text) {
       if (!bleStatus) return;
       bleStatus.textContent = text || '';
+    }
+
+    function ensureManualPortTools() {
+      if (manualLogOutput) return;
+      const section = document.createElement('section');
+      section.id = 'manual-port-tools';
+      section.innerHTML = `
+        <h2>USB Direktsteuerung</h2>
+        <p class="muted">Öffne hier den Port und sende manuell Kommandos wie <code>PING</code>, <code>START</code> oder <code>LOG</code>. Antworten erscheinen im Log.</p>
+        <div class="manual-buttons">
+          <button type="button" id="manual-open">Port auswählen &amp; öffnen</button>
+          <button type="button" id="manual-ping" disabled>Send PING</button>
+          <button type="button" id="manual-start" disabled>Send START 0 test.bin</button>
+          <button type="button" id="manual-end" disabled>Send END</button>
+          <button type="button" id="manual-log" disabled>Send LOG</button>
+          <button type="button" id="manual-close" disabled>Port schließen</button>
+        </div>
+        <div class="manual-input">
+          <label for="manual-cmd">Eigener Befehl</label>
+          <div class="manual-input-row">
+            <input type="text" id="manual-cmd" placeholder="z. B. START 4096 test.jpg" autocomplete="off" />
+            <button type="button" id="manual-send" disabled>Senden</button>
+          </div>
+        </div>
+        <label for="manual-log-output">Serielles Log</label>
+        <textarea id="manual-log-output" rows="16" readonly spellcheck="false"></textarea>
+      `;
+      document.body.appendChild(section);
+
+      manualLogOutput = section.querySelector('#manual-log-output');
+      manualCmdInput = section.querySelector('#manual-cmd');
+      manualCmdButton = section.querySelector('#manual-send');
+      manualOpenButton = section.querySelector('#manual-open');
+      manualPingButton = section.querySelector('#manual-ping');
+      manualStartButton = section.querySelector('#manual-start');
+      manualEndButton = section.querySelector('#manual-end');
+      manualLogButton = section.querySelector('#manual-log');
+      manualCloseButton = section.querySelector('#manual-close');
+
+      const encoder = new TextEncoder();
+
+      const resetUi = () => {
+        manualPingButton.disabled = true;
+        manualStartButton.disabled = true;
+        manualEndButton.disabled = true;
+        manualLogButton.disabled = true;
+        manualCloseButton.disabled = true;
+        manualCmdButton.disabled = true;
+      };
+
+      const closePort = async () => {
+        if (!manualPort) return;
+        appendManualLog('== Port schließen …');
+        try {
+          if (manualReader) await manualReader.cancel().catch(() => {});
+        } catch (_) {}
+        try {
+          if (manualReadableClosed) await manualReadableClosed.catch(() => {});
+        } catch (_) {}
+        try {
+          if (manualWriter) await manualWriter.releaseLock();
+        } catch (_) {}
+        try {
+          await manualPort.close();
+        } catch (err) {
+          appendManualLog(`!! close error: ${err?.message || err}`);
+        }
+        manualPort = null;
+        manualReader = null;
+        manualWriter = null;
+        manualReadableClosed = null;
+        resetUi();
+        appendManualLog('== Port geschlossen');
+      };
+
+      const sendManual = async (text) => {
+        if (!manualWriter) throw new Error('Writer nicht bereit');
+        appendManualLog(`-> ${text.trim()}`);
+        try {
+          await manualWriter.write(encoder.encode(text));
+          await manualWriter.ready?.catch(() => {});
+        } catch (err) {
+          appendManualLog(`!! write error: ${err?.message || err}`);
+          throw err;
+        }
+      };
+
+      const openPort = async () => {
+        if (!serialAvailable) {
+          appendManualLog('!! WebSerial wird nicht unterstützt');
+          return;
+        }
+        try {
+          appendManualLog('== Portauswahl …');
+          manualPort = await navigator.serial.requestPort();
+          appendManualLog('== Öffne Port …');
+          await manualPort.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none' });
+          appendManualLog('== Port geöffnet');
+        } catch (err) {
+          appendManualLog(`!! open failed: ${err?.message || err}`);
+          manualPort = null;
+          return;
+        }
+
+        const decoderStream = new TextDecoderStream();
+        manualReadableClosed = manualPort.readable.pipeTo(decoderStream.writable).catch(() => {});
+        manualReader = decoderStream.readable.getReader();
+        manualWriter = manualPort.writable.getWriter();
+
+        (async () => {
+          appendManualLog('== Reader gestartet');
+          try {
+            while (manualReader && manualPort) {
+              const { value, done } = await manualReader.read();
+              if (done) {
+                appendManualLog('== Reader done');
+                break;
+              }
+              if (value) {
+                const lines = value.split(/\r?\n/);
+                for (const line of lines) {
+                  if (line) appendManualLog(`<= ${line}`);
+                }
+              }
+            }
+          } catch (err) {
+            appendManualLog(`!! reader error: ${err?.message || err}`);
+          }
+        })();
+
+        manualPingButton.onclick = () => sendManual('PING\n');
+        manualStartButton.onclick = () => sendManual('START 0 test.bin\n');
+        manualEndButton.onclick = () => sendManual('END\n');
+        manualLogButton.onclick = () => sendManual('LOG\n');
+        manualCmdButton.onclick = () => {
+          const line = manualCmdInput.value.trim();
+          if (!line) return;
+          sendManual(line + '\n').catch(() => {});
+          manualCmdInput.value = '';
+          manualCmdInput.focus();
+        };
+
+        manualCloseButton.onclick = () => closePort();
+
+        manualPingButton.disabled = false;
+        manualStartButton.disabled = false;
+        manualEndButton.disabled = false;
+        manualLogButton.disabled = false;
+        manualCloseButton.disabled = false;
+        manualCmdButton.disabled = false;
+      };
+
+      manualOpenButton.addEventListener('click', () => {
+        if (manualPort) {
+          appendManualLog('== Port bereits geöffnet');
+          return;
+        }
+        openPort().catch((err) => appendManualLog(`!! openPort error: ${err?.message || err}`));
+      });
+
+      manualCloseButton.addEventListener('click', () => closePort());
+
+      manualCmdInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !manualCmdButton.disabled) {
+          event.preventDefault();
+          manualCmdButton.click();
+        }
+      });
     }
 
     function updateActionButtons() {
@@ -1494,6 +1701,7 @@
       setBleStatus('WebBluetooth wird von diesem Browser/Profil nicht unterstützt. Verwende eine aktuelle Chromium-Variante wie Chrome oder Edge.');
     }
 
+    ensureManualPortTools();
     updateActionButtons();
   </script>
 </body>
