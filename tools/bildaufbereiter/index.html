@@ -38,6 +38,13 @@
     .file-picker__button { display: inline-flex; align-items: center; justify-content: center; padding: .55rem .9rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: canvas; cursor: pointer; font-weight: 400; }
     .file-picker__button:focus-visible { outline: 2px solid #4a90e2; outline-offset: 2px; }
     .version-tag { font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; margin-top: .4rem; color: #4a90e2; }
+    .error-modal { position: fixed; inset: 0; background: rgba(15,23,42,.55); display: none; align-items: center; justify-content: center; padding: 1.5rem; z-index: 1500; }
+    .error-modal.open { display: flex; }
+    .error-modal__box { background: #fff; color: inherit; border-radius: .9rem; box-shadow: 0 20px 45px rgba(15,23,42,.25); max-width: min(720px, 95vw); width: 100%; padding: 1.4rem; display: flex; flex-direction: column; gap: 1rem; }
+    .error-modal__title { margin: 0; font-size: 1.1rem; font-weight: 600; }
+    .error-modal__textarea { width: 100%; min-height: 220px; font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: .9rem; line-height: 1.35; border-radius: .6rem; border: 1px solid #ccd3dd; padding: .75rem; resize: vertical; box-sizing: border-box; }
+    .error-modal__textarea:focus-visible { outline: 2px solid #4a90e2; outline-offset: 2px; }
+    .error-modal__actions { display: flex; justify-content: flex-end; gap: .75rem; }
   </style>
 </head>
 <body>
@@ -80,6 +87,7 @@
   <div class="actions">
     <button id="save" disabled>Als JPEG speichern</button>
     <button id="send-usb" disabled>Über USB senden</button>
+    <button id="send-usb-log" disabled>USB-Log abrufen</button>
     <button id="send-ble" disabled>Per Bluetooth senden</button>
     <p id="usb-status" class="muted" aria-live="polite"></p>
     <p id="ble-status" class="muted" aria-live="polite"></p>
@@ -90,19 +98,40 @@
     // --- Import der MozJPEG-WASM-Codec-Factory (jSquash, auf UNPKG gehostet) ---
     // Dokumentation/Quelle: https://github.com/jamsinclair/jSquash (encode API) –
     // und Typdefinitionen der Optionen (mozjpeg_enc.d.ts)
-    const moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
-    const TOOL_VERSION = 'USB Debug build 2025-02-21 00:14Z (no start ack)';
-    //const moduleFactory = (await import('./mozjpeg/mozjpeg_enc.js?module')).default;
-
-    // Fallback: Wenn du die WASM/JS lokal ausliefern willst, lege sie in ./mozjpeg/ ab
-    // und ersetze die URL oben durch: './mozjpeg/mozjpeg_enc.js'
-    // (Achte darauf, dass mozjpeg_enc.wasm im selben Ordner liegt.)
+    let moduleFactory = null;
+    let mozModuleSource = 'cdn';
+    const mozModuleErrors = [];
+    try {
+      moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
+      console.info('[MozJPEG] Encoder via CDN geladen.');
+    } catch (cdnError) {
+      mozModuleErrors.push(cdnError);
+      console.warn('[MozJPEG] CDN-Import fehlgeschlagen, versuche lokalen Fallback …', cdnError);
+      try {
+        moduleFactory = (await import('./mozjpeg/mozjpeg_enc.js?module')).default;
+        mozModuleSource = 'local';
+        console.info('[MozJPEG] Encoder aus ./mozjpeg/ geladen.');
+      } catch (localError) {
+        mozModuleErrors.push(localError);
+        console.error('[MozJPEG] Lokaler Fallback fehlgeschlagen.', localError);
+      }
+    }
+    if (!moduleFactory) {
+      const combinedError = mozModuleErrors.pop() || new Error('Unbekannter Importfehler');
+      const message = 'MozJPEG-WASM konnte nicht geladen werden. Bitte Internetverbindung prüfen oder ./mozjpeg/ bereitstellen.';
+      console.error(message, { mozModuleErrors });
+      alert(message);
+      throw combinedError;
+    }
+    window.__mozjpegSource = mozModuleSource;
+    const TOOL_VERSION = 'USB Debug build 2025-10-27 12:05Z (Host sent log)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
     const qInput    = document.getElementById('quality');
     const btnSave   = document.getElementById('save');
     const btnUsb    = document.getElementById('send-usb');
+    const btnUsbLog = document.getElementById('send-usb-log');
     const btnBle    = document.getElementById('send-ble');
     const versionLabel = document.getElementById('tool-version');
     const usbStatus = document.getElementById('usb-status');
@@ -131,9 +160,14 @@
     let bleSending = false;
     let usbSending = false;
     const usbDebugLog = [];
+    let usbErrorModal = null;
+    let usbErrorModalText = null;
+    let usbErrorModalCopyBtn = null;
+    let usbErrorModalCloseBtn = null;
+    let usbErrorModalKeyHandlerAttached = false;
 
     if (versionLabel) {
-      versionLabel.textContent = TOOL_VERSION;
+      versionLabel.textContent = `${TOOL_VERSION} · mozjpeg: ${mozModuleSource}`;
     }
 
     const secureContextHosts = new Set(['localhost', '127.0.0.1', '::1']);
@@ -161,6 +195,93 @@
       return usbDebugLog.slice(-12).join('\n');
     }
 
+    function ensureUsbErrorModal() {
+      if (usbErrorModal) return usbErrorModal;
+      const overlay = document.createElement('div');
+      overlay.className = 'error-modal';
+
+      const box = document.createElement('div');
+      box.className = 'error-modal__box';
+
+      const title = document.createElement('h2');
+      title.className = 'error-modal__title';
+      title.textContent = 'USB-Fehlerdetails';
+
+      const textarea = document.createElement('textarea');
+      textarea.className = 'error-modal__textarea';
+      textarea.setAttribute('readonly', 'readonly');
+
+      const actions = document.createElement('div');
+      actions.className = 'error-modal__actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.textContent = 'In Zwischenablage kopieren';
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.textContent = 'Schliessen';
+
+      actions.appendChild(copyBtn);
+      actions.appendChild(closeBtn);
+      box.appendChild(title);
+      box.appendChild(textarea);
+      box.appendChild(actions);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(textarea.value);
+          copyBtn.textContent = 'Kopiert ✔';
+          setTimeout(() => { copyBtn.textContent = 'In Zwischenablage kopieren'; }, 1600);
+        } catch (err) {
+          console.warn('Clipboard write failed', err);
+        }
+        textarea.focus();
+        textarea.select();
+      });
+
+      closeBtn.addEventListener('click', () => {
+        overlay.classList.remove('open');
+      });
+
+      overlay.addEventListener('click', (evt) => {
+        if (evt.target === overlay) {
+          overlay.classList.remove('open');
+        }
+      });
+
+      if (!usbErrorModalKeyHandlerAttached) {
+        document.addEventListener('keydown', (evt) => {
+          if (evt.key === 'Escape' && overlay.classList.contains('open')) {
+            overlay.classList.remove('open');
+          }
+        });
+        usbErrorModalKeyHandlerAttached = true;
+      }
+
+      usbErrorModal = overlay;
+      usbErrorModalText = textarea;
+      usbErrorModalCopyBtn = copyBtn;
+      usbErrorModalCloseBtn = closeBtn;
+      return overlay;
+    }
+
+    function showUsbErrorDialog(message) {
+      const overlay = ensureUsbErrorModal();
+      if (!usbErrorModalText) return;
+      usbErrorModalText.value = message;
+      if (usbErrorModalCopyBtn) {
+        usbErrorModalCopyBtn.textContent = 'In Zwischenablage kopieren';
+      }
+      requestAnimationFrame(() => {
+        overlay.classList.add('open');
+        usbErrorModalText.focus();
+        usbErrorModalText.select();
+      });
+    }
+
     async function alertUsbError(message) {
       const log = usbLogSnapshot();
       const fullMessage = log ? `${message}\n\nLetzte USB-Meldungen:\n${log}` : message;
@@ -173,7 +294,12 @@
           usbLog('!!', `Clipboard write failed: ${err?.message || err}`);
         }
       }
-      alert(fullMessage);
+      try {
+        showUsbErrorDialog(fullMessage);
+      } catch (err) {
+        console.warn('Fallback alert (Dialog fehlgeschlagen)', err);
+        alert(fullMessage);
+      }
     }
 
     function setBleStatus(text) {
@@ -186,6 +312,7 @@
       const busy = bleSending || usbSending;
       if (btnSave) btnSave.disabled = !ready || busy;
       if (btnUsb) btnUsb.disabled = !ready || !usbSupported || busy;
+      if (btnUsbLog) btnUsbLog.disabled = !usbSupported || busy;
       if (btnBle) btnBle.disabled = !ready || !bleSupported || busy;
     }
 
@@ -374,6 +501,67 @@
       }
     }
 
+    async function dumpDeviceLog(lineReader, writer, maxEntries = 16) {
+      if (!writer || !lineReader) return [];
+      try {
+        usbLog('->', 'LOG');
+        await writer.write(textEncoder.encode('LOG\n'));
+      } catch (err) {
+        usbLog('!!', `LOG senden fehlgeschlagen: ${err?.message || err}`);
+        return [];
+      }
+
+      let ack;
+      try {
+        ack = await waitForUsbLine(
+          lineReader,
+          (payload) => payload.startsWith('OK LOG') || payload.startsWith('ERR'),
+          2000
+        );
+      } catch (err) {
+        usbLog('!!', `LOG-Antwort ausstehend: ${err?.message || err}`);
+        return [];
+      }
+
+      if (ack.startsWith('ERR')) {
+        usbLog('!!', `Gerät meldet LOG-Fehler: ${ack}`);
+        return [];
+      }
+
+      const parts = ack.split(/\s+/);
+      let count = Number(parts[2]);
+      if (!Number.isFinite(count) || count <= 0) {
+        count = maxEntries;
+      }
+      const limit = Math.min(count, Math.max(1, maxEntries));
+      const entries = [];
+      let guard = 0;
+
+      while (entries.length < limit && guard < limit + 8) {
+        guard += 1;
+        try {
+          const raw = (await lineReader.readLine(800)).trim();
+          if (!raw) continue;
+          usbLog('<=', raw);
+          if (raw.startsWith('USB LOG')) {
+            entries.push(raw.substring(7).trim());
+          }
+        } catch (err) {
+          if (entries.length === 0) {
+            usbLog('!!', `LOG lesen fehlgeschlagen: ${err?.message || err}`);
+          } else {
+            usbLog('<>', 'LOG lesen beendet (Timeout)');
+          }
+          break;
+        }
+      }
+
+      if (!entries.length) {
+        usbLog('<>', 'Keine LOG-Einträge vom Gerät erhalten.');
+      }
+      return entries;
+    }
+
     async function sendViaUsb() {
       if (!usbSupported) {
         alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge auf dem Desktop verwenden.');
@@ -442,7 +630,29 @@
 
         writer = port.writable.getWriter();
 
-        // Optional: READY-Meldung ignorieren – START funktioniert auch ohne.
+        // Vorab Verbindung prüfen (PING). Wenn wir keine Antwort erhalten,
+        // brechen wir ab, weil das Gerät vermutlich im falschen Modus ist.
+        usbLog('<>', 'Warte auf Gerätebereit (post-open delay)…');
+        await delay(1100);
+
+        usbLog('->', 'PING');
+        await writer.write(textEncoder.encode('PING\n'));
+        try {
+          const pong = await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK PONG') || payload.startsWith('ERR'),
+            3000
+          );
+          if (pong.startsWith('ERR')) {
+            usbLog('!!', `Gerät meldet Fehler auf PING: ${pong}`);
+            throw new Error('Gerät reagiert nicht auf PING. Bitte Transfer-Modus erneut aktivieren (BTN2 lang, bis "Transfer" angezeigt wird).');
+          }
+          usbLog('<=', pong);
+          setUsbStatus('Gerät antwortet – Übertragung wird vorbereitet …');
+        } catch (err) {
+          usbLog('!!', `PING fehlgeschlagen: ${err?.message || err}`);
+          throw new Error('Kein PING von der Brosche empfangen. Bitte Transfer-Modus (BTN2 lang halten) und USB-Kabel prüfen.');
+        }
 
         const startLine = `START ${totalSize} ${sanitizedName}\n`;
         usbLog('->', startLine.trim());
@@ -452,37 +662,50 @@
         try {
           startAck = await waitForUsbLine(
             lineReader,
-            (payload) => payload.startsWith('OK START') || payload.startsWith('OK READY'),
+            // Wir ziehen die relevanten USB-Zeilen heraus und lassen Debug-Text ignorieren.
+            (payload) => payload.startsWith('OK READY') ||
+                         payload.startsWith('OK START') ||
+                         payload.startsWith('ERR'),
             6000
           );
         } catch (err) {
           usbLog('!!', `Keine START-Bestätigung innerhalb 6s: ${err?.message || err}`);
         }
-        if (startAck && startAck.startsWith('OK READY')) {
-          usbLog('<>', 'READY kam nach START; warte optional auf OK START');
-          try {
-            const follow = await waitForUsbLine(
-              lineReader,
-              (payload) => payload.startsWith('OK START'),
-              4000
-            );
-            startAck = follow;
-          } catch (err) {
-            usbLog('!!', `Kein OK START nach READY: ${err?.message || err}`);
+
+        if (startAck) {
+          usbLog('<=', startAck);
+          if (startAck.startsWith('OK READY')) {
+            usbLog('<>', 'READY bestätigt – warte auf OK START');
+            try {
+              startAck = await waitForUsbLine(
+                lineReader,
+                (payload) => payload.startsWith('OK START') || payload.startsWith('ERR'),
+                6000
+              );
+              usbLog('<=', startAck);
+            } catch (err) {
+              usbLog('!!', `Kein OK START nach READY: ${err?.message || err}`);
+            }
           }
         }
 
         if (startAck && startAck.startsWith('OK START')) {
           let deviceFilename = sanitizedName;
-          const startParts = startAck.split(/\s+/);
-          if (startParts.length >= 3) {
-            deviceFilename = startParts[2];
+          const parts = startAck.split(/\s+/);
+          if (parts.length >= 3) {
+            deviceFilename = parts[2];
           }
           setUsbStatus(`Übertragung gestartet (${deviceFilename})`);
           usbLog('<>', `Transfer bestätigt: ${deviceFilename}`);
+        } else if (startAck && startAck.startsWith('ERR')) {
+          usbLog('!!', `Gerät meldet Fehler vor Datenstart: ${startAck}`);
+          setUsbStatus(`Gerätefehler: ${startAck}`);
+          throw new Error(startAck);
         } else {
-          setUsbStatus('Starte Übertragung (keine Bestätigung erhalten – sende trotzdem)…');
-          usbLog('!!', 'Sende Daten ohne Start-Bestätigung');
+          const noAckMsg = 'Keine START-Bestätigung vom Gerät empfangen. Bitte sicherstellen, dass der Transfer-Modus aktiv ist (BTN2 lang halten, bis \"Transfer\" erscheint).';
+          usbLog('!!', noAckMsg);
+          setUsbStatus(noAckMsg);
+          throw new Error(noAckMsg);
         }
 
         const chunkSize = 1024;
@@ -491,11 +714,9 @@
 
         for (let offset = 0; offset < totalSize; offset += chunkSize) {
           const slice = bytes.subarray(offset, Math.min(offset + chunkSize, totalSize));
-          if (offset === 0 || (offset % (chunkSize * 32) === 0)) {
-            usbLog('->', `DATA ${offset}/${totalSize}`);
-          }
           await writer.write(slice);
           sent += slice.length;
+          usbLog('->', `DATA ${sent}/${totalSize} (+${slice.length})`);
 
           if (sent === totalSize || sent <= chunkSize || (sent % (chunkSize * 12)) === 0) {
             const pct = Math.min(100, Math.round((sent / totalSize) * 100));
@@ -524,7 +745,7 @@
           return false;
         };
 
-        const endAck = await waitForUsbLine(lineReader, endPredicate, 14000);
+        const endAck = await waitForUsbLine(lineReader, endPredicate, 16000);
         if (endAck.startsWith('OK PROG')) {
           setUsbStatus('Übertragung abgeschlossen ✅ (Bestätigung über Fortschrittsmeldung)');
         } else {
@@ -539,26 +760,46 @@
         } catch (error) {
           console.error(error);
           const name = error?.name;
+          let userMessage = '';
+          let fetchLog = false;
+          usbLog('<>', `HOST SENT ${sent}/${totalSize}`);
+
           if (name === 'NotFoundError') {
             setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
-            alertUsbError('USB-Senden abgebrochen – kein Port ausgewählt.');
+            userMessage = 'USB-Senden abgebrochen – kein Port ausgewählt.';
           } else if (name === 'AbortError') {
             setUsbStatus('USB-Senden abgebrochen.');
-            alertUsbError('USB-Senden abgebrochen.');
+            userMessage = 'USB-Senden abgebrochen.';
           } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
             if (transferCompleted) {
               setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat den Port getrennt).');
+              userMessage = '';
             } else {
               setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und Transfer-Modus erneut aktivieren.');
-              alertUsbError('USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.');
+              userMessage = 'USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.';
+              fetchLog = true;
             }
           } else if (/timeout beim warten/i.test(error?.message || '')) {
             setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv (BTN2 lang in der Diashow)?');
-            alertUsbError('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.');
+            userMessage = 'Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.';
+            fetchLog = true;
           } else {
             const message = error?.message || error?.toString() || 'Unbekannter Fehler';
             setUsbStatus(`Fehler: ${message}`);
-            alertUsbError('Fehler beim USB-Senden: ' + message);
+            userMessage = 'Fehler beim USB-Senden: ' + message;
+            fetchLog = true;
+          }
+
+          if (fetchLog && writer && lineReader) {
+            try {
+              await dumpDeviceLog(lineReader, writer, 20);
+            } catch (logErr) {
+              console.warn('Dump device log failed', logErr);
+            }
+          }
+
+          if (userMessage) {
+            await alertUsbError(userMessage);
           }
       } finally {
         try {
@@ -732,6 +973,89 @@
           }
         } catch (_) { /* noop */ }
         bleSending = false;
+        updateActionButtons();
+      }
+    }
+
+    async function fetchUsbLogManually() {
+      if (!usbSupported) {
+        alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge auf dem Desktop verwenden.');
+        return;
+      }
+      if (usbSending || bleSending) return;
+
+      let port = null;
+      let writer = null;
+      let reader = null;
+      let readableClosed = null;
+      let lineReader = null;
+
+      try {
+        usbSending = true;
+        updateActionButtons();
+        setUsbStatus('USB-Log wird angefordert …');
+
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+
+        if (typeof port.setSignals === 'function') {
+          try {
+            await port.setSignals({ dataTerminalReady: true, requestToSend: true, break: false });
+            usbLog('<>', 'setSignals DTR=1 RTS=1 (log fetch)');
+          } catch (err) {
+            usbLog('<>', `setSignals failed (log fetch): ${err?.message || err}`);
+          }
+        }
+
+        await delay(200);
+
+        if (!port.writable || !port.readable) {
+          throw new Error('Port bietet keine Lese-/Schreibstreams.');
+        }
+
+        const decoder = new TextDecoderStream();
+        readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
+        reader = decoder.readable.getReader();
+        lineReader = createLineReader(reader);
+        writer = port.writable.getWriter();
+
+        const entries = await dumpDeviceLog(lineReader, writer, 24);
+        const text = entries.map((line, idx) => `${idx + 1}. ${line || '(leer)'}`).join('\n');
+        if (text) {
+          console.log('[USB LOG FETCH]\n' + text);
+          setUsbStatus(`USB-Log erhalten (${entries.length} Einträge).`);
+          showUsbErrorDialog(`USB-Log (${entries.length} Einträge):\n\n${text}`);
+        } else {
+          setUsbStatus('USB-Log: Keine Einträge verfügbar.');
+          showUsbErrorDialog('USB-Log: Keine Einträge verfügbar.');
+        }
+      } catch (error) {
+        console.error(error);
+        const message = error?.message || error?.toString() || 'Unbekannter Fehler';
+        setUsbStatus(`USB-Log abrufen fehlgeschlagen: ${message}`);
+        await alertUsbError('USB-Log abrufen fehlgeschlagen: ' + message);
+      } finally {
+        try {
+          if (writer) {
+            await writer.releaseLock();
+          }
+        } catch (_) { /* noop */ }
+        try {
+          if (reader) {
+            await reader.cancel();
+          }
+        } catch (_) { /* noop */ }
+        try {
+          if (readableClosed) {
+            await readableClosed.catch(() => {});
+          }
+        } catch (_) { /* noop */ }
+        try {
+          if (port) {
+            await port.close();
+          }
+        } catch (_) { /* noop */ }
+        usbSending = false;
         updateActionButtons();
       }
     }
@@ -1020,6 +1344,15 @@
       } else if (!serialAvailable) {
         btnUsb.title = 'WebSerial wird von diesem Browser nicht freigegeben.';
         setUsbStatus('WebSerial wird von diesem Browser/Profil nicht unterstützt. Verwende eine aktuelle Chromium-Variante wie Chrome oder Edge auf dem Desktop.');
+      }
+    }
+
+    if (btnUsbLog) {
+      btnUsbLog.addEventListener('click', fetchUsbLogManually);
+      if (!secureContext) {
+        btnUsbLog.title = 'WebSerial benötigt HTTPS oder localhost.';
+      } else if (!serialAvailable) {
+        btnUsbLog.title = 'WebSerial wird von diesem Browser nicht freigegeben.';
       }
     }
 
