@@ -596,26 +596,21 @@
         setUsbStatus('Seriellen Port auswählen …');
         port = await navigator.serial.requestPort();
         try {
-          await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+          // IMPORTANT: Do NOT set flowControl or signals that might reset the ESP32.
+          // The user must manually enter USB transfer mode (BTN2 long press in slideshow).
+          await port.open({ baudRate: 115200 });
         } catch (err) {
           usbLog('!!', `open failed: ${err?.message || err}`);
           throw err;
         }
 
-        // Do NOT set DTR/RTS, or set them low to avoid resetting the ESP32.
-        // If we set DTR=1 RTS=1, the ESP32 will reset and we need to wait ~2-3s for boot.
-        // Instead, we keep signals as-is or set them low (running mode).
-        if (typeof port.setSignals === 'function') {
-          try {
-            await port.setSignals({ dataTerminalReady: false, requestToSend: false, break: false });
-            usbLog('<>', 'setSignals DTR=0 RTS=0 (no reset)');
-          } catch (err) {
-            usbLog('<>', `setSignals failed (non-critical): ${err?.message || err}`);
-          }
-        }
+        // Do NOT call setSignals at all - leave DTR/RTS untouched!
+        // The ESP32 is already running in USB transfer mode (manually activated by user).
+        // Any signal changes might reset or disturb the ESP32.
+        usbLog('<>', 'Port opened, no signal changes (user has activated USB mode)');
 
-        // Wait longer to ensure ESP32 is stable (even if not reset, give it time to settle)
-        await delay(800);
+        // Short delay to let the connection settle
+        await delay(300);
 
         if (!port.writable) {
           throw new Error('Port bietet keinen Schreibstream.');
@@ -636,29 +631,8 @@
 
         // Vorab Verbindung prüfen (PING). Wenn wir keine Antwort erhalten,
         // brechen wir ab, weil das Gerät vermutlich im falschen Modus ist.
-        usbLog('<>', 'Warte auf Gerätebereit und drainiere Buffer…');
-        await delay(600);
-
-        // Drain any boot/startup messages from the serial buffer before sending PING
-        try {
-          const drainDeadline = performance.now() + 800;
-          let drained = 0;
-          while (performance.now() < drainDeadline) {
-            const chunk = await Promise.race([
-              lineReader.readLine(100),
-              delay(100).then(() => null)
-            ]);
-            if (chunk === null) break;
-            usbLog('<<', chunk);
-            drained++;
-            if (drained > 20) break; // safety limit
-          }
-          if (drained > 0) {
-            usbLog('<>', `${drained} Zeilen vom Buffer entfernt`);
-          }
-        } catch (err) {
-          usbLog('<>', `Buffer drain: ${err?.message || err}`);
-        }
+        usbLog('<>', 'Prüfe Verbindung mit PING…');
+        await delay(100);
 
         usbLog('->', 'PING');
         await writer.write(textEncoder.encode('PING\n'));
@@ -1021,19 +995,12 @@
         setUsbStatus('USB-Log wird angefordert …');
 
         port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+        await port.open({ baudRate: 115200 });
 
-        // Same fix as sendViaUsb: don't reset the ESP32
-        if (typeof port.setSignals === 'function') {
-          try {
-            await port.setSignals({ dataTerminalReady: false, requestToSend: false, break: false });
-            usbLog('<>', 'setSignals DTR=0 RTS=0 (log fetch, no reset)');
-          } catch (err) {
-            usbLog('<>', `setSignals failed (log fetch, non-critical): ${err?.message || err}`);
-          }
-        }
+        // Do NOT call setSignals - leave ESP32 state unchanged
+        usbLog('<>', 'Port opened for log fetch (no signal changes)');
 
-        await delay(600);
+        await delay(200);
 
         if (!port.writable || !port.readable) {
           throw new Error('Port bietet keine Lese-/Schreibstreams.');
@@ -1044,27 +1011,6 @@
         reader = decoder.readable.getReader();
         lineReader = createLineReader(reader);
         writer = port.writable.getWriter();
-
-        // Drain buffer before requesting log
-        try {
-          const drainDeadline = performance.now() + 400;
-          let drained = 0;
-          while (performance.now() < drainDeadline) {
-            const chunk = await Promise.race([
-              lineReader.readLine(80),
-              delay(80).then(() => null)
-            ]);
-            if (chunk === null) break;
-            usbLog('<<', chunk);
-            drained++;
-            if (drained > 15) break;
-          }
-          if (drained > 0) {
-            usbLog('<>', `${drained} Zeilen vom Buffer entfernt (log fetch)`);
-          }
-        } catch (err) {
-          usbLog('<>', `Buffer drain (log fetch): ${err?.message || err}`);
-        }
 
         const entries = await dumpDeviceLog(lineReader, writer, 24);
         const text = entries.map((line, idx) => `${idx + 1}. ${line || '(leer)'}`).join('\n');
