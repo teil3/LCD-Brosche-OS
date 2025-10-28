@@ -134,7 +134,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.5';
+    const TOOL_VERSION = 'V0.6';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -439,8 +439,14 @@
           return;
         }
         try {
-          appendManualLog('== Portauswahl …');
-          manualPort = await navigator.serial.requestPort();
+          const known = await navigator.serial.getPorts();
+          if (known.length > 0) {
+            manualPort = known[0];
+            appendManualLog(`== Nutze vorhandene Berechtigung (${known.length} Port${known.length>1?'s':''})`);
+          } else {
+            appendManualLog('== Portauswahl …');
+            manualPort = await navigator.serial.requestPort();
+          }
           appendManualLog('== Öffne Port …');
           await manualPort.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none' });
           appendManualLog('== Port geöffnet');
