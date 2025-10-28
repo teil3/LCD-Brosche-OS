@@ -134,7 +134,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.9';
+    const TOOL_VERSION = 'V1.0';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -840,8 +840,14 @@
         totalSize = bytes.length;
         totalLabel = humanReadableSize(totalSize);
 
-        setUsbStatus('Seriellen Port auswählen …');
-        port = await navigator.serial.requestPort();
+        const grantedPorts = serialAvailable ? await navigator.serial.getPorts() : [];
+        if (grantedPorts.length > 0) {
+          port = grantedPorts[0];
+          usbLog('<>', `Nutze vorhandene Port-Freigabe (${grantedPorts.length})`);
+        } else {
+          setUsbStatus('Seriellen Port auswählen …');
+          port = await navigator.serial.requestPort();
+        }
         try {
           await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
         } catch (err) {
@@ -851,7 +857,6 @@
 
         // Versuche nur DTR auf HIGH zu setzen. Einige Systeme melden zwar Fehler,
         // aber wenn es klappt, bleibt die Brosche im Transfer-Modus.
-        let dtrPinned = false;
         try {
           const info = port.getInfo ? port.getInfo() : {};
           usbLog('<>', `Port geöffnet (vendor=${info.usbVendorId || 'n/a'} product=${info.usbProductId || 'n/a'})`);
@@ -878,9 +883,7 @@
         reader = decoder.readable.getReader();
         lineReader = createLineReader(reader);
 
-        if (!dtrPinned) {
-          setUsbStatus('USB-Port geöffnet – falls die Brosche neu startet, Transfer-Modus erneut aktivieren.');
-        }
+        setUsbStatus('USB-Port geöffnet – falls die Brosche neu startet, Transfer-Modus erneut aktivieren.');
 
         await delay(400);
         const drainDeadline = performance.now() + 600;
