@@ -707,60 +707,88 @@
           throw new Error(noAckMsg);
         }
 
-        // Send all data at once like the Python test - this works!
-        // The chunking was causing the TX buffer to fill up with PROG messages
+        // CRITICAL FIX: Start reading responses in the background BEFORE sending data!
+        // The ESP32 will send PROG messages as it receives data. If we don't read them,
+        // the TX buffer fills up and the ESP32 can't send more PROG messages, which
+        // causes it to stop reading data (waiting for TX buffer space).
+
         let sent = 0;
-        setUsbStatus(`Sende Daten (${totalLabel})...`);
-        usbLog('->', `DATA all ${totalSize} bytes`);
+        let esp32Ready = false;
+        let lastReceivedBytes = 0;
+        let backgroundReaderError = null;
 
-        await writer.write(bytes);
-        sent = totalSize;
-        setUsbStatus(`Daten gesendet, ESP32 verarbeitet...`);
-
-        // Like the Python test: wait a bit for ESP32 to process and drain any PROG messages
-        // The Python test calls expect_ok(" PROG") which reads lines with timeout,
-        // accepting any PROG message (or timing out if none come).
-        // We do the same: try to read responses for a bit, then send END.
-        usbLog('<>', 'Waiting for ESP32 to process data (reading responses)...');
-        const processingStart = performance.now();
-        const maxProcessingWait = 3000; // 3 seconds max
-
-        // Read any PROG/MSG responses that come in, but don't block forever
-        while (performance.now() - processingStart < maxProcessingWait) {
+        // Background task: continuously read and process responses from ESP32
+        const backgroundReader = (async () => {
           try {
-            const line = await lineReader.readLine(500);
-            if (line) {
-              usbLog('<=', line);
+            while (!esp32Ready) {
+              const line = await lineReader.readLine(500);
+              if (!line) continue;
+
               const trimmed = line.trim();
-              if (trimmed.startsWith('USB')) {
-                const payload = trimmed.slice(3).trimStart();
-                if (payload.startsWith('OK MSG') && payload.includes('END senden')) {
-                  // ESP32 is ready for END command
-                  usbLog('<>', 'ESP32 signals ready for END');
-                  break;
-                }
-                if (payload.startsWith('OK PROG')) {
-                  // Update progress display
-                  const parts = payload.split(/\s+/);
-                  if (parts.length >= 4) {
-                    const received = Number(parts[2]);
-                    const total = Number(parts[3]);
-                    if (Number.isFinite(received) && Number.isFinite(total) && total > 0) {
-                      const pct = Math.min(100, Math.round((received / total) * 100));
-                      setUsbStatus(`ESP32 empfängt ${pct}% (${humanReadableSize(received)} / ${humanReadableSize(total)})`);
-                      if (received >= total) {
-                        usbLog('<>', 'ESP32 reports 100% received');
-                        break;
-                      }
+              if (!trimmed) continue;
+
+              usbLog('<=', trimmed);
+
+              if (!trimmed.startsWith('USB')) continue;
+
+              const payload = trimmed.slice(3).trimStart();
+
+              if (payload.startsWith('ERR')) {
+                const message = payload.substring(3).trim();
+                throw new Error(message || 'Gerätefehler');
+              }
+
+              if (payload.startsWith('OK MSG') && payload.includes('END senden')) {
+                usbLog('<>', 'ESP32 signals ready for END');
+                esp32Ready = true;
+                break;
+              }
+
+              if (payload.startsWith('OK PROG')) {
+                const parts = payload.split(/\s+/);
+                if (parts.length >= 4) {
+                  const received = Number(parts[2]);
+                  const total = Number(parts[3]);
+                  if (Number.isFinite(received) && Number.isFinite(total) && total > 0) {
+                    lastReceivedBytes = received;
+                    const pct = Math.min(100, Math.round((received / total) * 100));
+                    setUsbStatus(`ESP32 empfängt ${pct}% (${humanReadableSize(received)} / ${humanReadableSize(total)})`);
+                    if (received >= total) {
+                      usbLog('<>', 'ESP32 reports 100% received');
+                      esp32Ready = true;
+                      break;
                     }
                   }
                 }
               }
             }
           } catch (err) {
-            // Timeout or error reading - that's fine, ESP32 might be busy processing
-            break;
+            backgroundReaderError = err;
+            usbLog('!!', `Background reader error: ${err?.message || err}`);
           }
+        })();
+
+        // NOW send the data while the background reader is active
+        setUsbStatus(`Sende Daten (${totalLabel})...`);
+        usbLog('->', `DATA all ${totalSize} bytes`);
+        await writer.write(bytes);
+        sent = totalSize;
+        usbLog('<>', 'Host finished writing to port');
+
+        // Wait for ESP32 to finish processing (max 5 seconds)
+        setUsbStatus('Warte auf Verarbeitung durch ESP32...');
+        const waitStart = performance.now();
+        while (!esp32Ready && !backgroundReaderError && (performance.now() - waitStart) < 5000) {
+          await delay(100);
+        }
+
+        if (backgroundReaderError) {
+          throw backgroundReaderError;
+        }
+
+        if (!esp32Ready) {
+          usbLog('!!', `ESP32 not ready after 5s, last received: ${lastReceivedBytes}/${totalSize}`);
+          // Continue anyway - maybe ESP32 is ready but didn't send the message
         }
 
         setUsbStatus('Sende END-Kommando...');
