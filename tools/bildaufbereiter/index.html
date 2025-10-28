@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.1';
+    const TOOL_VERSION = 'V0.2';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -612,7 +612,19 @@
         // aber wenn es klappt, bleibt die Brosche im Transfer-Modus.
         let dtrPinned = false;
         if (typeof port.setSignals === 'function') {
-          usbLog('<>', 'setSignals nicht erforderlich – Browserstandard verwenden');
+          try {
+            await port.setSignals({ dataTerminalReady: true });
+            usbLog('<>', 'setSignals DTR=1');
+            dtrPinned = true;
+          } catch (err) {
+            usbLog('!!', `setSignals(DTR) fehlgeschlagen (ignoriere): ${err?.message || err}`);
+          }
+          try {
+            await port.setSignals({ requestToSend: true, break: false });
+            usbLog('<>', 'setSignals RTS=1');
+          } catch (err) {
+            usbLog('!!', `setSignals(RTS) fehlgeschlagen (ignoriere): ${err?.message || err}`);
+          }
         } else {
           usbLog('<>', 'setSignals nicht verfügbar – behalten Standardpegel bei');
         }
@@ -728,18 +740,17 @@
           try {
             const reply = await waitForUsbLine(
               lineReader,
-              (payload) => payload.startsWith('OK PONG') ||
-                           payload.startsWith('OK READY') ||
-                           payload.startsWith('ERR'),
+              (payload) => {
+                if (payload.startsWith('OK READY')) {
+                  setUsbStatus('Gerät meldet Bereitschaft – warte auf PONG …');
+                  return false;
+                }
+                return payload.startsWith('OK PONG');
+              },
               3000
             );
             if (reply.startsWith('OK PONG')) {
               setUsbStatus('Gerät antwortet – Übertragung wird vorbereitet …');
-              pingAcknowledged = true;
-              break;
-            }
-            if (reply.startsWith('OK READY')) {
-              setUsbStatus('Gerät meldet Bereitschaft – Übertragung wird vorbereitet …');
               pingAcknowledged = true;
               break;
             }
@@ -871,12 +882,13 @@
             setUsbStatus('USB-Senden abgebrochen.');
             userMessage = 'USB-Senden abgebrochen.';
           } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
+            const detail = error?.message ? ` (${error.message})` : '';
             if (transferCompleted) {
               setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat den Port getrennt).');
               userMessage = '';
             } else {
-              setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und Transfer-Modus erneut aktivieren.');
-              userMessage = 'USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.';
+              setUsbStatus(`USB-Verbindung verloren – bitte Brosche neu verbinden und Transfer-Modus erneut aktivieren.${detail ? ' ' + detail : ''}`);
+              userMessage = `USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.${detail ? `\nOriginalfehler: ${detail.trim()}` : ''}`;
               fetchLog = true;
             }
           } else if (/timeout beim warten/i.test(error?.message || '')) {
