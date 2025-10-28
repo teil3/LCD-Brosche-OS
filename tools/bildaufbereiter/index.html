@@ -654,6 +654,25 @@
         }
 
         await delay(400);
+        const drainDeadline = performance.now() + 600;
+        while (performance.now() < drainDeadline) {
+          try {
+            const remaining = Math.max(drainDeadline - performance.now(), 50);
+            const line = await lineReader.readLine(remaining);
+            if (!line) continue;
+            usbLog('<=', `(pre) ${line}`);
+          } catch (drainErr) {
+            const msg = drainErr?.message || '';
+            if (msg.includes('Timeout beim Lesen')) {
+              break;
+            }
+            if (msg.includes('Verbindung geschlossen')) {
+              throw drainErr;
+            }
+            usbLog('!!', `Drain-Leseproblem: ${msg || drainErr}`);
+            break;
+          }
+        }
 
         const bootLines = [];
         const strayLines = [];
