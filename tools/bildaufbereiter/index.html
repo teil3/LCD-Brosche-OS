@@ -134,7 +134,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.12';
+    const TOOL_VERSION = 'V0.13';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -807,6 +807,24 @@
       return entries;
     }
 
+    async function ensureTransferModeActive(lineReader, writer, attempts = 4) {
+      if (!writer || !lineReader) return false;
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        const hint = `Bitte BTN2 lang halten (Versuch ${attempt + 1}/${attempts})`;
+        setUsbStatus(hint);
+        appendManualLog(`<> ${hint}`);
+        const entries = await dumpDeviceLog(lineReader, writer, 24);
+        if (entries.some((line) => /ENABLED=1/.test(line))) {
+          setUsbStatus('Gerät meldet Transfer-Modus – sende PING …');
+          appendManualLog('<> Transfer-Modus bestätigt (ENABLED=1)');
+          return true;
+        }
+        appendManualLog('!! Transfer-Modus noch nicht bestätigt – erneut versuchen');
+        await delay(800);
+      }
+      return false;
+    }
+
     async function sendViaUsb() {
       if (manualPort) {
         appendManualLog('!! Automatischer Transfer blockiert: Port ist im manuellen Modus geöffnet');
@@ -992,10 +1010,16 @@
         usbLog('<>', 'Warte auf Gerätebereit (post-open delay)…');
         await delay(1200);
 
-        let pingAcknowledged = readyFromBoot;
-        if (pingAcknowledged) {
+        if (!readyFromBoot) {
+          const ready = await ensureTransferModeActive(lineReader, writer, 4);
+          if (!ready) {
+            throw new Error('Gerät meldet keinen aktiven Transfer-Modus. Bitte BTN2 lang halten, bis "USB-Transfer" angezeigt wird, und erneut versuchen.');
+          }
+        } else {
           usbLog('<>', 'Bereitschaft aus Vorlogs erkannt – PING optional');
         }
+
+        let pingAcknowledged = readyFromBoot;
         for (let attempt = 0; attempt < 3 && !pingAcknowledged; ++attempt) {
           const label = attempt === 0 ? 'PING' : `PING (Versuch ${attempt + 1})`;
           usbLog('->', label);
