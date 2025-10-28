@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.4';
+    const TOOL_VERSION = 'V0.5';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -618,27 +618,7 @@
           usbLog('<>', 'Port geöffnet (Info nicht verfügbar)');
         }
         if (typeof port.setSignals === 'function') {
-          try {
-            await port.setSignals({ dataTerminalReady: true });
-            usbLog('<>', 'setSignals DTR=1');
-            dtrPinned = true;
-          } catch (err) {
-            usbLog('!!', `setSignals(DTR) fehlgeschlagen (ignoriere): ${err?.message || err}`);
-          }
-          try {
-            await port.setSignals({ requestToSend: true, break: false });
-            usbLog('<>', 'setSignals RTS=1');
-          } catch (err) {
-            usbLog('!!', `setSignals(RTS) fehlgeschlagen (ignoriere): ${err?.message || err}`);
-          }
-          try {
-            if (port.getSignals) {
-              const signals = await port.getSignals();
-              usbLog('<>', `Signals nach set: DTR=${signals.dataTerminalReady ? 1 : 0} RTS=${signals.requestToSend ? 1 : 0}`);
-            }
-          } catch (err) {
-            usbLog('!!', `getSignals fehlgeschlagen: ${err?.message || err}`);
-          }
+          usbLog('<>', 'setSignals übersprungen (CH9102 toleranz)');
         } else {
           usbLog('<>', 'setSignals nicht verfügbar – behalten Standardpegel bei');
         }
