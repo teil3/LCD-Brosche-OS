@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-28 19:10Z (robust signals)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-28 19:35Z (no forced signals)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -610,19 +610,7 @@
         // aber wenn es klappt, bleibt die Brosche im Transfer-Modus.
         let dtrPinned = false;
         if (typeof port.setSignals === 'function') {
-          try {
-            await port.setSignals({ dataTerminalReady: true });
-            usbLog('<>', 'setSignals DTR=1');
-            dtrPinned = true;
-          } catch (err) {
-            usbLog('!!', `setSignals(DTR) fehlgeschlagen: ${err?.message || err}`);
-          }
-          try {
-            await port.setSignals({ requestToSend: true, break: false });
-            usbLog('<>', 'setSignals RTS=1');
-          } catch (err) {
-            usbLog('!!', `setSignals(RTS) fehlgeschlagen (ignoriere): ${err?.message || err}`);
-          }
+          usbLog('<>', 'setSignals nicht erforderlich – Browserstandard verwenden');
         } else {
           usbLog('<>', 'setSignals nicht verfügbar – behalten Standardpegel bei');
         }
@@ -1069,18 +1057,7 @@
         await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
         if (typeof port.setSignals === 'function') {
-          try {
-            await port.setSignals({ dataTerminalReady: true });
-            usbLog('<>', 'setSignals DTR=1 (log fetch)');
-          } catch (err) {
-            usbLog('<>', `setSignals(DTR) failed (log fetch): ${err?.message || err}`);
-          }
-          try {
-            await port.setSignals({ requestToSend: true, break: false });
-            usbLog('<>', 'setSignals RTS=1 (log fetch)');
-          } catch (err) {
-            usbLog('<>', `setSignals(RTS) failed (log fetch): ${err?.message || err}`);
-          }
+          usbLog('<>', 'setSignals übersprungen (log fetch)');
         }
 
         await delay(200);
