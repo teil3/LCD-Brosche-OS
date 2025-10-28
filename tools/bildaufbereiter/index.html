@@ -37,6 +37,7 @@
     .file-picker { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
     .file-picker__button { display: inline-flex; align-items: center; justify-content: center; padding: .55rem .9rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: canvas; cursor: pointer; font-weight: 400; }
     .file-picker__button:focus-visible { outline: 2px solid #4a90e2; outline-offset: 2px; }
+    .version-tag { font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; margin-top: .4rem; color: #4a90e2; }
   </style>
 </head>
 <body>
@@ -45,7 +46,7 @@
     <div class="header__text">
       <h1>Bilderaufbereiter für die LCD-Brosche</h1>
       <p class="muted">Mit dieser Anwendung kannst du deine Bilder so vorbereiten, dass sie perfekt auf der Brosche angezeigt werden. Du kannst sie anschliessend per Bluetooth, USB oder über eine SD-Karte auf die Brosche übertragen.</p>
-      <p class="muted" style="font-size:0.85rem;margin-top:0.4rem;">Version V0.17</p>
+      <p class="muted version-tag" id="tool-version"></p>
     </div>
     <a class="header__logo" href="https://www.teil3.ch" target="_blank" rel="noopener">
       <img src="teil3_logo.svg" alt="Teil3 Logo" width="160" height="95" />
@@ -81,7 +82,6 @@
     <button id="send-usb" disabled>Über USB senden</button>
     <button id="send-ble" disabled>Per Bluetooth senden</button>
     <p id="usb-status" class="muted" aria-live="polite"></p>
-    <p class="muted" id="usb-hint">Hinweis: Transfer-Modus der Brosche aktivieren (BTN2 lang in der Diashow), dann hier „Über USB senden“ wählen.</p>
     <p id="ble-status" class="muted" aria-live="polite"></p>
     <p class="muted" id="ble-hint">Hinweis: Auf der Brosche den BLE-Empfangsmodus aktivieren (BTN2 in der Diashow App mehrmals lang drücken, bis "Bluetooth Modus" angezeigt wird).</p>
   </div>
@@ -91,6 +91,7 @@
     // Dokumentation/Quelle: https://github.com/jamsinclair/jSquash (encode API) –
     // und Typdefinitionen der Optionen (mozjpeg_enc.d.ts)
     const moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
+    const TOOL_VERSION = 'USB Debug build 2025-02-21 00:14Z (no start ack)';
     //const moduleFactory = (await import('./mozjpeg/mozjpeg_enc.js?module')).default;
 
     // Fallback: Wenn du die WASM/JS lokal ausliefern willst, lege sie in ./mozjpeg/ ab
@@ -103,8 +104,8 @@
     const btnSave   = document.getElementById('save');
     const btnUsb    = document.getElementById('send-usb');
     const btnBle    = document.getElementById('send-ble');
+    const versionLabel = document.getElementById('tool-version');
     const usbStatus = document.getElementById('usb-status');
-    const usbHint   = document.getElementById('usb-hint');
     const bleStatus = document.getElementById('ble-status');
     const cv        = document.getElementById('cv');
     const ctx       = cv.getContext('2d', { willReadFrequently: true });
@@ -115,8 +116,6 @@
     };
     const textEncoder = new TextEncoder();
     const textDecoder = new TextDecoder();
-
-    const USB_BAUD_RATE = 115200;
 
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -131,31 +130,55 @@
     let currentDownloadName = 'image_240.jpg';
     let bleSending = false;
     let usbSending = false;
-    let rememberedUsbPort = null;
+    const usbDebugLog = [];
+
+    if (versionLabel) {
+      versionLabel.textContent = TOOL_VERSION;
+    }
 
     const secureContextHosts = new Set(['localhost', '127.0.0.1', '::1']);
     const secureContext = window.isSecureContext || secureContextHosts.has(location.hostname);
     const bleAvailable = 'bluetooth' in navigator;
     const bleSupported = secureContext && bleAvailable;
-    const usbAvailable = 'serial' in navigator;
-    const usbSupported = secureContext && usbAvailable;
+    const serialAvailable = 'serial' in navigator;
+    const usbSupported = secureContext && serialAvailable;
 
-    if (usbHint) {
-      if (!usbSupported) {
-        usbHint.textContent = 'USB-Senden wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge auf dem Desktop über HTTPS verwenden.';
-      } else {
-        usbHint.textContent = 'Hinweis: Auf der Brosche USB-Transfer (BTN2 lang) aktivieren, dann hier „Über USB senden“.';
+    function setUsbStatus(text) {
+      if (!usbStatus) return;
+      usbStatus.textContent = text || '';
+    }
+
+    function usbLog(direction, message) {
+      const entry = `${direction} ${message}`;
+      if (usbDebugLog.length >= 80) {
+        usbDebugLog.shift();
       }
+      usbDebugLog.push(entry);
+      console.debug('[USB LOG]', entry);
+    }
+
+    function usbLogSnapshot() {
+      return usbDebugLog.slice(-12).join('\n');
+    }
+
+    async function alertUsbError(message) {
+      const log = usbLogSnapshot();
+      const fullMessage = log ? `${message}\n\nLetzte USB-Meldungen:\n${log}` : message;
+      console.error('USB ERROR:', message, { log: usbDebugLog.slice() });
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(fullMessage);
+          usbLog('<>', 'Fehlerdetails in die Zwischenablage kopiert.');
+        } catch (err) {
+          usbLog('!!', `Clipboard write failed: ${err?.message || err}`);
+        }
+      }
+      alert(fullMessage);
     }
 
     function setBleStatus(text) {
       if (!bleStatus) return;
       bleStatus.textContent = text || '';
-    }
-
-    function setUsbStatus(text) {
-      if (!usbStatus) return;
-      usbStatus.textContent = text || '';
     }
 
     function updateActionButtons() {
@@ -166,7 +189,7 @@
       if (btnBle) btnBle.disabled = !ready || !bleSupported || busy;
     }
 
-    function sanitizeFilenameForBle(name) {
+    function sanitizeFilenameForTransfer(name) {
       const fallback = 'ble_image.jpg';
       if (!name) return fallback;
       let base = name.split(/[\\/]/).pop() || fallback;
@@ -190,34 +213,6 @@
         const ext = idx >= 0 ? out.slice(idx) : '.jpg';
         const stem = idx >= 0 ? out.slice(0, idx) : out;
         out = stem.slice(0, Math.max(1, 60 - ext.length)) + ext;
-      }
-      return out;
-    }
-
-    function sanitizeFilenameForUsb(name) {
-      const fallback = 'usb_image.jpg';
-      if (!name) return fallback;
-      let candidate = name.split(/[\\/]/).pop() || fallback;
-      candidate = candidate.toLowerCase();
-      let out = '';
-      for (const ch of candidate) {
-        if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch === '-' || ch === '_' || ch === '.') {
-          out += ch;
-        } else if (ch === ' ') {
-          out += '_';
-        }
-        if (out.length >= 80) break;
-      }
-      if (!out) out = fallback;
-      if (out.startsWith('.')) out = out.substring(1) || fallback;
-      if (!out.endsWith('.jpg') && !out.endsWith('.jpeg')) {
-        out += '.jpg';
-      }
-      if (out.length > 80) {
-        const idx = out.lastIndexOf('.');
-        const ext = idx >= 0 ? out.slice(idx) : '.jpg';
-        const stem = idx >= 0 ? out.slice(0, idx) : out;
-        out = stem.slice(0, Math.max(1, 80 - ext.length)) + ext;
       }
       return out;
     }
@@ -289,31 +284,13 @@
       return predicate();
     }
 
-    async function readWithTimeout(reader, timeoutMs) {
-      if (typeof timeoutMs !== 'number' || timeoutMs === Infinity) {
-        return reader.read();
-      }
-      let timerId;
-      try {
-        return await Promise.race([
-          reader.read(),
-          new Promise((_, reject) => {
-            timerId = setTimeout(() => reject(new Error('Timeout beim Lesen von Gerätedaten')), Math.max(0, timeoutMs));
-          })
-        ]);
-      } finally {
-        if (timerId) {
-          clearTimeout(timerId);
-        }
-      }
-    }
-
     function createLineReader(reader) {
       let buffer = '';
       return {
         async readLine(timeoutMs) {
-          const hasTimeout = typeof timeoutMs === 'number';
-          const deadline = hasTimeout ? performance.now() + timeoutMs : 0;
+          const deadline = (typeof timeoutMs === 'number')
+            ? performance.now() + timeoutMs
+            : null;
           while (true) {
             const newlineIdx = buffer.indexOf('\n');
             if (newlineIdx >= 0) {
@@ -321,12 +298,26 @@
               buffer = buffer.slice(newlineIdx + 1);
               return line.replace(/\r$/, '');
             }
-            const remaining = hasTimeout ? deadline - performance.now() : undefined;
-            if (hasTimeout && remaining <= 0) {
-              throw new Error('Timeout beim Lesen von Gerätedaten');
+
+            const readPromise = reader.read();
+            let result;
+            if (deadline !== null) {
+              const remaining = deadline - performance.now();
+              if (remaining <= 0) {
+                throw new Error('Timeout beim Lesen von Gerätedaten');
+              }
+              result = await Promise.race([
+                readPromise,
+                delay(Math.max(remaining, 0)).then(() => ({ timeout: true })),
+              ]);
+              if (result?.timeout) {
+                throw new Error('Timeout beim Lesen von Gerätedaten');
+              }
+            } else {
+              result = await readPromise;
             }
-            const { value, done } = await readWithTimeout(reader, hasTimeout ? Math.max(remaining, 20) : undefined);
-            if (done) {
+
+            if (result.done) {
               if (buffer.length > 0) {
                 const line = buffer;
                 buffer = '';
@@ -334,8 +325,8 @@
               }
               throw new Error('Verbindung geschlossen');
             }
-            if (value) {
-              buffer += value;
+            if (result.value) {
+              buffer += result.value;
             }
           }
         }
@@ -349,17 +340,36 @@
         if (remaining <= 0) {
           throw new Error('Timeout beim Warten auf Antwort des Geräts');
         }
-        const line = (await lineReader.readLine(Math.max(remaining, 100))).trim();
+        const line = (await lineReader.readLine(Math.max(remaining, 50))).trim();
         if (!line) continue;
-        console.debug('[USB <=]', line);
-        if (!line.startsWith('USB')) continue;
+        usbLog('<=', line);
+        if (!line.startsWith('USB')) {
+          continue;
+        }
         const payload = line.slice(3).trimStart();
         if (payload.startsWith('ERR')) {
-          const errMsg = payload.substring(3).trim();
-          throw new Error(errMsg || 'Gerätefehler');
+          const message = payload.substring(3).trim();
+          throw new Error(message || 'Gerätefehler');
+        }
+        if (payload.startsWith('OK PROG')) {
+          const parts = payload.split(/\s+/);
+          if (parts.length >= 4) {
+            const received = Number(parts[2]);
+            const total = Number(parts[3]);
+            if (Number.isFinite(received) && Number.isFinite(total) && total > 0) {
+              const pct = Math.min(100, Math.round((received / total) * 100));
+              setUsbStatus(`Gerät empfängt ${pct}% (${humanReadableSize(received)} / ${humanReadableSize(total)})`);
+            }
+          }
+          continue;
+        }
+        if (payload.startsWith('OK MSG')) {
+          const msg = payload.substring(6).trim();
+          if (msg) setUsbStatus(msg);
+          continue;
         }
         if (predicate(payload)) {
-          return { payload, raw: line };
+          return payload;
         }
       }
     }
@@ -375,163 +385,208 @@
         return;
       }
 
+      usbDebugLog.length = 0;
+
       let port = null;
       let writer = null;
       let reader = null;
       let readableClosed = null;
       let lineReader = null;
+      let transferCompleted = false;
 
       try {
         usbSending = true;
         updateActionButtons();
         setUsbStatus('Bild wird vorbereitet …');
+        usbLog('<>', 'Beginne USB-Transfer');
 
         const { bytes, filename } = await encodeCurrentImage();
-        const sanitizedName = sanitizeFilenameForUsb(filename);
+        const sanitizedName = sanitizeFilenameForTransfer(filename);
         const totalSize = bytes.length;
         const totalLabel = humanReadableSize(totalSize);
 
-        if (!rememberedUsbPort) {
-          const grantedPorts = await navigator.serial.getPorts();
-          if (grantedPorts && grantedPorts.length > 0) {
-            rememberedUsbPort = grantedPorts[0];
-          }
-        }
-        port = rememberedUsbPort;
-        if (!port) {
-          port = await navigator.serial.requestPort();
-          rememberedUsbPort = port;
+        setUsbStatus('Seriellen Port auswählen …');
+        port = await navigator.serial.requestPort();
+        try {
+          await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+        } catch (err) {
+          usbLog('!!', `open failed: ${err?.message || err}`);
+          throw err;
         }
 
-        if (port.readable || port.writable) {
+        if (typeof port.setSignals === 'function') {
           try {
-            await port.close();
-          } catch (_) {
-            /* ignore */
+            await port.setSignals({ dataTerminalReady: true, requestToSend: true, break: false });
+            usbLog('<>', 'setSignals DTR=1 RTS=1');
+          } catch (err) {
+            usbLog('<>', `setSignals failed: ${err?.message || err}`);
           }
         }
-        await port.open({ baudRate: USB_BAUD_RATE, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
+        await delay(400);
+
+        if (!port.writable) {
+          throw new Error('Port bietet keinen Schreibstream.');
+        }
+        if (!port.readable) {
+          throw new Error('Port bietet keinen Lesestream.');
+        }
+
+        if (typeof TextDecoderStream === 'undefined') {
+          throw new Error('TextDecoderStream wird nicht unterstützt. Bitte einen aktuellen Chromium-Browser verwenden.');
+        }
         const decoder = new TextDecoderStream();
         readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
         reader = decoder.readable.getReader();
         lineReader = createLineReader(reader);
+
         writer = port.writable.getWriter();
 
-        setUsbStatus('USB-Port geöffnet – sende PING …');
-        console.debug('[USB ->] PING');
-        await writer.write(textEncoder.encode('PING\n'));
+        // Optional: READY-Meldung ignorieren – START funktioniert auch ohne.
 
-        await waitForUsbLine(
-          lineReader,
-          (payload) => payload.startsWith('OK PONG') || payload.startsWith('OK READY'),
-          2000
-        );
-        setUsbStatus('Transfer-Modus bestätigt – starte Übertragung …');
+        const startLine = `START ${totalSize} ${sanitizedName}\n`;
+        usbLog('->', startLine.trim());
+        await writer.write(textEncoder.encode(startLine));
 
-        const startCommand = `START ${totalSize} ${sanitizedName}\n`;
-        console.debug('[USB ->]', startCommand.trim());
-        await writer.write(textEncoder.encode(startCommand));
+        let startAck = null;
+        try {
+          startAck = await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK START') || payload.startsWith('OK READY'),
+            6000
+          );
+        } catch (err) {
+          usbLog('!!', `Keine START-Bestätigung innerhalb 6s: ${err?.message || err}`);
+        }
+        if (startAck && startAck.startsWith('OK READY')) {
+          usbLog('<>', 'READY kam nach START; warte optional auf OK START');
+          try {
+            const follow = await waitForUsbLine(
+              lineReader,
+              (payload) => payload.startsWith('OK START'),
+              4000
+            );
+            startAck = follow;
+          } catch (err) {
+            usbLog('!!', `Kein OK START nach READY: ${err?.message || err}`);
+          }
+        }
 
-        await waitForUsbLine(
-          lineReader,
-          (payload) => payload.startsWith('OK START'),
-          4000
-        );
+        if (startAck && startAck.startsWith('OK START')) {
+          let deviceFilename = sanitizedName;
+          const startParts = startAck.split(/\s+/);
+          if (startParts.length >= 3) {
+            deviceFilename = startParts[2];
+          }
+          setUsbStatus(`Übertragung gestartet (${deviceFilename})`);
+          usbLog('<>', `Transfer bestätigt: ${deviceFilename}`);
+        } else {
+          setUsbStatus('Starte Übertragung (keine Bestätigung erhalten – sende trotzdem)…');
+          usbLog('!!', 'Sende Daten ohne Start-Bestätigung');
+        }
 
-        setUsbStatus(`Sende Daten (0 / ${totalLabel}) …`);
         const chunkSize = 1024;
         let sent = 0;
-        while (sent < totalSize) {
-          const next = Math.min(chunkSize, totalSize - sent);
-          const chunk = bytes.subarray(sent, sent + next);
-          await writer.write(chunk);
-          if (writer.ready) {
-            try {
-              await writer.ready;
-            } catch (_) {
-              /* ignore */
-            }
-          }
-          sent += next;
-          if (totalSize >= 4096 && sent % 4096 === 0) {
-            setUsbStatus(`Sende Daten (${humanReadableSize(sent)} / ${totalLabel}) …`);
-          }
-        }
-        console.debug('[USB ->] Daten gesendet', sent);
+        setUsbStatus(`Sende 0% (0 / ${totalLabel})`);
 
-        const prog = await waitForUsbLine(
-          lineReader,
-          (payload) => payload.startsWith('OK PROG'),
-          Math.max(4000, Math.min(12000, 2000 + totalSize / 20))
-        );
-        const progParts = prog.payload.split(/\s+/);
-        if (progParts.length >= 4) {
-          const received = Number(progParts[2]);
-          const expected = Number(progParts[3]);
-          if (Number.isFinite(received) && Number.isFinite(expected) && expected > 0) {
-            const pct = Math.min(100, Math.round((received / expected) * 100));
-            setUsbStatus(`Gerät bestätigt Empfang ${pct}% (${humanReadableSize(received)} / ${humanReadableSize(expected)})`);
+        for (let offset = 0; offset < totalSize; offset += chunkSize) {
+          const slice = bytes.subarray(offset, Math.min(offset + chunkSize, totalSize));
+          if (offset === 0 || (offset % (chunkSize * 32) === 0)) {
+            usbLog('->', `DATA ${offset}/${totalSize}`);
           }
+          await writer.write(slice);
+          sent += slice.length;
+
+          if (sent === totalSize || sent <= chunkSize || (sent % (chunkSize * 12)) === 0) {
+            const pct = Math.min(100, Math.round((sent / totalSize) * 100));
+            setUsbStatus(`Sende ${pct}% (${humanReadableSize(sent)} / ${totalLabel})`);
+          }
+          await delay(3);
         }
 
-        console.debug('[USB ->] END');
+        usbLog('->', 'END');
         await writer.write(textEncoder.encode('END\n'));
 
-        const end = await waitForUsbLine(
-          lineReader,
-          (payload) => payload.startsWith('OK END') || payload.startsWith('OK PROG'),
-          8000
-        );
+        const endPredicate = (payload) => {
+          if (payload.startsWith('OK END')) {
+            return true;
+          }
+          if (payload.startsWith('OK PROG')) {
+            const parts = payload.split(/\s+/);
+            if (parts.length >= 4) {
+              const received = Number(parts[2]);
+              const total = Number(parts[3]);
+              if (Number.isFinite(received) && Number.isFinite(total) && total > 0 && received >= total) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
 
-        if (end.payload.startsWith('OK PROG')) {
-          setUsbStatus('Übertragung abgeschlossen ✅');
+        const endAck = await waitForUsbLine(lineReader, endPredicate, 14000);
+        if (endAck.startsWith('OK PROG')) {
+          setUsbStatus('Übertragung abgeschlossen ✅ (Bestätigung über Fortschrittsmeldung)');
         } else {
-          const parts = end.payload.split(/\s+/);
-          if (parts.length >= 3) {
-            setUsbStatus(`Übertragung abgeschlossen ✅ (${parts[2]})`);
+          const endParts = endAck.split(/\s+/);
+          if (endParts.length >= 3) {
+            setUsbStatus(`Übertragung abgeschlossen ✅ (${endParts[2]})`);
           } else {
             setUsbStatus('Übertragung abgeschlossen ✅');
           }
         }
-      } catch (error) {
-        const name = error?.name;
-        const message = error?.message || error?.toString() || 'Unbekannter Fehler beim USB-Transfer';
-        console.error('USB transfer failed:', error);
-        if (port && port === rememberedUsbPort) {
-          rememberedUsbPort = null;
-        }
-        if (name === 'NotFoundError') {
-          setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
-        } else if (name === 'AbortError') {
-          setUsbStatus('USB-Senden abgebrochen.');
-        } else {
-          setUsbStatus(`Fehler: ${message}`);
-          alert(`USB-Übertragung fehlgeschlagen: ${message}`);
-        }
+        transferCompleted = true;
+        } catch (error) {
+          console.error(error);
+          const name = error?.name;
+          if (name === 'NotFoundError') {
+            setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
+            alertUsbError('USB-Senden abgebrochen – kein Port ausgewählt.');
+          } else if (name === 'AbortError') {
+            setUsbStatus('USB-Senden abgebrochen.');
+            alertUsbError('USB-Senden abgebrochen.');
+          } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
+            if (transferCompleted) {
+              setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat den Port getrennt).');
+            } else {
+              setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und Transfer-Modus erneut aktivieren.');
+              alertUsbError('USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.');
+            }
+          } else if (/timeout beim warten/i.test(error?.message || '')) {
+            setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv (BTN2 lang in der Diashow)?');
+            alertUsbError('Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.');
+          } else {
+            const message = error?.message || error?.toString() || 'Unbekannter Fehler';
+            setUsbStatus(`Fehler: ${message}`);
+            alertUsbError('Fehler beim USB-Senden: ' + message);
+          }
       } finally {
-        usbSending = false;
-        updateActionButtons();
         try {
           if (writer) {
+            usbLog('<>', 'release writer');
             await writer.releaseLock();
           }
-        } catch (_) {}
+        } catch (_) { /* ignore */ }
         try {
           if (reader) {
+            usbLog('<>', 'cancel reader');
             await reader.cancel();
           }
-        } catch (_) {}
+        } catch (_) { /* ignore */ }
         try {
           if (readableClosed) {
+            usbLog('<>', 'await readable close');
             await readableClosed.catch(() => {});
           }
-        } catch (_) {}
+        } catch (_) { /* ignore */ }
         try {
           if (port) {
+            usbLog('<>', 'close port');
             await port.close();
           }
-        } catch (_) {}
+        } catch (_) { /* ignore */ }
+        usbSending = false;
+        updateActionButtons();
       }
     }
 
@@ -540,7 +595,7 @@
         alert('WebBluetooth wird von diesem Browser nicht unterstützt. Bitte Chrome, Edge oder Android Chrome verwenden.');
         return;
       }
-      if (bleSending) return;
+      if (bleSending || usbSending) return;
       if (!currentBitmap) {
         alert('Bitte zuerst ein Bild auswählen.');
         return;
@@ -561,7 +616,7 @@
         setBleStatus('Bild wird vorbereitet …');
 
         const { bytes, filename } = await encodeCurrentImage();
-        const sanitizedName = sanitizeFilenameForBle(filename);
+        const sanitizedName = sanitizeFilenameForTransfer(filename);
 
         setBleStatus('Bitte Brosche auswählen …');
         device = await navigator.bluetooth.requestDevice({
@@ -759,6 +814,9 @@
       if (!bleSending) {
         setBleStatus('');
       }
+      if (!usbSending) {
+        setUsbStatus('');
+      }
     }
 
     // JPEG header scan to verify non-progressive:
@@ -955,13 +1013,13 @@
     });
 
     if (btnUsb) {
-      btnUsb.addEventListener('click', () => {
-        sendViaUsb().catch((error) => {
-          console.error('USB transfer error', error);
-        });
-      });
-      if (!usbSupported) {
-        btnUsb.title = 'WebSerial wird von diesem Browser nicht unterstützt.';
+      btnUsb.addEventListener('click', sendViaUsb);
+      if (!secureContext) {
+        btnUsb.title = 'WebSerial benötigt HTTPS oder localhost.';
+        setUsbStatus('WebSerial benötigt eine sichere Herkunft. Bitte die Seite über https:// oder http://localhost ausliefern (z. B. \"python -m http.server\" nutzen) und dann erneut versuchen.');
+      } else if (!serialAvailable) {
+        btnUsb.title = 'WebSerial wird von diesem Browser nicht freigegeben.';
+        setUsbStatus('WebSerial wird von diesem Browser/Profil nicht unterstützt. Verwende eine aktuelle Chromium-Variante wie Chrome oder Edge auf dem Desktop.');
       }
     }
 
