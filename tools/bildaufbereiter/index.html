@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.3';
+    const TOOL_VERSION = 'V0.4';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -611,6 +611,12 @@
         // Versuche nur DTR auf HIGH zu setzen. Einige Systeme melden zwar Fehler,
         // aber wenn es klappt, bleibt die Brosche im Transfer-Modus.
         let dtrPinned = false;
+        try {
+          const info = port.getInfo ? port.getInfo() : {};
+          usbLog('<>', `Port geöffnet (vendor=${info.usbVendorId || 'n/a'} product=${info.usbProductId || 'n/a'})`);
+        } catch (_) {
+          usbLog('<>', 'Port geöffnet (Info nicht verfügbar)');
+        }
         if (typeof port.setSignals === 'function') {
           try {
             await port.setSignals({ dataTerminalReady: true });
@@ -711,10 +717,22 @@
 
         writer = port.writable.getWriter();
 
+        const writeCommand = async (text) => {
+          const data = textEncoder.encode(text);
+          await writer.write(data);
+          if (writer.ready) {
+            try {
+              await writer.ready;
+            } catch (err) {
+              usbLog('!!', `writer.ready rejected: ${err?.message || err}`);
+            }
+          }
+        };
+
         // Vorab Verbindung prüfen (PING). Wenn wir keine Antwort erhalten,
         // brechen wir ab, weil das Gerät vermutlich im falschen Modus ist.
         usbLog('<>', 'Warte auf Gerätebereit (post-open delay)…');
-        await delay(1100);
+        await delay(1200);
 
         let pingAcknowledged = readyFromBoot;
         if (pingAcknowledged) {
@@ -724,7 +742,7 @@
           const label = attempt === 0 ? 'PING' : `PING (Versuch ${attempt + 1})`;
           usbLog('->', label);
           try {
-            await writer.write(textEncoder.encode('PING\n'));
+            await writeCommand('PING\n');
           } catch (err) {
             usbLog('!!', `Senden von ${label} fehlgeschlagen: ${err?.message || err}`);
             if (attempt >= 2) {
