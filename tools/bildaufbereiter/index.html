@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-28 18:05Z (stable DTR handshake)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-28 18:55Z (align RTS/DTR)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -611,8 +611,8 @@
         let dtrPinned = false;
         if (typeof port.setSignals === 'function') {
           try {
-            await port.setSignals({ dataTerminalReady: true, requestToSend: false });
-            usbLog('<>', 'setSignals DTR=1 RTS=0');
+            await port.setSignals({ dataTerminalReady: true, requestToSend: true, break: false });
+            usbLog('<>', 'setSignals DTR=1 RTS=1');
             dtrPinned = true;
           } catch (err) {
             usbLog('!!', `setSignals(DTR/RTS) fehlgeschlagen: ${err?.message || err}`);
@@ -1064,8 +1064,8 @@
 
         if (typeof port.setSignals === 'function') {
           try {
-            await port.setSignals({ dataTerminalReady: true, requestToSend: false });
-            usbLog('<>', 'setSignals DTR=1 RTS=0 (log fetch)');
+            await port.setSignals({ dataTerminalReady: true, requestToSend: true, break: false });
+            usbLog('<>', 'setSignals DTR=1 RTS=1 (log fetch)');
           } catch (err) {
             usbLog('<>', `setSignals failed (log fetch): ${err?.message || err}`);
           }
