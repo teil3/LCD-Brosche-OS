@@ -21,10 +21,6 @@
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
 ButtonState btn2({(uint8_t)BTN2_PIN, true});
 
-namespace {
-constexpr bool kUsbDebug = false;
-}
-
 static const char* btnEventName(BtnEvent e) {
   switch (e) {
     case BtnEvent::Single: return "Single";
@@ -48,38 +44,38 @@ RandomStripesIntoneApp app_random_stripes;
 
 void setup() {
   Serial.setRxBufferSize(8192);
-  Serial.setTxBufferSize(8192);
+  Serial.setTxBufferSize(2048);
   Serial.begin(115200);
-  Serial.setTimeout(5);
+  Serial.setTimeout(20);
   delay(100);
   // Warten, bis der Monitor dran ist (nur kurz)
   for (int i=0;i<20;i++){ if (Serial) break; delay(10); }
-  if (kUsbDebug) Serial.println("[BOOT] setup start");
+  Serial.println("[BOOT] setup start");
 
   bool lfs_ok = mountLittleFs(false);
   if (!lfs_ok) {
-    if (kUsbDebug) Serial.println("[BOOT] LittleFS mount failed, try format");
+    Serial.println("[BOOT] LittleFS mount failed, try format");
     lfs_ok = mountLittleFs(true);
   }
   if (lfs_ok) {
     if (!ensureFlashSlidesDir()) {
-      if (kUsbDebug) Serial.println("[BOOT] ensureFlashSlidesDir failed");
+      Serial.println("[BOOT] ensureFlashSlidesDir failed");
     } else {
-      if (kUsbDebug) Serial.println("[BOOT] LittleFS ready");
+      Serial.println("[BOOT] LittleFS ready");
     }
   } else {
-    if (kUsbDebug) Serial.println("[BOOT] LittleFS unavailable");
+    Serial.println("[BOOT] LittleFS unavailable");
   }
 
   gfxBegin();
-  if (kUsbDebug) Serial.println("[BOOT] gfxBegin done");
+  Serial.println("[BOOT] gfxBegin done");
 
-  if (kUsbDebug) Serial.printf("[BOOT] BOOT_MS=%u\n", BOOT_MS);
+  Serial.printf("[BOOT] BOOT_MS=%u\n", BOOT_MS);
   drawBootLogo(tft, BOOT_MS);
-  if (kUsbDebug) Serial.println("[BOOT] bootlogo done");
+  Serial.println("[BOOT] bootlogo done");
 
   btn1.begin(); btn2.begin();
-  if (kUsbDebug) Serial.println("[BOOT] buttons ready");
+  Serial.println("[BOOT] buttons ready");
 
   appman.add(&app_slideshow);
   appman.add(&app_pixel_field);
@@ -90,12 +86,12 @@ void setup() {
   appman.add(&app_random_pasteller);
   appman.add(&app_square_intone);
   appman.begin();
-  if (kUsbDebug) Serial.println("[BOOT] appman.begin done");
+  Serial.println("[BOOT] appman.begin done");
 
   BleImageTransfer::begin();
-  if (kUsbDebug) Serial.println("[BOOT] BLE ready");
+  Serial.println("[BOOT] BLE ready");
   SerialImageTransfer::begin();
-  if (kUsbDebug) Serial.println("[BOOT] USB ready");
+  Serial.println("[BOOT] USB ready");
 }
 
 static void pumpBleEvents() {
@@ -144,13 +140,11 @@ static void pumpUsbEvents() {
       case SerialImageTransfer::EventType::Error:     typeStr = "ERROR"; break;
       case SerialImageTransfer::EventType::Aborted:   typeStr = "ABORT"; break;
     }
-    if (kUsbDebug) {
-      Serial.printf("[USB] EVENT %s size=%lu file=%s msg=%s\n",
-                    typeStr,
-                    static_cast<unsigned long>(evt.size),
-                    evt.filename,
-                    evt.message);
-    }
+    Serial.printf("[USB] EVENT %s size=%lu file=%s msg=%s\n",
+                  typeStr,
+                  static_cast<unsigned long>(evt.size),
+                  evt.filename,
+                  evt.message);
 
     App* active = appman.activeApp();
     if (active == &app_slideshow) {
@@ -183,7 +177,7 @@ void loop() {
   // Globale Button-Logik (BTN1): App-Wechsel & Backlight
   BtnEvent e1 = btn1.poll();
   if (e1 != BtnEvent::None) {
-    if (kUsbDebug) Serial.printf("[BTN] BTN1 %s\n", btnEventName(e1));
+    Serial.printf("[BTN] BTN1 %s\n", btnEventName(e1));
     switch (e1) {
       case BtnEvent::Single: appman.next(); break;
       case BtnEvent::Double: /* frei: z.B. App-List OSD */ break;
@@ -196,7 +190,7 @@ void loop() {
   // App-seitige Events (BTN2)
   BtnEvent e2 = btn2.poll();
   if (e2 != BtnEvent::None) {
-    if (kUsbDebug) Serial.printf("[BTN] BTN2 %s\n", btnEventName(e2));
+    Serial.printf("[BTN] BTN2 %s\n", btnEventName(e2));
     appman.dispatchBtn(2, e2);
   }
 
@@ -211,7 +205,7 @@ void loop() {
   BleImageTransfer::tick();
   pumpBleEvents();
 
-  delay(1);
+  delay(5);
 }
 
 // --- force-compile local cpp units (Arduino ignores subfolders otherwise)

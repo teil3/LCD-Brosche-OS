@@ -165,8 +165,6 @@
     let usbErrorModalCopyBtn = null;
     let usbErrorModalCloseBtn = null;
     let usbErrorModalKeyHandlerAttached = false;
-    let usbLineQueue = [];
-    let usbReaderAbort = null;
 
     if (versionLabel) {
       versionLabel.textContent = `${TOOL_VERSION} · mozjpeg: ${mozModuleSource}`;
@@ -195,82 +193,6 @@
 
     function usbLogSnapshot() {
       return usbDebugLog.slice(-12).join('\n');
-    }
-
-    function stopUsbReader() {
-      if (usbReaderAbort) {
-        usbReaderAbort();
-        usbReaderAbort = null;
-      }
-      usbLineQueue.length = 0;
-    }
-
-    function startUsbReader(lineReader) {
-      stopUsbReader();
-      if (!lineReader) return;
-      const controller = new AbortController();
-      usbReaderAbort = () => controller.abort();
-      const { signal } = controller;
-      (async () => {
-        try {
-          while (!signal.aborted) {
-            const raw = await lineReader.readLine(250);
-            if (signal.aborted) break;
-            if (!raw) continue;
-            const line = raw.replace(/\r$/, '');
-            if (!line) continue;
-            usbLog('<=', line);
-            usbLineQueue.push(line);
-          }
-        } catch (err) {
-          if (!signal.aborted) {
-            console.warn('USB reader stopped', err);
-          }
-        }
-      })();
-    }
-
-    async function takeUsbLine(timeoutMs = null) {
-      const deadline = timeoutMs == null ? null : performance.now() + timeoutMs;
-      while (true) {
-        if (usbLineQueue.length > 0) {
-          return usbLineQueue.shift();
-        }
-        if (deadline !== null && performance.now() >= deadline) {
-          return null;
-        }
-        await delay(20);
-      }
-    }
-
-    function processUsbLine(raw) {
-      if (!raw || !raw.startsWith('USB')) {
-        return { payload: null, raw };
-      }
-      const payload = raw.slice(3).trimStart();
-      if (!payload) return { payload: null, raw };
-      if (payload.startsWith('ERR')) {
-        const message = payload.substring(3).trim();
-        throw new Error(message || 'Gerätefehler');
-      }
-      if (payload.startsWith('OK PROG')) {
-        const parts = payload.split(/\s+/);
-        if (parts.length >= 4) {
-          const received = Number(parts[2]);
-          const total = Number(parts[3]);
-          if (Number.isFinite(received) && Number.isFinite(total) && total > 0) {
-            const pct = Math.min(100, Math.round((received / total) * 100));
-            setUsbStatus(`Gerät empfängt ${pct}% (${humanReadableSize(received)} / ${humanReadableSize(total)})`);
-          }
-        }
-        return { payload: null, raw };
-      }
-      if (payload.startsWith('OK MSG')) {
-        const msg = payload.substring(6).trim();
-        if (msg) setUsbStatus(msg);
-        return { payload: null, raw };
-      }
-      return { payload, raw };
     }
 
     function ensureUsbErrorModal() {
@@ -538,29 +460,49 @@
       };
     }
 
-    async function waitForUsbLine(_lineReader, predicate, timeoutMs) {
+    async function waitForUsbLine(lineReader, predicate, timeoutMs) {
       const deadline = performance.now() + timeoutMs;
       while (true) {
         const remaining = deadline - performance.now();
         if (remaining <= 0) {
           throw new Error('Timeout beim Warten auf Antwort des Geräts');
         }
-        const raw = await takeUsbLine(Math.max(remaining, 20));
-        if (!raw) {
-          throw new Error('Timeout beim Warten auf Antwort des Geräts');
+        const line = (await lineReader.readLine(Math.max(remaining, 50))).trim();
+        if (!line) continue;
+        usbLog('<=', line);
+        if (!line.startsWith('USB')) {
+          continue;
         }
-        const { payload } = processUsbLine(raw);
-        if (payload && predicate(payload)) {
+        const payload = line.slice(3).trimStart();
+        if (payload.startsWith('ERR')) {
+          const message = payload.substring(3).trim();
+          throw new Error(message || 'Gerätefehler');
+        }
+        if (payload.startsWith('OK PROG')) {
+          const parts = payload.split(/\s+/);
+          if (parts.length >= 4) {
+            const received = Number(parts[2]);
+            const total = Number(parts[3]);
+            if (Number.isFinite(received) && Number.isFinite(total) && total > 0) {
+              const pct = Math.min(100, Math.round((received / total) * 100));
+              setUsbStatus(`Gerät empfängt ${pct}% (${humanReadableSize(received)} / ${humanReadableSize(total)})`);
+            }
+          }
+          continue;
+        }
+        if (payload.startsWith('OK MSG')) {
+          const msg = payload.substring(6).trim();
+          if (msg) setUsbStatus(msg);
+          continue;
+        }
+        if (predicate(payload)) {
           return payload;
         }
       }
     }
 
     async function dumpDeviceLog(lineReader, writer, maxEntries = 16) {
-      if (!writer) return [];
-      if (!usbReaderAbort && lineReader) {
-        startUsbReader(lineReader);
-      }
+      if (!writer || !lineReader) return [];
       try {
         usbLog('->', 'LOG');
         await writer.write(textEncoder.encode('LOG\n'));
@@ -572,6 +514,7 @@
       let ack;
       try {
         ack = await waitForUsbLine(
+          lineReader,
           (payload) => payload.startsWith('OK LOG') || payload.startsWith('ERR'),
           2000
         );
@@ -597,19 +540,12 @@
       while (entries.length < limit && guard < limit + 8) {
         guard += 1;
         try {
-          const raw = await takeUsbLine(800);
+          const raw = (await lineReader.readLine(800)).trim();
           if (!raw) continue;
-          const { payload } = processUsbLine(raw);
+          usbLog('<=', raw);
           if (raw.startsWith('USB LOG')) {
             entries.push(raw.substring(7).trim());
-            continue;
           }
-          if (payload && payload.startsWith('LOG')) {
-            const text = payload.substring(3).trim();
-            entries.push(text);
-            continue;
-          }
-          // andere Payloads wurden bereits in processUsbLine behandelt (z. B. PROG/MSG)
         } catch (err) {
           if (entries.length === 0) {
             usbLog('!!', `LOG lesen fehlgeschlagen: ${err?.message || err}`);
@@ -691,7 +627,6 @@
         readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
         reader = decoder.readable.getReader();
         lineReader = createLineReader(reader);
-        startUsbReader(lineReader);
 
         writer = port.writable.getWriter();
 
@@ -867,7 +802,6 @@
             await alertUsbError(userMessage);
           }
       } finally {
-        stopUsbReader();
         try {
           if (writer) {
             usbLog('<>', 'release writer');
@@ -1083,7 +1017,6 @@
         readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
         reader = decoder.readable.getReader();
         lineReader = createLineReader(reader);
-        startUsbReader(lineReader);
         writer = port.writable.getWriter();
 
         const entries = await dumpDeviceLog(lineReader, writer, 24);
@@ -1102,7 +1035,6 @@
         setUsbStatus(`USB-Log abrufen fehlgeschlagen: ${message}`);
         await alertUsbError('USB-Log abrufen fehlgeschlagen: ' + message);
       } finally {
-        stopUsbReader();
         try {
           if (writer) {
             await writer.releaseLock();
