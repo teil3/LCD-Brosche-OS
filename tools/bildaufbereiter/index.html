@@ -707,7 +707,9 @@
           throw new Error(noAckMsg);
         }
 
-        const chunkSize = 1024;
+        // Smaller chunks with longer delays to prevent ESP32 RX buffer overflow (4096 bytes).
+        // ESP32 needs time to read from serial buffer and write to filesystem.
+        const chunkSize = 512;  // Reduced from 1024
         let sent = 0;
         setUsbStatus(`Sende 0% (0 / ${totalLabel})`);
 
@@ -717,11 +719,12 @@
           sent += slice.length;
           usbLog('->', `DATA ${sent}/${totalSize} (+${slice.length})`);
 
-          if (sent === totalSize || sent <= chunkSize || (sent % (chunkSize * 12)) === 0) {
+          if (sent === totalSize || sent <= chunkSize || (sent % (chunkSize * 24)) === 0) {
             const pct = Math.min(100, Math.round((sent / totalSize) * 100));
             setUsbStatus(`Sende ${pct}% (${humanReadableSize(sent)} / ${totalLabel})`);
           }
-          await delay(3);
+          // Increased delay to give ESP32 time to process data (~20-25KB/s throughput)
+          await delay(20);
         }
 
         usbLog('->', 'END');
