@@ -43,7 +43,10 @@ RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
 
 void setup() {
+  Serial.setRxBufferSize(8192);
+  Serial.setTxBufferSize(2048);
   Serial.begin(115200);
+  Serial.setTimeout(20);
   delay(100);
   // Warten, bis der Monitor dran ist (nur kurz)
   for (int i=0;i<20;i++){ if (Serial) break; delay(10); }
@@ -190,6 +193,9 @@ void loop() {
     Serial.printf("[BTN] BTN2 %s\n", btnEventName(e2));
     appman.dispatchBtn(2, e2);
   }
+
+  SerialImageTransfer::tick();
+  pumpUsbEvents();
 
   appman.tick(dt);
   appman.draw();

@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-27 14:59Z (ignore app logs)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-28 16:40Z (skip DTR toggle)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -610,13 +610,10 @@
         // aber wenn es klappt, bleibt die Brosche im Transfer-Modus.
         let dtrPinned = false;
         if (typeof port.setSignals === 'function') {
-          try {
-            await port.setSignals({ dataTerminalReady: true });
-            usbLog('<>', 'setSignals DTR=1');
-            dtrPinned = true;
-          } catch (err) {
-            usbLog('!!', `setSignals(DTR) fehlgeschlagen: ${err?.message || err}`);
-          }
+          // Wir lassen DTR unverändert, damit der ESP32 nicht durch einen Reset das
+          // laufende Transfer-Fenster verliert. Einige Browser setzen DTR beim Öffnen
+          // bereits automatisch auf HIGH; wir loggen nur, ohne den Pegel erneut zu toggeln.
+          usbLog('<>', 'setSignals übersprungen (DTR unverändert lassen)');
         } else {
           usbLog('<>', 'setSignals nicht verfügbar – behalten Standardpegel bei');
         }
@@ -1067,12 +1064,7 @@
         await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
         if (typeof port.setSignals === 'function') {
-          try {
-            await port.setSignals({ dataTerminalReady: true, requestToSend: true, break: false });
-            usbLog('<>', 'setSignals DTR=1 RTS=1 (log fetch)');
-          } catch (err) {
-            usbLog('<>', `setSignals failed (log fetch): ${err?.message || err}`);
-          }
+          usbLog('<>', 'setSignals übersprungen (log fetch)');
         }
 
         await delay(200);
