@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-28 19:35Z (no forced signals)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-28 20:20Z (ping retries)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -690,27 +690,67 @@
 
         writer = port.writable.getWriter();
 
+        // Ein ABORT vorab sorgt dafür, dass eventuelle Alt-Sessions sauber beendet werden.
+        try {
+          usbLog('->', 'ABORT (sync state)');
+          await writer.write(textEncoder.encode('ABORT\n'));
+          await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK IDLE') || payload.startsWith('ERR NOACTIVE'),
+            1200
+          );
+        } catch (err) {
+          usbLog('!!', `ABORT-Sync übersprungen: ${err?.message || err}`);
+        }
+
         // Vorab Verbindung prüfen (PING). Wenn wir keine Antwort erhalten,
         // brechen wir ab, weil das Gerät vermutlich im falschen Modus ist.
         usbLog('<>', 'Warte auf Gerätebereit (post-open delay)…');
         await delay(1100);
 
-        usbLog('->', 'PING');
-        await writer.write(textEncoder.encode('PING\n'));
-        try {
-          const pong = await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK PONG') || payload.startsWith('ERR'),
-            3000
-          );
-          if (pong.startsWith('ERR')) {
-            usbLog('!!', `Gerät meldet Fehler auf PING: ${pong}`);
-            throw new Error('Gerät reagiert nicht auf PING. Bitte Transfer-Modus erneut aktivieren (BTN2 lang, bis "Transfer" angezeigt wird).');
+        let pingAcknowledged = false;
+        for (let attempt = 0; attempt < 3 && !pingAcknowledged; ++attempt) {
+          const label = attempt === 0 ? 'PING' : `PING (Versuch ${attempt + 1})`;
+          usbLog('->', label);
+          try {
+            await writer.write(textEncoder.encode('PING\n'));
+          } catch (err) {
+            usbLog('!!', `Senden von ${label} fehlgeschlagen: ${err?.message || err}`);
+            if (attempt >= 2) {
+              throw new Error('PING konnte nicht gesendet werden. Bitte Verbindung prüfen.');
+            }
+            await delay(200);
+            continue;
           }
-          usbLog('<=', pong);
-          setUsbStatus('Gerät antwortet – Übertragung wird vorbereitet …');
-        } catch (err) {
-          usbLog('!!', `PING fehlgeschlagen: ${err?.message || err}`);
+
+          try {
+            const reply = await waitForUsbLine(
+              lineReader,
+              (payload) => payload.startsWith('OK PONG') ||
+                           payload.startsWith('OK READY') ||
+                           payload.startsWith('ERR'),
+              3000
+            );
+            if (reply.startsWith('OK PONG')) {
+              setUsbStatus('Gerät antwortet – Übertragung wird vorbereitet …');
+              pingAcknowledged = true;
+              break;
+            }
+            if (reply.startsWith('OK READY')) {
+              setUsbStatus('Gerät meldet Bereitschaft – Übertragung wird vorbereitet …');
+              pingAcknowledged = true;
+              break;
+            }
+          } catch (err) {
+            usbLog('!!', `PING-Antwort fehlgeschlagen (Versuch ${attempt + 1}): ${err?.message || err}`);
+            if (attempt >= 2) {
+              throw new Error('Kein PING von der Brosche empfangen. Bitte Transfer-Modus (BTN2 lang halten) und USB-Kabel prüfen.');
+            }
+            await delay(300);
+          }
+        }
+
+        if (!pingAcknowledged) {
           throw new Error('Kein PING von der Brosche empfangen. Bitte Transfer-Modus (BTN2 lang halten) und USB-Kabel prüfen.');
         }
 
