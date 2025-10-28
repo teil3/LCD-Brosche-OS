@@ -186,6 +186,7 @@
     let manualEndButton = null;
     let manualLogButton = null;
     let manualCloseButton = null;
+    let manualCopyButton = null;
     let manualPort = null;
     let manualReader = null;
     let manualWriter = null;
@@ -217,6 +218,9 @@
       if (manualLogOutput) {
         manualLogOutput.value = manualLogEntries.join('\n');
         manualLogOutput.scrollTop = manualLogOutput.scrollHeight;
+      }
+      if (manualCopyButton) {
+        manualCopyButton.disabled = manualLogEntries.length === 0;
       }
     }
 
@@ -362,6 +366,7 @@
           <button type="button" id="manual-end" disabled>Send END</button>
           <button type="button" id="manual-log" disabled>Send LOG</button>
           <button type="button" id="manual-close" disabled>Port schließen</button>
+          <button type="button" id="manual-copy" disabled>Log kopieren</button>
         </div>
         <div class="manual-input">
           <label for="manual-cmd">Eigener Befehl</label>
@@ -384,6 +389,7 @@
       manualEndButton = section.querySelector('#manual-end');
       manualLogButton = section.querySelector('#manual-log');
       manualCloseButton = section.querySelector('#manual-close');
+      manualCopyButton = section.querySelector('#manual-copy');
 
       const encoder = new TextEncoder();
 
@@ -394,6 +400,8 @@
         manualLogButton.disabled = true;
         manualCloseButton.disabled = true;
         manualCmdButton.disabled = true;
+        manualCopyButton.disabled = manualLogEntries.length === 0;
+        manualOpenButton.disabled = false;
       };
 
       const closePort = async () => {
@@ -438,12 +446,19 @@
           appendManualLog('!! WebSerial wird nicht unterstützt');
           return;
         }
+        if (manualPort) {
+          appendManualLog('== Port bereits geöffnet');
+          return;
+        }
+        manualOpenButton.disabled = true;
         try {
+          appendManualLog('== openPort() gestartet');
           const known = await navigator.serial.getPorts();
           if (known.length > 0) {
             manualPort = known[0];
             appendManualLog(`== Nutze vorhandene Berechtigung (${known.length} Port${known.length>1?'s':''})`);
-          } else {
+          }
+          if (!manualPort) {
             appendManualLog('== Portauswahl …');
             manualPort = await navigator.serial.requestPort();
           }
@@ -453,6 +468,7 @@
         } catch (err) {
           appendManualLog(`!! open failed: ${err?.message || err}`);
           manualPort = null;
+          manualOpenButton.disabled = false;
           return;
         }
 
@@ -495,6 +511,16 @@
         };
 
         manualCloseButton.onclick = () => closePort();
+        manualCopyButton.onclick = async () => {
+          const text = manualLogEntries.join('\n');
+          if (!text) return;
+          try {
+            await navigator.clipboard.writeText(text);
+            appendManualLog('== Log in Zwischenablage kopiert');
+          } catch (err) {
+            appendManualLog(`!! Clipboard-Fehler: ${err?.message || err}`);
+          }
+        };
 
         manualPingButton.disabled = false;
         manualStartButton.disabled = false;
@@ -502,6 +528,7 @@
         manualLogButton.disabled = false;
         manualCloseButton.disabled = false;
         manualCmdButton.disabled = false;
+        manualCopyButton.disabled = manualLogEntries.length === 0;
       };
 
       manualOpenButton.addEventListener('click', () => {
@@ -512,14 +539,14 @@
         openPort().catch((err) => appendManualLog(`!! openPort error: ${err?.message || err}`));
       });
 
-      manualCloseButton.addEventListener('click', () => closePort());
-
       manualCmdInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' && !manualCmdButton.disabled) {
           event.preventDefault();
           manualCmdButton.click();
         }
       });
+
+      resetUi();
     }
 
     function updateActionButtons() {
