@@ -21,8 +21,7 @@ constexpr size_t   kMaxImageSize      = 320 * 1024;   // 320 KB Sicherheitslimit
 constexpr uint32_t kTransferTimeoutMs = 15000;        // 15s Inaktivität -> Abbruch
 constexpr size_t   kChunkBufferSize   = 1024;         // Puffer für eingehende Blöcke
 constexpr size_t   kFilenameCapacity  = sizeof(SerialImageTransfer::Event::filename);
-constexpr size_t   kLineBufferSize    = 512;
-constexpr size_t   kProgressNotifyMin = 1024;         // mind. alle 1 KB Fortschritt melden
+constexpr size_t   kLineBufferSize    = 160;
 
 enum class RxState : uint8_t { Idle = 0, Receiving, AwaitEnd };
 
@@ -36,8 +35,6 @@ struct TransferSession {
   uint32_t lastActivity = 0;
   bool endHintSent = false;
   char filename[kFilenameCapacity];
-  uint8_t* ramBuffer = nullptr;
-  size_t ramCapacity = 0;
 };
 
 QueueHandle_t gEventQueue = nullptr;
@@ -45,14 +42,6 @@ TransferSession gSession;
 bool gTransfersEnabled = false;
 char gLineBuffer[kLineBufferSize];
 size_t gLineLength = 0;
-
-constexpr size_t kLogLineCount = 32;
-constexpr size_t kLogLineLength = 96;
-char gLogBuffer[kLogLineCount][kLogLineLength];
-size_t gLogHead = 0;
-
-uint32_t gLastNoDataLogMs = 0;
-size_t gLastNoDataReceived = 0;
 
 void ensureQueue() {
   if (!gEventQueue) {
@@ -113,30 +102,6 @@ void sendErr(const char* code, const char* fmt = nullptr, ...) {
   va_end(args);
 }
 
-void logLine(const char* tag, const char* fmt = nullptr, ...) {
-  char line[kLogLineLength];
-  size_t pos = 0;
-  if (tag && tag[0]) {
-    pos = std::snprintf(line, sizeof(line), "%s", tag);
-  }
-  if (fmt && fmt[0]) {
-    if (pos < sizeof(line) - 2) {
-      line[pos++] = ' ';
-    }
-    va_list args;
-    va_start(args, fmt);
-    std::vsnprintf(line + pos, sizeof(line) - pos, fmt, args);
-    va_end(args);
-  }
-  line[sizeof(line) - 1] = '\0';
-
-  std::snprintf(gLogBuffer[gLogHead], sizeof gLogBuffer[gLogHead], "%s", line);
-  gLogHead = (gLogHead + 1) % kLogLineCount;
-
-  Serial.print("USB LOG ");
-  Serial.println(line);
-}
-
 void cleanupFileOnError() {
   if (!gSession.filename[0]) return;
   String path = String(kFlashSlidesDir) + "/" + gSession.filename;
@@ -157,11 +122,6 @@ void resetSession() {
   if (gSession.file) {
     gSession.file.close();
   }
-  if (gSession.ramBuffer) {
-    free(gSession.ramBuffer);
-    gSession.ramBuffer = nullptr;
-    gSession.ramCapacity = 0;
-  }
   gSession.file = File();
   gSession.state = RxState::Idle;
   gSession.expected = 0;
@@ -171,9 +131,6 @@ void resetSession() {
   gSession.lastActivity = 0;
   gSession.endHintSent = false;
   std::memset(gSession.filename, 0, sizeof(gSession.filename));
-  for (auto &line : gLogBuffer) {
-    line[0] = '\0';
-  }
 }
 
 bool validateSize(size_t sz) {
@@ -303,24 +260,12 @@ bool beginTransfer(size_t size, const char* requestedName) {
   }
   ensureUniqueOnFs(filename, sizeof(filename));
 
-  bool ramBuffered = false;
-  if (size <= kMaxImageSize) {
-    uint8_t* buffer = static_cast<uint8_t*>(malloc(size));
-    if (buffer) {
-      gSession.ramBuffer = buffer;
-      gSession.ramCapacity = size;
-      ramBuffered = true;
-    }
-  }
-
-  if (!ramBuffered) {
-    String path = String(kFlashSlidesDir) + "/" + filename;
-    gSession.file = LittleFS.open(path.c_str(), FILE_WRITE);
-    if (!gSession.file) {
-      sendErr("OPEN", "Datei konnte nicht angelegt werden");
-      postEvent(SerialImageTransfer::EventType::Error, filename, size, "Datei konnte nicht angelegt werden");
-      return false;
-    }
+  String path = String(kFlashSlidesDir) + "/" + filename;
+  gSession.file = LittleFS.open(path.c_str(), FILE_WRITE);
+  if (!gSession.file) {
+    sendErr("OPEN", "Datei konnte nicht angelegt werden");
+    postEvent(SerialImageTransfer::EventType::Error, filename, size, "Datei konnte nicht angelegt werden");
+    return false;
   }
 
   gSession.state = RxState::Receiving;
@@ -331,8 +276,6 @@ bool beginTransfer(size_t size, const char* requestedName) {
   gSession.lastActivity = gSession.startedAt;
   gSession.endHintSent = false;
   std::snprintf(gSession.filename, sizeof(gSession.filename), "%s", filename);
-
-  logLine("START", "%s %lu", gSession.filename, static_cast<unsigned long>(size));
 
   sendOk("START", "%s %lu", gSession.filename, static_cast<unsigned long>(size));
 
@@ -362,7 +305,6 @@ void abortTransfer(const char* reason, SerialImageTransfer::EventType evtType) {
   resetSession();
 
   sendErr(reason ? reason : "ABORT");
-  logLine("ABORT", "%s %lu", reason ? reason : "?", static_cast<unsigned long>(received));
   postEvent(evtType, fname, received, reason ? reason : "");
   Serial.printf("[USB] ABORT (%s) after %lu bytes\n",
                 reason ? reason : "no-reason",
@@ -378,52 +320,28 @@ void completeTransfer() {
   char fname[sizeof(gSession.filename)];
   std::snprintf(fname, sizeof(fname), "%s", gSession.filename);
   size_t received = gSession.received;
-  bool ramMode = (gSession.ramBuffer != nullptr);
 
-  if (ramMode) {
-    String path = String(kFlashSlidesDir) + "/" + fname;
-    File out = LittleFS.open(path.c_str(), FILE_WRITE);
-    if (!out) {
-      sendErr("FLASH", "Datei konnte nicht angelegt werden");
-      logLine("FLASH", "OPEN_FAIL %s", fname);
-      postEvent(SerialImageTransfer::EventType::Error, fname, received, "Flash-Schreibfehler");
-      resetSession();
-      return;
-    }
-
-    size_t offset = 0;
-    while (offset < received) {
-      size_t chunk = std::min<size_t>(512, received - offset);
-      size_t written = out.write(gSession.ramBuffer + offset, chunk);
-      if (written != chunk) {
-        out.close();
-        LittleFS.remove(path);
-        sendErr("FLASH", "Schreibfehler");
-        logLine("FLASH", "WRITE_FAIL %s %u", fname, static_cast<unsigned>(chunk));
-        postEvent(SerialImageTransfer::EventType::Error, fname, received, "Flash-Schreibfehler");
-        resetSession();
-        return;
-      }
-      offset += written;
-      delay(0);
-    }
-    out.close();
-  } else if (gSession.file) {
-    gSession.file.close();
-  }
+  gSession.file.close();
+  gSession.file = File();
+  gSession.state = RxState::Idle;
+  gSession.expected = 0;
+  gSession.received = 0;
+  gSession.lastNotified = 0;
+  gSession.startedAt = 0;
+  gSession.lastActivity = 0;
+  gSession.endHintSent = false;
+  std::memset(gSession.filename, 0, sizeof(gSession.filename));
 
   sendOk("END", "%s %lu", fname, static_cast<unsigned long>(received));
   postEvent(SerialImageTransfer::EventType::Completed, fname, received, "USB Übertragung abgeschlossen");
   Serial.printf("[USB] COMPLETE %s (%lu bytes)\n",
                 fname,
                 static_cast<unsigned long>(received));
-
-  resetSession();
 }
 
 void processData() {
   if (gSession.state != RxState::Receiving) return;
-  if (!gSession.ramBuffer && !gSession.file) {
+  if (!gSession.file) {
     abortTransfer("NOFILE", SerialImageTransfer::EventType::Error);
     return;
   }
@@ -438,19 +356,8 @@ void processData() {
 
   int available = Serial.available();
   if (available <= 0) {
-    uint32_t now = millis();
-    if (now - gLastNoDataLogMs >= 250 || gSession.received != gLastNoDataReceived) {
-      Serial.printf("[USB DBG] WAIT avail=%d received=%lu/%lu state=%u\n",
-                    available,
-                    static_cast<unsigned long>(gSession.received),
-                    static_cast<unsigned long>(gSession.expected),
-                    static_cast<unsigned>(gSession.state));
-      gLastNoDataLogMs = now;
-      gLastNoDataReceived = gSession.received;
-    }
     return;
   }
-  gLastNoDataLogMs = 0;
   size_t toRead = std::min<size_t>(remaining, static_cast<size_t>(available));
 
   uint8_t buffer[1024];
@@ -458,50 +365,26 @@ void processData() {
     size_t chunk = std::min<size_t>(sizeof(buffer), toRead);
     size_t readCount = Serial.readBytes(buffer, chunk);
     if (readCount == 0) {
-      Serial.printf("[USB DBG] readBytes=0 requested=%u avail_now=%d received=%lu/%lu\n",
-                    static_cast<unsigned>(chunk),
-                    Serial.available(),
-                    static_cast<unsigned long>(gSession.received),
-                    static_cast<unsigned long>(gSession.expected));
       break;
     }
-    size_t consumed = readCount;
-    if (gSession.ramBuffer) {
-      if (gSession.received + readCount > gSession.ramCapacity) {
-        abortTransfer("RAM", SerialImageTransfer::EventType::Error);
-        return;
-      }
-      std::memcpy(gSession.ramBuffer + gSession.received, buffer, readCount);
-      gSession.received += readCount;
-    } else {
-      size_t written = gSession.file.write(buffer, readCount);
-      if (written != readCount) {
-        abortTransfer("WRITE", SerialImageTransfer::EventType::Error);
-        return;
-      }
-      gSession.received += written;
-      consumed = written;
+    size_t written = gSession.file.write(buffer, readCount);
+    if (written != readCount) {
+      abortTransfer("WRITE", SerialImageTransfer::EventType::Error);
+      return;
     }
+    gSession.received += written;
     gSession.lastActivity = millis();
-    toRead -= consumed;
-    logLine("READ", "%lu/%lu chunk=%u avail=%u",
-            static_cast<unsigned long>(gSession.received),
-            static_cast<unsigned long>(gSession.expected),
-            static_cast<unsigned>(consumed),
-            static_cast<unsigned>(Serial.available()));
+    toRead -= written;
   }
 
   if (gSession.expected > 0 && gSession.received <= gSession.expected) {
-    size_t notifyStep = std::max<size_t>(gSession.expected / 16, kProgressNotifyMin);
+    size_t notifyStep = std::max<size_t>(gSession.expected / 10, 4096);
     if (gSession.received - gSession.lastNotified >= notifyStep ||
         gSession.received == gSession.expected) {
       gSession.lastNotified = gSession.received;
       sendOk("PROG", "%lu %lu",
              static_cast<unsigned long>(gSession.received),
              static_cast<unsigned long>(gSession.expected));
-      logLine("PROG", "%lu %lu",
-              static_cast<unsigned long>(gSession.received),
-              static_cast<unsigned long>(gSession.expected));
     }
   }
 
@@ -569,25 +452,6 @@ void processLine(const char* line) {
     return;
   }
 
-  if (std::strcmp(line, "LOG") == 0 || std::strcmp(line, "DUMPLOG") == 0) {
-    sendOk("LOG", "%u", static_cast<unsigned>(kLogLineCount));
-    Serial.println("USB LOG STATUS DISABLED");
-    Serial.printf("USB LOG STATUS STATE=%u ACTIVE=%u ENABLED=%u\n",
-                  static_cast<unsigned>(gSession.state),
-                  SerialImageTransfer::isTransferActive(),
-                  gTransfersEnabled);
-    size_t idx = gLogHead;
-    for (size_t i = 0; i < kLogLineCount; ++i) {
-      const char* entry = gLogBuffer[idx];
-      if (entry[0]) {
-        Serial.print("USB LOG ");
-        Serial.println(entry);
-      }
-      idx = (idx + 1) % kLogLineCount;
-    }
-    return;
-  }
-
   if (!line[0] || std::strlen(line) <= 2 || line[0] == '[' || line[0] == '<' || line[0] == '!' || line[0] == '=') {
     Serial.printf("[USB] IGN %s\n", line);
     return;
@@ -600,19 +464,6 @@ void processLine(const char* line) {
 void processIncoming() {
   if (gSession.state == RxState::Receiving) {
     processData();
-    return;
-  }
-
-  if (!gTransfersEnabled) {
-    while (Serial.available() > 0) {
-      int byteVal = Serial.read();
-      if (byteVal < 0) break;
-      char c = static_cast<char>(byteVal);
-      if (c == '\n') {
-        Serial.println("USB LOG IGNORE (disabled)\n");
-        break;
-      }
-    }
     return;
   }
 
@@ -642,12 +493,10 @@ void processIncoming() {
 namespace SerialImageTransfer {
 
 void begin() {
+  Serial.setRxBufferSize(4096);
   SerialTransferInternal::ensureQueue();
   SerialTransferInternal::gLineLength = 0;
   SerialTransferInternal::resetSession();
-  SerialTransferInternal::gLogHead = 0;
-  SerialTransferInternal::gLastNoDataLogMs = 0;
-  SerialTransferInternal::gLastNoDataReceived = 0;
 }
 
 void tick() {
