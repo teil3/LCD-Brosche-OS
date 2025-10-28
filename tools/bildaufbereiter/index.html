@@ -539,6 +539,8 @@
         openPort().catch((err) => appendManualLog(`!! openPort error: ${err?.message || err}`));
       });
 
+      manualCloseButton.addEventListener('click', () => closePort());
+
       manualCmdInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' && !manualCmdButton.disabled) {
           event.preventDefault();
@@ -806,6 +808,11 @@
     }
 
     async function sendViaUsb() {
+      if (manualPort) {
+        appendManualLog('!! Automatischer Transfer blockiert: Port ist im manuellen Modus geöffnet');
+        setUsbStatus('Port ist aktuell im manuellen Modus geöffnet. Bitte unten "Port schließen" wählen oder den manuellen Test beenden.');
+        return;
+      }
       if (!usbSupported) {
         alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge auf dem Desktop verwenden.');
         return;
