@@ -131,6 +131,7 @@
     let currentDownloadName = 'image_240.jpg';
     let bleSending = false;
     let usbSending = false;
+    let rememberedUsbPort = null;
 
     const secureContextHosts = new Set(['localhost', '127.0.0.1', '::1']);
     const secureContext = window.isSecureContext || secureContextHosts.has(location.hostname);
@@ -390,7 +391,25 @@
         const totalSize = bytes.length;
         const totalLabel = humanReadableSize(totalSize);
 
-        port = await navigator.serial.requestPort();
+        if (!rememberedUsbPort) {
+          const grantedPorts = await navigator.serial.getPorts();
+          if (grantedPorts && grantedPorts.length > 0) {
+            rememberedUsbPort = grantedPorts[0];
+          }
+        }
+        port = rememberedUsbPort;
+        if (!port) {
+          port = await navigator.serial.requestPort();
+          rememberedUsbPort = port;
+        }
+
+        if (port.readable || port.writable) {
+          try {
+            await port.close();
+          } catch (_) {
+            /* ignore */
+          }
+        }
         await port.open({ baudRate: USB_BAUD_RATE, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
         const decoder = new TextDecoderStream();
@@ -479,6 +498,9 @@
         const name = error?.name;
         const message = error?.message || error?.toString() || 'Unbekannter Fehler beim USB-Transfer';
         console.error('USB transfer failed:', error);
+        if (port && port === rememberedUsbPort) {
+          rememberedUsbPort = null;
+        }
         if (name === 'NotFoundError') {
           setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
         } else if (name === 'AbortError') {
