@@ -631,6 +631,14 @@
           } catch (err) {
             usbLog('!!', `setSignals(RTS) fehlgeschlagen (ignoriere): ${err?.message || err}`);
           }
+          try {
+            if (port.getSignals) {
+              const signals = await port.getSignals();
+              usbLog('<>', `Signals nach set: DTR=${signals.dataTerminalReady ? 1 : 0} RTS=${signals.requestToSend ? 1 : 0}`);
+            }
+          } catch (err) {
+            usbLog('!!', `getSignals fehlgeschlagen: ${err?.message || err}`);
+          }
         } else {
           usbLog('<>', 'setSignals nicht verfügbar – behalten Standardpegel bei');
         }
