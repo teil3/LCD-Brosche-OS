@@ -715,23 +715,55 @@
 
         await writer.write(bytes);
         sent = totalSize;
-        setUsbStatus(`Daten gesendet, warte auf Bestätigung vom ESP32...`);
+        setUsbStatus(`Daten gesendet, ESP32 verarbeitet...`);
 
-        // CRITICAL: Wait for PROG response BEFORE sending END (like Python test does!)
-        // The ESP32 needs time to process all data and send PROG
-        usbLog('<>', 'Waiting for PROG confirmation...');
-        try {
-          await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK PROG') || payload.startsWith('OK MSG'),
-            20000  // Give ESP32 plenty of time to process
-          );
-          usbLog('<>', 'PROG received, ESP32 has processed all data');
-        } catch (err) {
-          usbLog('!!', `No PROG received: ${err?.message || err}`);
-          // Continue anyway, maybe ESP32 is ready
+        // Like the Python test: wait a bit for ESP32 to process and drain any PROG messages
+        // The Python test calls expect_ok(" PROG") which reads lines with timeout,
+        // accepting any PROG message (or timing out if none come).
+        // We do the same: try to read responses for a bit, then send END.
+        usbLog('<>', 'Waiting for ESP32 to process data (reading responses)...');
+        const processingStart = performance.now();
+        const maxProcessingWait = 3000; // 3 seconds max
+
+        // Read any PROG/MSG responses that come in, but don't block forever
+        while (performance.now() - processingStart < maxProcessingWait) {
+          try {
+            const line = await lineReader.readLine(500);
+            if (line) {
+              usbLog('<=', line);
+              const trimmed = line.trim();
+              if (trimmed.startsWith('USB')) {
+                const payload = trimmed.slice(3).trimStart();
+                if (payload.startsWith('OK MSG') && payload.includes('END senden')) {
+                  // ESP32 is ready for END command
+                  usbLog('<>', 'ESP32 signals ready for END');
+                  break;
+                }
+                if (payload.startsWith('OK PROG')) {
+                  // Update progress display
+                  const parts = payload.split(/\s+/);
+                  if (parts.length >= 4) {
+                    const received = Number(parts[2]);
+                    const total = Number(parts[3]);
+                    if (Number.isFinite(received) && Number.isFinite(total) && total > 0) {
+                      const pct = Math.min(100, Math.round((received / total) * 100));
+                      setUsbStatus(`ESP32 empfängt ${pct}% (${humanReadableSize(received)} / ${humanReadableSize(total)})`);
+                      if (received >= total) {
+                        usbLog('<>', 'ESP32 reports 100% received');
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            // Timeout or error reading - that's fine, ESP32 might be busy processing
+            break;
+          }
         }
 
+        setUsbStatus('Sende END-Kommando...');
         usbLog('->', 'END');
         await writer.write(textEncoder.encode('END\n'));
 
