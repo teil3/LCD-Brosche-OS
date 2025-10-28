@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'USB Debug build 2025-10-28 16:40Z (skip DTR toggle)';
+    const TOOL_VERSION = 'USB Debug build 2025-10-28 18:05Z (stable DTR handshake)';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -610,10 +610,13 @@
         // aber wenn es klappt, bleibt die Brosche im Transfer-Modus.
         let dtrPinned = false;
         if (typeof port.setSignals === 'function') {
-          // Wir lassen DTR unverändert, damit der ESP32 nicht durch einen Reset das
-          // laufende Transfer-Fenster verliert. Einige Browser setzen DTR beim Öffnen
-          // bereits automatisch auf HIGH; wir loggen nur, ohne den Pegel erneut zu toggeln.
-          usbLog('<>', 'setSignals übersprungen (DTR unverändert lassen)');
+          try {
+            await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+            usbLog('<>', 'setSignals DTR=1 RTS=0');
+            dtrPinned = true;
+          } catch (err) {
+            usbLog('!!', `setSignals(DTR/RTS) fehlgeschlagen: ${err?.message || err}`);
+          }
         } else {
           usbLog('<>', 'setSignals nicht verfügbar – behalten Standardpegel bei');
         }
@@ -670,9 +673,6 @@
               continue;
             }
             strayLines.push(trimmed);
-            if (strayLines.length >= 5) {
-              break;
-            }
           } catch (err) {
             const msg = err?.message || '';
             if (msg.includes('Timeout beim Lesen')) {
@@ -691,8 +691,7 @@
         }
         if (strayLines.length > 0) {
           const preview = strayLines.slice(0, 2).join(' | ');
-          setUsbStatus('Gerät meldet andere Logs – Transfer-Modus erneut aktivieren.');
-          throw new Error(`Gerät meldet andere Logs vor dem Handshake (${preview}). Bitte BTN2 lang halten, bis \"USB-Transfer\" angezeigt wird, und erneut versuchen.`);
+          usbLog('!!', `Ignoriere Nicht-USB-Ausgabe vor Handshake: ${preview}`);
         }
 
         writer = port.writable.getWriter();
@@ -1064,7 +1063,12 @@
         await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
         if (typeof port.setSignals === 'function') {
-          usbLog('<>', 'setSignals übersprungen (log fetch)');
+          try {
+            await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+            usbLog('<>', 'setSignals DTR=1 RTS=0 (log fetch)');
+          } catch (err) {
+            usbLog('<>', `setSignals failed (log fetch): ${err?.message || err}`);
+          }
         }
 
         await delay(200);
