@@ -651,6 +651,7 @@
 
         const bootLines = [];
         const strayLines = [];
+        let readyFromBoot = false;
         const bootDeadline = performance.now() + 1000;
         while (performance.now() < bootDeadline) {
           try {
@@ -661,6 +662,12 @@
             const trimmed = line.trim();
             if (!trimmed) continue;
             if (trimmed.startsWith('USB')) {
+              const payload = trimmed.slice(3).trimStart();
+              if (payload.startsWith('OK READY') || payload.startsWith('OK PONG')) {
+                readyFromBoot = true;
+                setUsbStatus('Gerät meldet Bereitschaft – warte auf Start …');
+                continue;
+              }
               continue;
             }
             const looksLikeReset = trimmed.startsWith('ets ') ||
@@ -704,25 +711,15 @@
 
         writer = port.writable.getWriter();
 
-        // Ein ABORT vorab sorgt dafür, dass eventuelle Alt-Sessions sauber beendet werden.
-        try {
-          usbLog('->', 'ABORT (sync state)');
-          await writer.write(textEncoder.encode('ABORT\n'));
-          await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK IDLE') || payload.startsWith('ERR NOACTIVE'),
-            1200
-          );
-        } catch (err) {
-          usbLog('!!', `ABORT-Sync übersprungen: ${err?.message || err}`);
-        }
-
         // Vorab Verbindung prüfen (PING). Wenn wir keine Antwort erhalten,
         // brechen wir ab, weil das Gerät vermutlich im falschen Modus ist.
         usbLog('<>', 'Warte auf Gerätebereit (post-open delay)…');
         await delay(1100);
 
-        let pingAcknowledged = false;
+        let pingAcknowledged = readyFromBoot;
+        if (pingAcknowledged) {
+          usbLog('<>', 'Bereitschaft aus Vorlogs erkannt – PING optional');
+        }
         for (let attempt = 0; attempt < 3 && !pingAcknowledged; ++attempt) {
           const label = attempt === 0 ? 'PING' : `PING (Versuch ${attempt + 1})`;
           usbLog('->', label);
@@ -740,17 +737,16 @@
           try {
             const reply = await waitForUsbLine(
               lineReader,
-              (payload) => {
-                if (payload.startsWith('OK READY')) {
-                  setUsbStatus('Gerät meldet Bereitschaft – warte auf PONG …');
-                  return false;
-                }
-                return payload.startsWith('OK PONG');
-              },
-              3000
+              (payload) => payload.startsWith('OK PONG') || payload.startsWith('OK READY'),
+              3500
             );
             if (reply.startsWith('OK PONG')) {
               setUsbStatus('Gerät antwortet – Übertragung wird vorbereitet …');
+              pingAcknowledged = true;
+              break;
+            }
+            if (reply.startsWith('OK READY')) {
+              setUsbStatus('Gerät meldet Bereitschaft – Übertragung wird vorbereitet …');
               pingAcknowledged = true;
               break;
             }
