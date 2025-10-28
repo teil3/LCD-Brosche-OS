@@ -134,7 +134,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.10';
+    const TOOL_VERSION = 'V0.11';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -1372,7 +1372,13 @@
         updateActionButtons();
         setUsbStatus('USB-Log wird angefordert …');
 
-        port = await navigator.serial.requestPort();
+        const knownPorts = serialAvailable ? await navigator.serial.getPorts() : [];
+        if (knownPorts.length > 0) {
+          port = knownPorts[0];
+          usbLog('<>', `Nutze vorhandene Port-Freigabe (log fetch)`);
+        } else {
+          port = await navigator.serial.requestPort();
+        }
         await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
 
         if (typeof port.setSignals === 'function') {
