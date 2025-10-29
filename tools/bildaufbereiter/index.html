@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.2';
+    const TOOL_VERSION = 'V0.1';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -460,30 +460,6 @@
       };
     }
 
-    async function flushInputBuffer(lineReader, maxMs = 500) {
-      // Flush any pending data in the input buffer by reading and discarding everything
-      // This is similar to Python's ser.reset_input_buffer()
-      const deadline = performance.now() + maxMs;
-      let flushed = 0;
-      try {
-        while (performance.now() < deadline) {
-          const remaining = deadline - performance.now();
-          if (remaining <= 0) break;
-          const line = await lineReader.readLine(Math.min(remaining, 50));
-          if (line) {
-            flushed++;
-            usbLog('--', `Flushed: ${line.substring(0, 60)}${line.length > 60 ? '...' : ''}`);
-          }
-        }
-      } catch (err) {
-        // Timeout or error is expected when buffer is empty
-      }
-      if (flushed > 0) {
-        usbLog('<>', `Flushed ${flushed} lines from input buffer`);
-      }
-      return flushed;
-    }
-
     async function waitForUsbLine(lineReader, predicate, timeoutMs) {
       const deadline = performance.now() + timeoutMs;
       while (true) {
@@ -653,11 +629,6 @@
 
         writer = port.writable.getWriter();
 
-        // CRITICAL FIX: Flush input buffer before PING to clear any garbage
-        // This is equivalent to Python's ser.reset_input_buffer()
-        usbLog('<>', 'Leere Input-Buffer...');
-        await flushInputBuffer(lineReader, 500);
-
         // Vorab Verbindung prüfen (PING). Wenn wir keine Antwort erhalten,
         // brechen wir ab, weil das Gerät vermutlich im falschen Modus ist.
         usbLog('<>', 'Prüfe Verbindung mit PING…');
@@ -804,17 +775,10 @@
         sent = totalSize;
         usbLog('<>', 'Host finished writing to port');
 
-        // CRITICAL FIX: With RAM buffering, ESP32 no longer sends PROG messages during transfer
-        // We need to wait based on expected transfer time, not on PROG messages
-        const baudRate = 115200;
-        const expectedTransferTime = (totalSize * 10) / baudRate * 1000; // in ms (10 bits per byte)
-        const waitTime = Math.max(expectedTransferTime + 2000, 3000); // At least 3s, or expected time + 2s margin
-
+        // Wait for ESP32 to finish processing (max 5 seconds)
         setUsbStatus('Warte auf Verarbeitung durch ESP32...');
-        usbLog('<>', `Waiting ${Math.round(waitTime / 1000)}s for ESP32 to receive and buffer data...`);
-
         const waitStart = performance.now();
-        while (!esp32Ready && !backgroundReaderError && (performance.now() - waitStart) < waitTime) {
+        while (!esp32Ready && !backgroundReaderError && (performance.now() - waitStart) < 5000) {
           await delay(100);
         }
 
@@ -823,9 +787,8 @@
         }
 
         if (!esp32Ready) {
-          usbLog('!!', `ESP32 not ready after ${Math.round(waitTime / 1000)}s, last received: ${lastReceivedBytes}/${totalSize}`);
-          usbLog('<>', 'Continuing anyway - ESP32 may be ready but did not send confirmation');
-          // Continue anyway - with RAM buffering, ESP32 might not send any message until END
+          usbLog('!!', `ESP32 not ready after 5s, last received: ${lastReceivedBytes}/${totalSize}`);
+          // Continue anyway - maybe ESP32 is ready but didn't send the message
         }
 
         setUsbStatus('Sende END-Kommando...');
