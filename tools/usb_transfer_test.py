@@ -94,12 +94,18 @@ def main() -> None:
         else:
             ser.write(data)
             ser.flush()
-        expect_ok(" PROG", iter_lines(ser, timeout=4))
+
+        # Wait for ESP32 to finish receiving (no PROG messages during transfer anymore)
+        # Calculate expected transfer time and add margin
+        expected_time = (len(data) * 10) / args.baud  # 10 bits per byte
+        time.sleep(expected_time + 1.0)  # Add 1 second margin
 
         ser.write(b"END\n")
         ser.flush()
-        for line in iter_lines(ser, timeout=4):
+        for line in iter_lines(ser, timeout=10):
             print(line)
+            if line.startswith("USB OK PROG"):  # May receive final PROG before END
+                continue
             if line.startswith("USB OK END"):
                 break
         else:
