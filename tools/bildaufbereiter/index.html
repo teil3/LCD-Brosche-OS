@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.1';
+    const TOOL_VERSION = 'V0.2';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -595,19 +595,30 @@
 
         setUsbStatus('Seriellen Port auswählen …');
         port = await navigator.serial.requestPort();
+
+        // CRITICAL FIX: Simulate "monitor trick" by opening, closing, and reopening the port
+        // This resets the OS-level serial driver state, which is necessary for reliable communication
+        // Without this, the Web Serial API often fails to establish proper communication
+        usbLog('<>', 'Performing port reset cycle (simulating monitor trick)...');
         try {
-          // IMPORTANT: Do NOT set flowControl or signals that might reset the ESP32.
-          // The user must manually enter USB transfer mode (BTN2 long press in slideshow).
+          await port.open({ baudRate: 115200 });
+          await delay(100);
+          await port.close();
+          usbLog('<>', 'Port reset: closed');
+          await delay(200);
+        } catch (err) {
+          usbLog('!!', `Port reset cycle failed (non-critical): ${err?.message || err}`);
+        }
+
+        // Now open the port for real
+        try {
           await port.open({ baudRate: 115200 });
         } catch (err) {
           usbLog('!!', `open failed: ${err?.message || err}`);
           throw err;
         }
 
-        // Do NOT call setSignals at all - leave DTR/RTS untouched!
-        // The ESP32 is already running in USB transfer mode (manually activated by user).
-        // Any signal changes might reset or disturb the ESP32.
-        usbLog('<>', 'Port opened, no signal changes (user has activated USB mode)');
+        usbLog('<>', 'Port opened after reset cycle');
 
         // Short delay to let the connection settle
         await delay(300);

@@ -194,11 +194,10 @@ Use `TextRenderer::drawCentered()` with outline for toast messages. Follow with 
 ## Web Tool Version Management
 
 The Bildaufbereiter web tool (`tools/bildaufbereiter/index.html`) uses semantic versioning:
-- **Current version: V0.1**
-- Version is defined at line ~127: `const TOOL_VERSION = 'V0.1';`
-- **IMPORTANT:** When making changes to `index.html`, increment ONLY the minor version (V0.1 → V0.2 → V0.3, etc.)
+- Version is defined at line ~127: `const TOOL_VERSION = 'V0.X';`
+- **IMPORTANT:** When making changes to `index.html`, increment ONLY the minor version (the number after the dot)
 - **NEVER change the major version** (the number before the dot) - only the user can do that or will explicitly tell you
-- The version is displayed in the UI as: "V0.1 · mozjpeg: ..."
+- The version is displayed in the UI alongside the mozjpeg version
 
 ### git Status Note
 The modified file `Core/SerialImageTransfer.cpp` is from recent development work. Check git diff before committing to avoid losing uncommitted changes.
