@@ -124,7 +124,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.6';
+    const TOOL_VERSION = 'V0.7';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -640,28 +640,52 @@
 
         writer = port.writable.getWriter();
 
-        // Vorab Verbindung prüfen (PING). Wenn wir keine Antwort erhalten,
-        // brechen wir ab, weil das Gerät vermutlich im falschen Modus ist.
+        // Vorab Verbindung prüfen (PING). Mit Retry-Mechanismus für den Fall,
+        // dass der Benutzer zu schnell nach Aktivierung des Transfer-Modus klickt.
         usbLog('<>', 'Prüfe Verbindung mit PING…');
         await delay(100);
 
-        usbLog('->', 'PING');
-        await writer.write(textEncoder.encode('PING\n'));
-        try {
-          const pong = await waitForUsbLine(
-            lineReader,
-            (payload) => payload.startsWith('OK PONG') || payload.startsWith('ERR'),
-            3000
-          );
-          if (pong.startsWith('ERR')) {
-            usbLog('!!', `Gerät meldet Fehler auf PING: ${pong}`);
-            throw new Error('Gerät reagiert nicht auf PING. Bitte Transfer-Modus erneut aktivieren (BTN2 lang, bis "Transfer" angezeigt wird).');
+        const maxPingRetries = 5;
+        let pingSuccess = false;
+        let lastPingError = null;
+
+        for (let attempt = 1; attempt <= maxPingRetries; attempt++) {
+          try {
+            if (attempt > 1) {
+              setUsbStatus(`Warte auf Transfer-Modus... (Versuch ${attempt}/${maxPingRetries})`);
+              usbLog('<>', `PING retry attempt ${attempt}/${maxPingRetries}`);
+              await delay(1000); // 1 Sekunde zwischen Retries
+            }
+
+            usbLog('->', 'PING');
+            await writer.write(textEncoder.encode('PING\n'));
+
+            const pong = await waitForUsbLine(
+              lineReader,
+              (payload) => payload.startsWith('OK PONG') || payload.startsWith('ERR'),
+              3000
+            );
+
+            if (pong.startsWith('ERR')) {
+              usbLog('!!', `Gerät meldet Fehler auf PING: ${pong}`);
+              throw new Error('Gerät meldet Fehler');
+            }
+
+            usbLog('<=', pong);
+            setUsbStatus('Gerät antwortet – Übertragung wird vorbereitet …');
+            pingSuccess = true;
+            break;
+
+          } catch (err) {
+            lastPingError = err;
+            usbLog('!!', `PING Versuch ${attempt} fehlgeschlagen: ${err?.message || err}`);
+            // Continue to next retry
           }
-          usbLog('<=', pong);
-          setUsbStatus('Gerät antwortet – Übertragung wird vorbereitet …');
-        } catch (err) {
-          usbLog('!!', `PING fehlgeschlagen: ${err?.message || err}`);
-          throw new Error('Kein PING von der Brosche empfangen. Bitte Transfer-Modus (BTN2 lang halten) und USB-Kabel prüfen.');
+        }
+
+        if (!pingSuccess) {
+          usbLog('!!', `Alle ${maxPingRetries} PING-Versuche fehlgeschlagen`);
+          throw new Error(`Transfer-Modus nicht aktiv. Bitte BTN2 lang halten bis "TRANSFER" angezeigt wird, dann erneut versuchen.`);
         }
 
         const startLine = `START ${totalSize} ${sanitizedName}\n`;
