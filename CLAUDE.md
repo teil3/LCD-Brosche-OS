@@ -150,6 +150,8 @@ Currently, only `SlideshowApp` handles these events via callbacks:
 
 ## Adding New Apps
 
+### Traditional C++ Apps (Statically Compiled)
+
 1. Create `Apps/YourApp.h` and `Apps/YourApp.cpp`
 2. Inherit from `App` base class
 3. Implement all virtual methods (name, init, tick, draw, onButton, shutdown)
@@ -157,6 +159,134 @@ Currently, only `SlideshowApp` handles these events via callbacks:
 5. Create instance: `YourApp app_yourapp;`
 6. Register in setup(): `appman.add(&app_yourapp);`
 7. Force-compile: Add `#include "Apps/YourApp.cpp"` at bottom of .ino
+
+### Plugin Apps (Function Table Based) ⚠️ EXPERIMENTAL
+
+A new plugin architecture allows apps to be developed against a stable ABI (Application Binary Interface) using a function table pattern. This enables future possibilities like dynamic loading from `.bin` files.
+
+**Status:** Phase 1 (Static Plugins) is **WORKING**. Phase 2 (Dynamic Loading) is **IN PROGRESS**.
+
+#### Architecture Components
+
+**AppAPI Interface** (`Core/AppAPI.h`):
+- Defines stable function table with core functionality
+- Version field for ABI compatibility checking
+- Provides access to: TFT display, TextRenderer, logging, timing
+
+**PluginAppVTable** (`Core/AppAPI.h`):
+- Standard vtable structure for plugin apps
+- Required functions: init, onActivate, tick, draw, onButton, shutdown, getName
+- All plugins must export this vtable with C linkage
+
+**StaticPluginApp** (`Core/StaticPluginApp.h/cpp`):
+- Wrapper that adapts plugin vtable to App interface
+- Used for statically-linked plugins (Phase 1)
+- Zero overhead - just function pointer indirection
+
+**PluginApp** (`Core/PluginApp.h/cpp`):
+- Future: Loads `.bin` files from LittleFS at runtime
+- Status: Structure in place, relocation not yet implemented
+
+#### Phase 1: Static Plugin Development (WORKING)
+
+Create plugin apps that use only the AppAPI interface:
+
+**Example:** See `Apps/HelloWorldApp.cpp`
+
+```cpp
+#include "Core/AppAPI.h"
+
+static const AppAPI* api = nullptr;
+
+extern "C" {
+  void plugin_init(const AppAPI* core_api) {
+    api = core_api;
+  }
+
+  void plugin_draw() {
+    api->drawCentered(100, "Hello Plugin", 0xFFFF, 0x0000);
+  }
+
+  // ... other lifecycle functions
+
+  const PluginAppVTable helloworld_vtable = {
+    .init = plugin_init,
+    .onActivate = plugin_onActivate,
+    .tick = plugin_tick,
+    .draw = plugin_draw,
+    .onButton = plugin_onButton,
+    .shutdown = plugin_shutdown,
+    .getName = plugin_getName
+  };
+}
+
+extern "C" const PluginAppVTable* getHelloWorldVTable() {
+  return &helloworld_vtable;
+}
+```
+
+**Register in ESP32-BoardOS.ino:**
+```cpp
+extern "C" const PluginAppVTable* getHelloWorldVTable();
+StaticPluginApp app_helloworld(getHelloWorldVTable());
+
+void setup() {
+  // ...
+  appman.add(&app_helloworld);
+  // ...
+}
+```
+
+**Benefits:**
+- Apps are decoupled from core implementation
+- Only depends on AppAPI interface
+- Future-proof for dynamic loading
+- Same performance as regular apps
+
+#### Phase 2: Dynamic Plugin Loading (IN PROGRESS)
+
+**Goal:** Load apps from `.bin` files at runtime without recompiling firmware.
+
+**Build System:** `plugins/` directory contains separate build environment:
+- `plugins/Makefile` - Compiles plugins with `-fPIC` for position independence
+- `plugins/plugin.ld` - Custom linker script placing vtable at offset 0
+- `plugins/runtime.c` - Minimal libc functions (memcpy, memset, memmove)
+- `plugins/HelloWorldPlugin.cpp` - Standalone plugin example
+
+**Building Plugins:**
+```bash
+cd plugins
+make HelloWorldPlugin
+# Creates: ../data/apps/HelloWorld.bin (835 bytes)
+```
+
+**Plugin Binary Format:**
+- Position-independent code (PIC)
+- VTable at offset 0 for easy discovery
+- No external dependencies (self-contained)
+- Uses only AppAPI for core access
+
+**What Works:**
+✅ Build system compiles plugins to `.bin` files
+✅ Linker script places vtable at known location
+✅ AppAPI interface fully functional
+✅ StaticPluginApp wrapper tested and working
+
+**What's Missing (TODO):**
+❌ **Relocation:** Convert relative offsets to absolute IRAM addresses
+❌ **PluginApp loader:** Finish implementing binary loader
+❌ **Auto-discovery:** Scan `/apps/*.bin` at boot
+❌ **Upload system:** Transfer `.bin` files via USB/BLE
+
+**Technical Challenges:**
+- ESP32 has no MMU for virtual addressing
+- No standard dynamic linker
+- Must manually relocate function pointers
+- Limited IRAM for code (plugins load to IRAM for execution)
+
+**See:** `plugins/TODO.md` for detailed implementation roadmap.
+
+**Current Recommendation:** Use StaticPluginApp for new apps until Phase 2 is complete.
 
 ## Hardware Constraints & Rules
 

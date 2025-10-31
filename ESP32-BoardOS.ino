@@ -16,6 +16,7 @@
 #include "Core/Storage.h"
 #include "Core/BleImageTransfer.h"
 #include "Core/SerialImageTransfer.h"
+#include "Core/StaticPluginApp.h"
 
 // Buttons
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
@@ -35,6 +36,9 @@ static const char* btnEventName(BtnEvent e) {
   }
 }
 
+// Forward declaration for HelloWorld plugin
+extern "C" const PluginAppVTable* getHelloWorldVTable();
+
 // Apps
 AppManager appman;
 SlideshowApp app_slideshow;
@@ -45,6 +49,7 @@ RandomPixelIntoneApp app_pixel_blocks;
 RandomSquareIntoneApp app_square_intone;
 RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
+StaticPluginApp app_helloworld(getHelloWorldVTable());
 
 void setup() {
   Serial.setRxBufferSize(8192);
@@ -82,6 +87,7 @@ void setup() {
   if (kUsbDebug) Serial.println("[BOOT] buttons ready");
 
   appman.add(&app_slideshow);
+  appman.add(&app_helloworld);
   appman.add(&app_pixel_field);
   appman.add(&app_pixel_blocks);
   appman.add(&app_random_lines);
@@ -220,7 +226,9 @@ void loop() {
 #include "Core/Gfx.cpp"
 #include "Core/Storage.cpp"
 #include "Core/TextRenderer.cpp"
+#include "Core/StaticPluginApp.cpp"
 #include "Apps/SlideshowApp.cpp"
+#include "Apps/HelloWorldApp.cpp"
 #include "Apps/PixelFieldApp.cpp"
 #include "Apps/RandomImagerApp.cpp"
 #include "Apps/RandomPastellerApp.cpp"
