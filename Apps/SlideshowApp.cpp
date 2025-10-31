@@ -272,13 +272,28 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
       bleOverlayDirty_ = true;
       bleOverlayNeedsClear_ = true;
       break;
+
+    case ControlMode::DeleteMenu:
+      auto_mode = false;
+      toastText_.clear();
+      toastUntil_ = 0;
+      deleteState_ = DeleteState::Idle;
+      deleteMenuSelection_ = 0;
+      markDeleteMenuDirty_();
+      break;
   }
   timeSinceSwitch_ = 0;
 
-  if ((previous == ControlMode::StorageMenu || previous == ControlMode::BleReceive) &&
-      controlMode_ != ControlMode::StorageMenu && controlMode_ != ControlMode::BleReceive) {
+  if ((previous == ControlMode::StorageMenu || previous == ControlMode::BleReceive || previous == ControlMode::DeleteMenu) &&
+      controlMode_ != ControlMode::StorageMenu && controlMode_ != ControlMode::BleReceive && controlMode_ != ControlMode::DeleteMenu) {
     if (!files_.empty()) {
       showCurrent_();
+    } else {
+      tft.fillScreen(TFT_BLACK);
+      const int16_t line = TextRenderer::lineHeight();
+      const int16_t centerY = (TFT_H - line * 2) / 2;
+      TextRenderer::drawCentered(centerY, "Keine Bilder", TFT_WHITE, TFT_BLACK);
+      TextRenderer::drawCentered(centerY + line, "gefunden", TFT_WHITE, TFT_BLACK);
     }
   }
 }
@@ -555,6 +570,165 @@ void SlideshowApp::handleCopyTick_(uint32_t budget_ms) {
 
 }
 
+void SlideshowApp::enterDeleteMenu_() {
+  setControlMode_(ControlMode::DeleteMenu);
+}
+
+void SlideshowApp::exitDeleteMenu_() {
+  if (controlMode_ != ControlMode::DeleteMenu) return;
+  deleteState_ = DeleteState::Idle;
+  setControlMode_(ControlMode::Auto);
+}
+
+void SlideshowApp::requestDeleteAll_() {
+  deleteState_ = DeleteState::DeleteAllConfirm;
+  deleteConfirmSelection_ = 0; // Nein vorauswählen
+  toastText_.clear();
+  toastUntil_ = 0;
+  toastDirty_ = false;
+  markDeleteConfirmDirty_();
+}
+
+void SlideshowApp::confirmDeleteAll_() {
+  if (deleteState_ != DeleteState::DeleteAllConfirm) return;
+  if (deleteConfirmSelection_ != 1) {
+    cancelDeleteAll_();
+    return;
+  }
+  performDeleteAll_();
+}
+
+void SlideshowApp::cancelDeleteAll_() {
+  deleteState_ = DeleteState::Idle;
+  showToast_("Abgebrochen", kToastShortMs);
+  markDeleteMenuDirty_();
+}
+
+void SlideshowApp::startDeleteSingle_() {
+  if (!ensureFlashReady_()) {
+    showToast_("Flash-Fehler", kToastLongMs);
+    deleteState_ = DeleteState::Idle;
+    markDeleteMenuDirty_();
+    return;
+  }
+
+  if (!rebuildFileListFrom_(SlideSource::Flash)) {
+    showToast_("Keine Flash-Bilder", kToastLongMs);
+    deleteState_ = DeleteState::Idle;
+    markDeleteMenuDirty_();
+    return;
+  }
+
+  source_ = SlideSource::Flash;
+  idx_ = 0;
+  deleteState_ = DeleteState::DeleteSingle;
+  deleteSingleTimer_ = 0;
+  showCurrent_();
+}
+
+void SlideshowApp::requestDeleteSingle_() {
+  if (deleteState_ != DeleteState::DeleteSingle) return;
+  if (files_.empty()) return;
+
+  deleteState_ = DeleteState::DeleteSingleConfirm;
+  deleteCurrentFile_ = files_[idx_];
+  deleteConfirmSelection_ = 0; // Nein vorauswählen
+  markDeleteConfirmDirty_();
+}
+
+void SlideshowApp::confirmDeleteSingle_() {
+  if (deleteState_ != DeleteState::DeleteSingleConfirm) return;
+  if (deleteConfirmSelection_ != 1) {
+    cancelDeleteSingle_();
+    return;
+  }
+
+  performDeleteSingle_(deleteCurrentFile_);
+  deleteCurrentFile_.clear();
+
+  if (!rebuildFileListFrom_(SlideSource::Flash) || files_.empty()) {
+    deleteState_ = DeleteState::Idle;
+    setControlMode_(ControlMode::Auto);
+    showToast_("Keine Bilder mehr", kToastLongMs);
+    return;
+  }
+
+  if (idx_ >= files_.size()) {
+    idx_ = 0;
+  }
+
+  deleteState_ = DeleteState::DeleteSingle;
+  deleteSingleTimer_ = 0;
+  showCurrent_();
+  showToast_("Gelöscht", kToastShortMs);
+}
+
+void SlideshowApp::cancelDeleteSingle_() {
+  deleteState_ = DeleteState::DeleteSingle;
+  deleteSingleTimer_ = 0;
+  if (!files_.empty()) {
+    showCurrent_();
+  }
+}
+
+void SlideshowApp::performDeleteAll_() {
+  if (!ensureFlashReady_()) {
+    deleteState_ = DeleteState::Error;
+    showToast_("Flash-Fehler", kCopyErrorToastMs);
+    deleteState_ = DeleteState::Idle;
+    markDeleteMenuDirty_();
+    return;
+  }
+
+  std::vector<String> flashFiles;
+  if (!readDirectoryEntries_(&LittleFS, kFlashSlidesDir, flashFiles)) {
+    showToast_("Keine Bilder", kToastLongMs);
+    deleteState_ = DeleteState::Idle;
+    markDeleteMenuDirty_();
+    return;
+  }
+
+  deleteCount_ = 0;
+  for (const String& path : flashFiles) {
+    if (LittleFS.remove(path.c_str())) {
+      deleteCount_++;
+      Serial.printf("[Delete] Removed: %s\n", path.c_str());
+    } else {
+      Serial.printf("[Delete] FAILED to remove: %s\n", path.c_str());
+    }
+  }
+
+  deleteState_ = DeleteState::Done;
+  String msg = String(deleteCount_) + String(" Bilder gelöscht");
+  showToast_(msg, kCopyDoneToastMs);
+
+  files_.clear();
+  idx_ = 0;
+  deleteState_ = DeleteState::Idle;
+  setControlMode_(ControlMode::Auto);
+
+  if (!rebuildFileList_()) {
+    tft.fillScreen(TFT_BLACK);
+    showToast_("Keine Bilder", kToastLongMs);
+  }
+}
+
+void SlideshowApp::performDeleteSingle_(const String& path) {
+  if (LittleFS.remove(path.c_str())) {
+    Serial.printf("[Delete] Removed: %s\n", path.c_str());
+  } else {
+    Serial.printf("[Delete] FAILED to remove: %s\n", path.c_str());
+  }
+}
+
+void SlideshowApp::markDeleteMenuDirty_() {
+  deleteMenuDirty_ = true;
+}
+
+void SlideshowApp::markDeleteConfirmDirty_() {
+  deleteConfirmDirty_ = true;
+}
+
 void SlideshowApp::showCurrent_() {
   if (files_.empty()) return;
 
@@ -650,6 +824,8 @@ String SlideshowApp::modeLabel_() const {
       return String("EINSTELLUNG");
     case ControlMode::BleReceive:
       return String("TRANSFER");
+    case ControlMode::DeleteMenu:
+      return String("LÖSCHEN");
   }
   return String("?");
 }
@@ -851,6 +1027,75 @@ void SlideshowApp::markCopyConfirmDirty_() {
   copyConfirmLastSelection_ = 255;
 }
 
+void SlideshowApp::drawDeleteMenuOverlay_() {
+  if (!deleteMenuDirty_) return;
+  deleteMenuDirty_ = false;
+
+  tft.fillScreen(TFT_BLACK);
+
+  const int16_t line = TextRenderer::lineHeight();
+  const int16_t spacing = 10;
+  const int16_t top = 28;
+  const int16_t option1Y = top + line + spacing;
+  const int16_t option2Y = option1Y + line + spacing;
+  const int16_t hint1Y = option2Y + line + spacing + 8;
+  const int16_t hint2Y = hint1Y + line + spacing;
+
+  TextRenderer::drawCentered(top, "Lösch-Menü", TFT_WHITE, TFT_BLACK);
+
+  String option1 = (deleteMenuSelection_ == 0) ? String("> Alle löschen") : String("Alle löschen");
+  String option2 = (deleteMenuSelection_ == 1) ? String("> Einzeln") : String("Einzeln");
+
+  TextRenderer::drawCentered(option1Y, option1, TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(option2Y, option2, TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(hint1Y, "Doppel: Starten", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(hint2Y, "Lang: Auto", TFT_WHITE, TFT_BLACK);
+}
+
+void SlideshowApp::drawDeleteAllConfirmOverlay_() {
+  if (!deleteConfirmDirty_) return;
+  deleteConfirmDirty_ = false;
+
+  tft.fillScreen(TFT_BLACK);
+
+  const int16_t line = TextRenderer::lineHeight();
+  const int16_t top = 32;
+  TextRenderer::drawCentered(top, "Flash", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line, "löschen?", TFT_WHITE, TFT_BLACK);
+
+  String options = (deleteConfirmSelection_ == 0) ? String("> Nein    Ja")
+                                                  : String("Nein    > Ja");
+  TextRenderer::drawCentered(top + line * 2 + 16, options, TFT_WHITE, TFT_BLACK);
+
+  TextRenderer::drawCentered(top + line * 3 + 28, "Klick: Wechseln", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line * 4 + 28, "Lang: Bestätigen", TFT_WHITE, TFT_BLACK);
+}
+
+void SlideshowApp::drawDeleteSingleConfirmOverlay_() {
+  if (!deleteConfirmDirty_) return;
+  deleteConfirmDirty_ = false;
+
+  tft.fillScreen(TFT_BLACK);
+
+  const int16_t line = TextRenderer::lineHeight();
+  const int16_t top = 26;
+
+  TextRenderer::drawCentered(top, "Bild löschen?", TFT_WHITE, TFT_BLACK);
+
+  String filename = deleteCurrentFile_;
+  int s = filename.lastIndexOf('/');
+  if (s >= 0) filename = filename.substring(s + 1);
+
+  TextRenderer::drawCentered(top + line + 6, filename, TFT_WHITE, TFT_BLACK);
+
+  String options = (deleteConfirmSelection_ == 0) ? String("> Nein    Ja")
+                                                  : String("Nein    > Ja");
+  TextRenderer::drawCentered(top + line * 2 + 20, options, TFT_WHITE, TFT_BLACK);
+
+  TextRenderer::drawCentered(top + line * 3 + 32, "Klick: Wechseln", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line * 4 + 32, "Lang: Bestätigen", TFT_WHITE, TFT_BLACK);
+}
+
 void SlideshowApp::drawBleReceiveOverlay_() {
   if (bleState_ == BleState::Receiving) {
     size_t expected = 0;
@@ -1038,7 +1283,7 @@ void SlideshowApp::drawBleReceiveOverlay_() {
     footer = toastText_;
   }
   if (footer.isEmpty()) {
-    footer = "Lang: Auto";
+    footer = "Lang: Löschmodus";
   }
   if (allowClear) {
     if (footer != bleLastFooter_) {
@@ -1153,12 +1398,23 @@ void SlideshowApp::init() {
   bleLastSecondary_.clear();
   bleLastFooter_.clear();
   transferSource_ = TransferSource::None;
+  deleteState_ = DeleteState::Idle;
+  deleteMenuSelection_ = 0;
+  deleteConfirmSelection_ = 0;
+  deleteMenuDirty_ = true;
+  deleteConfirmDirty_ = true;
+  deleteSingleTimer_ = 0;
+  deleteCurrentFile_.clear();
+  deleteCount_ = 0;
 
   applyDwell_();
 
   if (!rebuildFileList_()) {
     tft.fillScreen(TFT_BLACK);
-    showToast_("Keine Bilder auf SD", kToastLongMs);
+    const int16_t line = TextRenderer::lineHeight();
+    const int16_t centerY = (TFT_H - line * 2) / 2;
+    TextRenderer::drawCentered(centerY, "Keine Bilder", TFT_WHITE, TFT_BLACK);
+    TextRenderer::drawCentered(centerY + line, "gefunden", TFT_WHITE, TFT_BLACK);
     return;
   }
 
@@ -1208,7 +1464,29 @@ void SlideshowApp::tick(uint32_t delta_ms) {
     return;
   }
 
-  if (files_.empty()) return;
+  if (deleteState_ == DeleteState::DeleteSingle) {
+    deleteSingleTimer_ += delta_ms;
+    if (deleteSingleTimer_ >= 2000) {
+      deleteSingleTimer_ = 0;
+      advance_(+1);
+    }
+    return;
+  }
+
+  if (files_.empty()) {
+    static uint32_t lastCheckTime = 0;
+    const uint32_t now = millis();
+    if (now - lastCheckTime >= 1000) {
+      lastCheckTime = now;
+      if (rebuildFileList_()) {
+        showCurrent_();
+        if (controlMode_ == ControlMode::Auto) {
+          showToast_(modeLabel_(), kToastShortMs);
+        }
+      }
+    }
+    return;
+  }
 
   if (!auto_mode) return;
 
@@ -1220,6 +1498,38 @@ void SlideshowApp::tick(uint32_t delta_ms) {
 
 void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
   if (index != 2) return;
+
+  switch (deleteState_) {
+    case DeleteState::DeleteAllConfirm:
+      if (e == BtnEvent::Single) {
+        deleteConfirmSelection_ ^= 1;
+        markDeleteConfirmDirty_();
+      } else if (e == BtnEvent::Long) {
+        confirmDeleteAll_();
+      }
+      return;
+
+    case DeleteState::DeleteSingle:
+      if (e == BtnEvent::Single) {
+        requestDeleteSingle_();
+      } else if (e == BtnEvent::Long) {
+        deleteState_ = DeleteState::Idle;
+        markDeleteMenuDirty_();
+      }
+      return;
+
+    case DeleteState::DeleteSingleConfirm:
+      if (e == BtnEvent::Single) {
+        deleteConfirmSelection_ ^= 1;
+        markDeleteConfirmDirty_();
+      } else if (e == BtnEvent::Long) {
+        confirmDeleteSingle_();
+      }
+      return;
+
+    default:
+      break;
+  }
 
   switch (copyState_) {
     case CopyState::Running:
@@ -1255,6 +1565,9 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
                      ? String("Übertragung läuft")
                      : String("Bereit für Browser");
         showToast_(msg, kToastShortMs);
+      } else if (controlMode_ == ControlMode::DeleteMenu) {
+        deleteMenuSelection_ ^= 1;
+        markDeleteMenuDirty_();
       } else {
         advance_(+1);
       }
@@ -1266,6 +1579,12 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
       } else if (controlMode_ == ControlMode::BleReceive) {
         bleOverlayDirty_ = true;
         showToast_(bleLastMessage_.isEmpty() ? String("Warte auf Senden") : bleLastMessage_, kToastShortMs);
+      } else if (controlMode_ == ControlMode::DeleteMenu) {
+        if (deleteMenuSelection_ == 0) {
+          requestDeleteAll_();
+        } else {
+          startDeleteSingle_();
+        }
       } else {
         dwellIdx_ = (dwellIdx_ + 1) % kDwellSteps.size();
         applyDwell_();
@@ -1280,7 +1599,9 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
         showToast_("Lang: Modus verlassen", kToastShortMs);
       } else if (controlMode_ == ControlMode::BleReceive) {
         bleOverlayDirty_ = true;
-        showToast_("Lang: Auto-Modus", kToastShortMs);
+        showToast_("Lang: Löschmodus", kToastShortMs);
+      } else if (controlMode_ == ControlMode::DeleteMenu) {
+        showToast_("Lang: Auto", kToastShortMs);
       } else {
         show_filename = !show_filename;
         showCurrent_();
@@ -1289,11 +1610,17 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
 
     case BtnEvent::Long: {
       if (controlMode_ == ControlMode::Auto) {
-        setControlMode_(ControlMode::Manual);
+        if (files_.empty()) {
+          setControlMode_(ControlMode::StorageMenu);
+        } else {
+          setControlMode_(ControlMode::Manual);
+        }
       } else if (controlMode_ == ControlMode::Manual) {
         setControlMode_(ControlMode::StorageMenu);
       } else if (controlMode_ == ControlMode::StorageMenu) {
         setControlMode_(ControlMode::BleReceive);
+      } else if (controlMode_ == ControlMode::BleReceive) {
+        setControlMode_(ControlMode::DeleteMenu);
       } else {
         setControlMode_(ControlMode::Auto);
       }
@@ -1312,6 +1639,18 @@ void SlideshowApp::draw() {
   }
   if (copyState_ == CopyState::Confirm) {
     drawCopyConfirmOverlay_();
+    return;
+  }
+  if (deleteState_ == DeleteState::DeleteAllConfirm) {
+    drawDeleteAllConfirmOverlay_();
+    return;
+  }
+  if (deleteState_ == DeleteState::DeleteSingleConfirm) {
+    drawDeleteSingleConfirmOverlay_();
+    return;
+  }
+  if (controlMode_ == ControlMode::DeleteMenu && deleteState_ == DeleteState::Idle) {
+    drawDeleteMenuOverlay_();
     return;
   }
   if (controlMode_ == ControlMode::StorageMenu) {

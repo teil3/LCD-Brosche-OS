@@ -32,10 +32,11 @@ public:
   void onUsbTransferAborted(const char* message);
 
 private:
-  enum class ControlMode : uint8_t { Auto = 0, Manual = 1, StorageMenu = 2, BleReceive = 3 };
+  enum class ControlMode : uint8_t { Auto = 0, Manual = 1, StorageMenu = 2, BleReceive = 3, DeleteMenu = 4 };
   enum class CopyState : uint8_t { Idle = 0, Confirm = 1, Running = 2, Done = 3, Error = 4, Aborted = 5 };
   enum class BleState : uint8_t { Idle = 0, Receiving = 1, Completed = 2, Error = 3, Aborted = 4 };
   enum class TransferSource : uint8_t { None = 0, Ble = 1, Usb = 2 };
+  enum class DeleteState : uint8_t { Idle = 0, DeleteAllConfirm = 1, DeleteSingle = 2, DeleteSingleConfirm = 3, Deleting = 4, Done = 5, Error = 6 };
 
   struct CopyItem {
     String path;
@@ -89,6 +90,14 @@ private:
   String bleLastPrimary_;
   String bleLastSecondary_;
   String bleLastFooter_;
+  DeleteState deleteState_ = DeleteState::Idle;
+  uint8_t deleteMenuSelection_ = 0; // 0=Alle löschen, 1=Einzeln
+  uint8_t deleteConfirmSelection_ = 0; // 0=Nein, 1=Ja
+  bool deleteMenuDirty_ = true;
+  bool deleteConfirmDirty_ = true;
+  uint32_t deleteSingleTimer_ = 0;
+  String deleteCurrentFile_;
+  size_t deleteCount_ = 0;
 
   void setControlMode_(ControlMode mode, bool showToast = true);
   void setSource_(SlideSource src, bool showToast = true);
@@ -129,4 +138,20 @@ private:
   void handleTransferCompleted_(TransferSource src, const char* filename, size_t size);
   void handleTransferError_(TransferSource src, const char* message);
   void handleTransferAborted_(TransferSource src, const char* message);
+  void enterDeleteMenu_();
+  void exitDeleteMenu_();
+  void requestDeleteAll_();
+  void confirmDeleteAll_();
+  void cancelDeleteAll_();
+  void startDeleteSingle_();
+  void requestDeleteSingle_();
+  void confirmDeleteSingle_();
+  void cancelDeleteSingle_();
+  void performDeleteAll_();
+  void performDeleteSingle_(const String& path);
+  void drawDeleteMenuOverlay_();
+  void drawDeleteAllConfirmOverlay_();
+  void drawDeleteSingleConfirmOverlay_();
+  void markDeleteMenuDirty_();
+  void markDeleteConfirmDirty_();
 };
