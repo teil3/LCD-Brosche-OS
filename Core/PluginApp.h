@@ -37,8 +37,8 @@ private:
   PluginAppVTable vtable_;
   String appName_;
 
-  // Core API provided to plugins
-  static AppAPI coreAPI_;
+  // Reference to shared core API
+  static AppAPI& coreAPI_;
 
   // Load plugin from LittleFS
   bool loadPlugin_();
@@ -46,6 +46,9 @@ private:
 
   // Find VTable in loaded binary
   bool findVTable_();
+
+  // Relocate VTable function pointers from relative to absolute addresses
+  bool relocateVTable_();
 };
 
 #endif // PLUGIN_APP_H_

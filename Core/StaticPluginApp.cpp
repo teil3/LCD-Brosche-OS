@@ -1,49 +1,8 @@
 #include "StaticPluginApp.h"
-#include "TextRenderer.h"
-#include "Gfx.h"
+#include "AppAPIImpl.h"
 
-// Forward declarations for API functions
-namespace {
-
-void api_drawCentered(int16_t y, const char* text, uint32_t fg, uint32_t bg) {
-  TextRenderer::drawCentered(y, String(text), fg, bg);
-}
-
-int16_t api_lineHeight() {
-  return TextRenderer::lineHeight();
-}
-
-void api_logInfo(const char* msg) {
-  Serial.print("[Plugin] ");
-  Serial.println(msg);
-}
-
-void api_logError(const char* msg) {
-  Serial.print("[Plugin ERROR] ");
-  Serial.println(msg);
-}
-
-uint32_t api_millis() {
-  return millis();
-}
-
-void api_delay(uint32_t ms) {
-  delay(ms);
-}
-
-} // namespace
-
-// Initialize static core API
-AppAPI StaticPluginApp::coreAPI_ = {
-  .version = APP_API_VERSION,
-  .tft = &tft,
-  .drawCentered = api_drawCentered,
-  .lineHeight = api_lineHeight,
-  .logInfo = api_logInfo,
-  .logError = api_logError,
-  .millis = api_millis,
-  .delay = api_delay
-};
+// Reference to shared core API
+AppAPI& StaticPluginApp::coreAPI_ = AppAPIImpl::coreAPI;
 
 StaticPluginApp::StaticPluginApp(const PluginAppVTable* vtable)
   : vtable_(vtable) {

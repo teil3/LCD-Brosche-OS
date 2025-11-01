@@ -1,50 +1,10 @@
 #include "PluginApp.h"
-#include "TextRenderer.h"
-#include "Gfx.h"
+#include "AppAPIImpl.h"
 #include <esp_heap_caps.h>
+#include <SD.h>
 
-// Forward declarations for API functions
-namespace {
-
-void api_drawCentered(int16_t y, const char* text, uint32_t fg, uint32_t bg) {
-  TextRenderer::drawCentered(y, String(text), fg, bg);
-}
-
-int16_t api_lineHeight() {
-  return TextRenderer::lineHeight();
-}
-
-void api_logInfo(const char* msg) {
-  Serial.print("[Plugin] ");
-  Serial.println(msg);
-}
-
-void api_logError(const char* msg) {
-  Serial.print("[Plugin ERROR] ");
-  Serial.println(msg);
-}
-
-uint32_t api_millis() {
-  return millis();
-}
-
-void api_delay(uint32_t ms) {
-  delay(ms);
-}
-
-} // namespace
-
-// Initialize static core API
-AppAPI PluginApp::coreAPI_ = {
-  .version = APP_API_VERSION,
-  .tft = &tft,
-  .drawCentered = api_drawCentered,
-  .lineHeight = api_lineHeight,
-  .logInfo = api_logInfo,
-  .logError = api_logError,
-  .millis = api_millis,
-  .delay = api_delay
-};
+// Reference to shared core API
+AppAPI& PluginApp::coreAPI_ = AppAPIImpl::coreAPI;
 
 PluginApp::PluginApp(const char* binPath) : binPath_(binPath) {
   Serial.printf("[PluginApp] Constructor: %s\n", binPath);
@@ -62,16 +22,31 @@ PluginApp::~PluginApp() {
 bool PluginApp::loadPlugin_() {
   Serial.printf("[PluginApp] Loading from: %s\n", binPath_.c_str());
 
-  // Check if file exists
-  if (!LittleFS.exists(binPath_.c_str())) {
-    Serial.printf("[PluginApp] File not found: %s\n", binPath_.c_str());
+  // Try to open from LittleFS first, then SD card
+  File f;
+  bool fromSD = false;
+
+  if (LittleFS.exists(binPath_.c_str())) {
+    f = LittleFS.open(binPath_.c_str(), FILE_READ);
+    Serial.println("[PluginApp] Opening from LittleFS");
+  } else if (SD.exists(binPath_.c_str())) {
+    f = SD.open(binPath_.c_str(), FILE_READ);
+    fromSD = true;
+    Serial.println("[PluginApp] Opening from SD card");
+  } else {
+    Serial.printf("[PluginApp] File not found in LittleFS or SD: %s\n", binPath_.c_str());
     return false;
   }
 
-  // Open file
-  File f = LittleFS.open(binPath_.c_str(), FILE_READ);
   if (!f) {
-    Serial.printf("[PluginApp] Failed to open: %s\n", binPath_.c_str());
+    Serial.printf("[PluginApp] Failed to open file: %s\n", binPath_.c_str());
+    return false;
+  }
+
+  // Double-check file is valid
+  if (!f.available()) {
+    Serial.printf("[PluginApp] File not available (invalid handle): %s\n", binPath_.c_str());
+    f.close();
     return false;
   }
 
@@ -84,32 +59,96 @@ bool PluginApp::loadPlugin_() {
     return false;
   }
 
-  // Allocate executable memory (IRAM)
-  pluginMemory_ = heap_caps_malloc(pluginSize_, MALLOC_CAP_EXEC);
-  if (!pluginMemory_) {
-    Serial.printf("[PluginApp] Failed to allocate %u bytes of IRAM\n", (unsigned)pluginSize_);
-    f.close();
-    return false;
+  // Check available memory types (keep file open to avoid SD re-open which triggers watchdog)
+  size_t freeIRAM = heap_caps_get_free_size(MALLOC_CAP_IRAM_8BIT);
+  size_t freeDRAM = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+
+  Serial.print("[PluginApp] Free IRAM: ");
+  Serial.print(freeIRAM);
+  Serial.println(" bytes");
+  Serial.print("[PluginApp] Free DRAM: ");
+  Serial.print(freeDRAM);
+  Serial.println(" bytes");
+
+  // Skip IRAM allocation if no space (heap_caps_malloc scans entire heap → slow)
+  if (freeIRAM > pluginSize_) {
+    Serial.println("[PluginApp] Trying IRAM allocation...");
+    pluginMemory_ = heap_caps_malloc(pluginSize_, MALLOC_CAP_IRAM_8BIT);
   }
 
-  // Load binary into memory
+  if (!pluginMemory_) {
+    // IRAM full or skipped, use DRAM (can execute via instruction cache)
+    Serial.println("[PluginApp] Using DRAM...");
+    pluginMemory_ = heap_caps_malloc(pluginSize_, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  }
+
+  Serial.print("[PluginApp] malloc returned: ");
+  if (pluginMemory_ == nullptr) {
+    Serial.println("NULL");
+    Serial.println("[PluginApp] Failed to allocate memory");
+    return false;
+  }
+  Serial.println("OK");
+
+  // Get and validate address
+  uintptr_t addr = (uintptr_t)pluginMemory_;
+  Serial.print("[PluginApp] Address: 0x");
+  Serial.println(addr, HEX);
+
+  // Identify memory region
+  if (addr >= 0x40070000 && addr < 0x400A0000) {
+    Serial.println("[PluginApp] -> In IRAM (writable, executable)");
+  } else if (addr >= 0x3FF00000 && addr < 0x40000000) {
+    Serial.println("[PluginApp] -> In DRAM (writable, executable via cache)");
+  } else if (addr >= 0x40000000 && addr < 0x40070000) {
+    Serial.println("[PluginApp] ERROR: In Flash (read-only!)");
+    heap_caps_free(pluginMemory_);
+    pluginMemory_ = nullptr;
+    return false;
+  } else if (addr >= 0x400A0000 && addr < 0x40100000) {
+    Serial.println("[PluginApp] ERROR: In ROM/Code (read-only!)");
+    heap_caps_free(pluginMemory_);
+    pluginMemory_ = nullptr;
+    return false;
+  } else {
+    Serial.println("[PluginApp] WARNING: Unknown memory region");
+  }
+
+  Serial.println("[PluginApp] Memory allocated and validated");
+
+  // Read entire file at once (file is still open from initial open)
+  Serial.printf("[PluginApp] Reading %u bytes...\n", (unsigned)pluginSize_);
+  f.seek(0); // Reset file position to beginning
+
+  // Read directly into allocated memory
   size_t bytesRead = f.read((uint8_t*)pluginMemory_, pluginSize_);
   f.close();
 
   if (bytesRead != pluginSize_) {
-    Serial.printf("[PluginApp] Read mismatch: %u != %u\n", (unsigned)bytesRead, (unsigned)pluginSize_);
+    Serial.println("[PluginApp] Read mismatch");
     unloadPlugin_();
     return false;
   }
 
-  Serial.printf("[PluginApp] Loaded to IRAM: %p\n", pluginMemory_);
+  Serial.println("[PluginApp] Read OK");
 
-  // Find VTable in binary
+  // Find VTable in binary (with relative offsets)
   if (!findVTable_()) {
-    Serial.println("[PluginApp] Failed to find VTable");
+    Serial.println("[PluginApp] VTable not found");
     unloadPlugin_();
     return false;
   }
+
+  Serial.println("[PluginApp] VTable found");
+
+  // Relocate VTable function pointers to absolute addresses
+  if (!relocateVTable_()) {
+    Serial.println("[PluginApp] Relocation failed");
+    unloadPlugin_();
+    return false;
+  }
+
+  Serial.println("[PluginApp] Relocation done");
 
   // Call plugin init
   if (vtable_.init) {
@@ -124,6 +163,7 @@ bool PluginApp::loadPlugin_() {
   }
 
   Serial.printf("[PluginApp] Successfully loaded: %s\n", appName_.c_str());
+
   return true;
 }
 
@@ -141,33 +181,61 @@ bool PluginApp::findVTable_() {
     return false;
   }
 
-  // Strategy 1: Look for VTable at known offset (beginning of binary)
-  // For now, assume VTable is at start of binary
+  // Strategy 1: VTable at beginning of binary (placed by linker script)
   PluginAppVTable* candidate = (PluginAppVTable*)pluginMemory_;
 
-  // Sanity check: all function pointers should be non-null and within reasonable range
-  uintptr_t base = (uintptr_t)pluginMemory_;
-  uintptr_t end = base + pluginSize_;
+  // Sanity check: Function pointers should be either NULL or small relative offsets
+  const uintptr_t MAX_RELATIVE_OFFSET = 0x10000; // 64KB max plugin size
 
-  auto isValidPtr = [base, end](void* ptr) -> bool {
-    if (!ptr) return false;
+  auto isValidOffset = [MAX_RELATIVE_OFFSET](void* ptr) -> bool {
+    if (!ptr) return true;
     uintptr_t addr = (uintptr_t)ptr;
-    return (addr >= base && addr < end);
+    return (addr < MAX_RELATIVE_OFFSET);
   };
 
-  if (isValidPtr((void*)candidate->init) &&
-      isValidPtr((void*)candidate->draw) &&
-      isValidPtr((void*)candidate->getName)) {
+  // Check if critical function pointers look like relative offsets
+  if (isValidOffset((void*)candidate->init) &&
+      isValidOffset((void*)candidate->draw) &&
+      isValidOffset((void*)candidate->getName)) {
+
     memcpy(&vtable_, candidate, sizeof(PluginAppVTable));
-    Serial.printf("[PluginApp] Found VTable at offset 0\n");
+
     return true;
   }
 
-  // Strategy 2: Search through binary for VTable signature
-  // TODO: Implement if Strategy 1 doesn't work
-
-  Serial.println("[PluginApp] VTable not found");
   return false;
+}
+
+bool PluginApp::relocateVTable_() {
+  if (!pluginMemory_) {
+    Serial.println("[PluginApp] No plugin memory to relocate");
+    return false;
+  }
+
+  uintptr_t base = (uintptr_t)pluginMemory_;
+
+  // Relocate all function pointers from relative offsets to absolute addresses
+  // Strategy: If pointer value is < 0x1000, it's likely a relative offset
+  const uintptr_t OFFSET_THRESHOLD = 0x1000;
+
+  auto relocate = [base, OFFSET_THRESHOLD](void** funcPtr) {
+    if (!funcPtr || !*funcPtr) return;
+    uintptr_t addr = (uintptr_t)(*funcPtr);
+    if (addr < OFFSET_THRESHOLD) {
+      *funcPtr = (void*)(base + addr);
+    }
+  };
+
+  // Relocate each function pointer in the VTable (no Serial output here!)
+  relocate((void**)&vtable_.init);
+  relocate((void**)&vtable_.onActivate);
+  relocate((void**)&vtable_.tick);
+  relocate((void**)&vtable_.draw);
+  relocate((void**)&vtable_.onButton);
+  relocate((void**)&vtable_.shutdown);
+  relocate((void**)&vtable_.getName);
+
+  return true;
 }
 
 const char* PluginApp::name() const {

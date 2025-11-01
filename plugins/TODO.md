@@ -16,137 +16,139 @@ Dynamisches Laden von `.bin` Plugin-Dateien zur Laufzeit ohne Firmware-Neukompil
 - [x] HelloWorldPlugin.cpp als `.bin` kompiliert (835 bytes)
 - [x] Dokumentation (CLAUDE.md, README.md)
 
-## 🚧 Phase 2: Verbleibende Aufgaben
+## 🚧 Phase 2: AKTUELLER STAND (2025-11-01)
 
-### 1. Binary Relocation implementieren ⭐ KRITISCH
+### ✅ Bereits implementiert seit letztem Update:
 
-**Problem:**
-Die kompilierten `.bin` Dateien enthalten relative Offsets, keine absoluten Adressen.
+1. **VTable Relocation** ✅ FERTIG
+   - `Core/PluginApp.cpp::relocateVTable_()` implementiert
+   - Konvertiert relative Offsets zu absoluten Adressen
+   - Threshold-basiert (< 0x1000 = relative offset)
 
-Beispiel aus `HelloWorld.bin`:
+2. **Auto-Discovery** ✅ FERTIG
+   - `ESP32-BoardOS.ino::discoverPlugins()` implementiert
+   - Scannt LittleFS:/apps/*.bin UND SD:/apps/*.bin
+   - Maximale Plugins: 10 (MAX_DYNAMIC_PLUGINS)
+   - Läuft in loop() statt setup() (boot watchdog avoidance)
+
+3. **Dual Filesystem Support** ✅ FERTIG
+   - LittleFS und SD card beide unterstützt
+   - Priority: LittleFS first, dann SD fallback beim Lesen
+
+4. **AppAPIImpl Refactoring** ✅ FERTIG
+   - `Core/AppAPIImpl.h/cpp` erstellt
+   - Shared AppAPI instance für StaticPluginApp und PluginApp
+   - Duplicate symbol errors gelöst
+
+### ⚠️ KRITISCHE BLOCKER - Plugin lädt NICHT
+
+**Serial Output zeigt:**
 ```
-Offset 0x00:  VTable
-  +0x00: init_ptr    = 0x24      (Offset zu plugin_init)
-  +0x04: activate_ptr = 0x44     (Offset zu plugin_onActivate)
-  ...
+[Plugins] Found: SD:/apps/HelloWorld.bin
+E (7378) task_wdt: esp_task_wdt_reset(707): task not found  (x100+)
+Guru Meditation Error: Core 0 panic'ed (Cache error)
+Debug exception reason: Stack canary watchpoint triggered (IDLE0)
 ```
 
-Wenn Binary nach 0x40080000 geladen wird:
+**Problem-Analyse:**
+
+1. **Kein PluginApp Serial Output** ❌
+   - Plugin discovery findet die Datei
+   - ABER: PluginApp::loadPlugin_() gibt KEINEN Output
+   - → Crash VOR erstem Serial.println in loadPlugin_()
+
+2. **Task Watchdog Errors**
+   - `yield()` calls versuchen Task im Watchdog zu resetten
+   - Task ist NICHT registriert im Task Watchdog
+   - → Alle yield() calls erzeugen Fehler
+
+3. **Stack Overflow im IDLE Task**
+   - "Stack canary watchpoint triggered (IDLE0)"
+   - IDLE Task läuft auf Core 0
+   - → Irgendetwas überschreibt IDLE Task Stack
+
+4. **Zwei Watchdogs auf ESP32:**
+   - **Task Watchdog (TWDT):** Überwacht Task-Ausführung
+   - **Interrupt Watchdog (TG1WDT):** Überwacht Interrupt-Blocking
+   - Frühere Resets waren TG1WDT_SYS_RESET
+
+**Versuchte Lösungen (alle gescheitert):**
+
+- ❌ disableCore0WDT() / disableCore1WDT() → Stack Overflow
+- ❌ yield() calls überall → "task not found" spam
+- ❌ setup() → loop() move → kein Unterschied
+- ❌ Serial output reduzieren → kein Unterschied
+- ❌ Single file read statt chunks → kein Unterschied
+- ❌ MALLOC_CAP_IRAM_8BIT → returns NULL (0 bytes free!)
+- ❌ MALLOC_CAP_INTERNAL → bekommt DRAM, execution unbekannt
+
+**Memory Status:**
 ```
-init_ptr sollte sein:    0x40080024 (base + offset)
-activate_ptr sollte sein: 0x40080044 (base + offset)
+Free IRAM: 0 bytes (!!!)
+Free DRAM: ~280KB
+Flash Usage: 1300203 / 1310720 bytes (99%)
 ```
+
+**Root Cause vermutlich:**
+- IRAM komplett voll (99% Flash = kein IRAM mehr)
+- Plugin kann nicht in IRAM geladen werden
+- DRAM execution ungetestet (ESP32 hat I-Cache, könnte funktionieren)
+- Watchdog disable destabilisiert System → Stack Overflow
+
+---
+
+### 🚧 Phase 2: Verbleibende Aufgaben
+
+### 1. IRAM Exhaustion Problem lösen ⭐ KRITISCH
+
+**Optionen:**
+
+**Option A: Flash Usage reduzieren**
+- Compiler optimizations prüfen (-Os vs -O2)
+- Unused code eliminieren
+- Große Konstanten in Flash statt RAM
+
+**Option B: DRAM Execution testen**
+- ESP32 hat Instruction Cache
+- DRAM könnte executable sein via I-Cache
+- Test: Plugin in DRAM laden ohne Watchdog disable
+
+**Option C: External RAM (PSRAM)**
+- Hardware upgrade nötig
+- Nur wenn A+B scheitern
+
+**Nächster Test:**
+```cpp
+// Ohne Watchdog disable, direkt DRAM allocation
+pluginMemory_ = heap_caps_malloc(pluginSize_, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+// Dann: relocate und function call testen
+```
+
+---
+
+### 2. yield() Calls entfernen
+
+**Problem:** Main Loop Task ist nicht im Task Watchdog registriert
 
 **Lösung:**
-```cpp
-// In PluginApp::loadPlugin_()
-bool PluginApp::relocateVTable_() {
-  if (!pluginMemory_) return false;
-
-  uintptr_t base = (uintptr_t)pluginMemory_;
-  PluginAppVTable* vtable = (PluginAppVTable*)pluginMemory_;
-
-  // Relocate all function pointers
-  if ((uintptr_t)vtable->init < 0x1000) {
-    vtable->init = (void(*)(const AppAPI*))(base + (uintptr_t)vtable->init);
-  }
-  if ((uintptr_t)vtable->onActivate < 0x1000) {
-    vtable->onActivate = (void(*)())(base + (uintptr_t)vtable->onActivate);
-  }
-  // ... für alle anderen Funktionszeiger
-
-  return true;
-}
-```
-
-**Test:**
-- Lade `HelloWorld.bin` in IRAM
-- Relocate VTable
-- Rufe Funktionen auf
-- Prüfe ob sie korrekt laufen
-
-**Datei:** `Core/PluginApp.cpp` Zeile ~100
+- Alle `yield()` calls in PluginApp.cpp entfernen
+- ODER: `esp_task_wdt_add(xTaskGetCurrentTaskHandle())` vor Loading
+- ODER: Task Watchdog komplett ignorieren (scheint nicht der Haupt-Issue)
 
 ---
 
-### 2. PluginApp.cpp finalisieren
+### 3. Plugin Auto-Discovery (TEILWEISE FERTIG)
 
-**Aktuelle Implementierung:**
-- ✅ Load binary from LittleFS
-- ✅ Allocate IRAM memory
-- ⚠️ VTable finding (basic implementation)
-- ❌ Relocation (missing!)
+**Was funktioniert:**
+- ✅ Findet `.bin` files in SD:/apps/
+- ✅ Versucht PluginApp zu erstellen
 
-**TODO:**
-- [ ] Implement `relocateVTable_()` (siehe oben)
-- [ ] Test mit `HelloWorld.bin`
-- [ ] Error handling verbessern
-- [ ] Memory leak prevention (ensure unload on errors)
-
-**Test-Plan:**
-```cpp
-// In ESP32-BoardOS.ino setup():
-PluginApp dynamicPlugin("/apps/HelloWorld.bin");
-if (dynamicPlugin.isLoaded()) {
-  appman.add(&dynamicPlugin);
-  Serial.println("Dynamic plugin loaded!");
-} else {
-  Serial.println("Failed to load dynamic plugin");
-}
-```
-
-**Datei:** `Core/PluginApp.cpp`
+**Was fehlt:**
+- ❌ Plugin lädt nicht (siehe Blocker oben)
+- [ ] Error recovery wenn Plugin crash
+- [ ] Memory leak prevention
 
 ---
-
-### 3. Plugin Auto-Discovery
-
-Automatisches Finden und Laden aller `.bin` Dateien beim Boot.
-
-**Implementation:**
-```cpp
-// In ESP32-BoardOS.ino setup():
-void discoverPlugins() {
-  File root = LittleFS.open("/apps");
-  if (!root || !root.isDirectory()) {
-    Serial.println("[Plugins] /apps directory not found");
-    return;
-  }
-
-  File file = root.openNextFile();
-  while (file) {
-    String name = file.name();
-    if (name.endsWith(".bin")) {
-      String path = "/apps/" + name;
-      Serial.printf("[Plugins] Found: %s\n", path.c_str());
-
-      PluginApp* plugin = new PluginApp(path.c_str());
-      if (plugin->isLoaded()) {
-        appman.add(plugin);
-        Serial.printf("[Plugins] Loaded: %s\n", plugin->name());
-      } else {
-        Serial.printf("[Plugins] Failed: %s\n", path.c_str());
-        delete plugin;
-      }
-    }
-    file = root.openNextFile();
-  }
-}
-
-void setup() {
-  // ... existing setup code
-  discoverPlugins();
-  appman.begin();
-}
-```
-
-**TODO:**
-- [ ] Implement `discoverPlugins()` function
-- [ ] Handle memory management (plugins created with `new`)
-- [ ] Add max plugin limit (avoid IRAM exhaustion)
-- [ ] Priority/ordering system (alphabetical?)
-
-**Datei:** `ESP32-BoardOS.ino` oder neue `Core/PluginManager.h/cpp`
 
 ---
 
@@ -242,26 +244,52 @@ public:
 
 ## 🐛 Bekannte Probleme & Lösungen
 
-### Problem 1: VTable Relocation
-**Status:** Ungelöst
-**Impact:** Kritisch - ohne Relocation laufen Plugins nicht
-**Lösung:** Siehe Abschnitt 1 oben
+### Problem 1: IRAM Exhaustion ⭐ KRITISCH - AKTUELL
+**Status:** Blockiert alle Plugin-Loading Tests
+**Symptome:**
+- Free IRAM: 0 bytes
+- MALLOC_CAP_IRAM_8BIT returns NULL
+- Flash usage: 99% (1300KB / 1310KB)
+**Impact:** Plugin kann nicht in executable memory geladen werden
+**Mögliche Lösungen:**
+1. Compiler optimization tuning (-Os, LTO)
+2. Code in Flash + IRAM_ATTR nur für hot paths
+3. DRAM execution via I-Cache testen
+4. Größere Apps auslagern zu Plugins (Platz schaffen)
 
-### Problem 2: IRAM Limits
-**Problem:** Plugins werden in IRAM geladen (begrenzt auf ~100-120 KB frei)
-**Lösung:**
-- Max 3-4 Plugins gleichzeitig (~30KB each)
-- Oder: Lazy loading (nur aktive Plugins in IRAM)
+### Problem 2: Stack Overflow beim Watchdog Disable ⭐ KRITISCH - AKTUELL
+**Status:** Neue Entdeckung (2025-11-01)
+**Symptome:**
+- "Stack canary watchpoint triggered (IDLE0)"
+- Cache error + Core 0 panic
+- Tritt auf bei disableCore0WDT() / disableCore1WDT()
+**Root Cause:** Unbekannt - möglicherweise:
+- Interrupt disable destabilisiert System
+- SD card operations brauchen Interrupts
+- IDLE Task wird durch disable-Calls korrumpiert
+**Workaround:** Watchdog disable NICHT verwenden
 
-### Problem 3: String Handling
+### Problem 3: Task Watchdog "task not found"
+**Status:** Nervend aber nicht kritisch
+**Symptome:** `E (xxxx) task_wdt: esp_task_wdt_reset(707): task not found`
+**Ursache:** Main loop task ist nicht im Task Watchdog registriert
+**Lösung:** Alle `yield()` calls entfernen aus PluginApp.cpp
+
+### Problem 4: VTable Relocation
+**Status:** ✅ GELÖST (2025-11-01)
+**Lösung:** Implementiert in Core/PluginApp.cpp::relocateVTable_()
+
+### Problem 5: String Handling
+**Status:** Gelöst für Phase 2
 **Problem:** Arduino `String` nicht in Plugins verfügbar (nostdlib)
-**Lösung:** Eigene String-Funktionen in `runtime.c` (bereits teilweise vorhanden)
+**Lösung:** Plugins benutzen nur const char* und AppAPI Funktionen
 
-### Problem 4: No stdlib
+### Problem 6: No stdlib
+**Status:** Gelöst für Phase 2
 **Problem:** Keine `printf`, `sprintf` etc.
 **Lösung:**
-- Eigene `snprintf` Implementierung
-- Oder: AppAPI erweitern mit formatString()
+- runtime.c bietet memcpy/memset/memmove
+- AppAPI bietet logging (logInfo, logError)
 
 ---
 
@@ -333,5 +361,5 @@ make HelloWorldPlugin
 
 ---
 
-**Letzte Aktualisierung:** 2025-10-31
-**Status:** Phase 1 Complete ✅ | Phase 2 In Progress 🚧
+**Letzte Aktualisierung:** 2025-11-01
+**Status:** Phase 1 Complete ✅ | Phase 2 In Progress 🚧 | **BLOCKER: IRAM Exhaustion**

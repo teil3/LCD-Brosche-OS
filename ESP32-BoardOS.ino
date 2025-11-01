@@ -17,6 +17,8 @@
 #include "Core/BleImageTransfer.h"
 #include "Core/SerialImageTransfer.h"
 #include "Core/StaticPluginApp.h"
+#include "Core/PluginApp.h"
+#include <SD.h>
 
 // Buttons
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
@@ -39,6 +41,11 @@ static const char* btnEventName(BtnEvent e) {
 // Forward declaration for HelloWorld plugin
 extern "C" const PluginAppVTable* getHelloWorldVTable();
 
+// Dynamic plugins storage (max 10 dynamic plugins)
+constexpr int MAX_DYNAMIC_PLUGINS = 10;
+PluginApp* dynamicPlugins[MAX_DYNAMIC_PLUGINS] = {nullptr};
+int dynamicPluginCount = 0;
+
 // Apps
 AppManager appman;
 SlideshowApp app_slideshow;
@@ -50,6 +57,69 @@ RandomSquareIntoneApp app_square_intone;
 RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
 StaticPluginApp app_helloworld(getHelloWorldVTable());
+
+/**
+ * Discover and load dynamic plugins from LittleFS and SD card
+ * Searches /apps/*.bin in both filesystems
+ */
+void discoverPlugins() {
+  Serial.println("[Plugins] === Plugin Discovery Start ===");
+
+  auto scanDirectory = [](fs::FS &fs, const char* fsName) {
+    const char* dirPath = "/apps";
+
+    if (!fs.exists(dirPath)) {
+      Serial.printf("[Plugins] %s:%s not found, skipping\n", fsName, dirPath);
+      return;
+    }
+
+    File root = fs.open(dirPath);
+    if (!root || !root.isDirectory()) {
+      Serial.printf("[Plugins] %s:%s is not a directory\n", fsName, dirPath);
+      return;
+    }
+
+    Serial.printf("[Plugins] Scanning %s:%s\n", fsName, dirPath);
+
+    File file = root.openNextFile();
+    while (file && dynamicPluginCount < MAX_DYNAMIC_PLUGINS) {
+      String filename = String(file.name());
+
+      // Extract just the filename if it contains path
+      int lastSlash = filename.lastIndexOf('/');
+      if (lastSlash >= 0) {
+        filename = filename.substring(lastSlash + 1);
+      }
+
+      if (filename.endsWith(".bin")) {
+        String fullPath = String(dirPath) + "/" + filename;
+        Serial.printf("[Plugins] Found: %s:%s\n", fsName, fullPath.c_str());
+
+        PluginApp* plugin = new PluginApp(fullPath.c_str());
+        if (plugin && plugin->isLoaded()) {
+          dynamicPlugins[dynamicPluginCount++] = plugin;
+          appman.add(plugin);
+          Serial.printf("[Plugins] ✓ Loaded: %s\n", plugin->name());
+        } else {
+          Serial.printf("[Plugins] ✗ Failed to load: %s\n", fullPath.c_str());
+          if (plugin) delete plugin;
+        }
+      }
+
+      file = root.openNextFile();
+    }
+
+    root.close();
+  };
+
+  // Scan LittleFS first
+  scanDirectory(LittleFS, "LittleFS");
+
+  // Then scan SD card
+  scanDirectory(SD, "SD");
+
+  Serial.printf("[Plugins] === Discovery Complete: %d plugins loaded ===\n", dynamicPluginCount);
+}
 
 void setup() {
   Serial.setRxBufferSize(8192);
@@ -95,7 +165,10 @@ void setup() {
   appman.add(&app_random_imager);
   appman.add(&app_random_pasteller);
   appman.add(&app_square_intone);
+
   appman.begin();
+
+  // NOTE: Plugin discovery moved to loop() to avoid boot watchdog timeout
   if (kUsbDebug) Serial.println("[BOOT] appman.begin done");
 
   BleImageTransfer::begin();
@@ -180,7 +253,17 @@ static void pumpUsbEvents() {
 
 void loop() {
   static bool first=true;
-  if (first) { Serial.println("[LOOP] enter"); first=false; }
+  if (first) {
+    Serial.println("[LOOP] enter");
+
+    // Discover and load dynamic plugins AFTER setup() to avoid boot watchdog
+    Serial.println("[LOOP] Starting plugin discovery...");
+    discoverPlugins();
+    Serial.println("[LOOP] Plugin discovery done");
+
+    first=false;
+  }
+
   static uint32_t last = millis();
   uint32_t now = millis();
   uint32_t dt = now - last;
@@ -226,7 +309,9 @@ void loop() {
 #include "Core/Gfx.cpp"
 #include "Core/Storage.cpp"
 #include "Core/TextRenderer.cpp"
+#include "Core/AppAPIImpl.cpp"
 #include "Core/StaticPluginApp.cpp"
+#include "Core/PluginApp.cpp"
 #include "Apps/SlideshowApp.cpp"
 #include "Apps/HelloWorldApp.cpp"
 #include "Apps/PixelFieldApp.cpp"

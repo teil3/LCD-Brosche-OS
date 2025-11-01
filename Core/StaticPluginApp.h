@@ -4,6 +4,7 @@
 
 #include "App.h"
 #include "AppAPI.h"
+#include "AppAPIImpl.h"
 
 /**
  * StaticPluginApp - Wrapper for statically linked plugins
@@ -29,8 +30,8 @@ private:
   const PluginAppVTable* vtable_;
   String appName_;
 
-  // Core API provided to plugins
-  static AppAPI coreAPI_;
+  // Reference to shared core API
+  static AppAPI& coreAPI_;
 };
 
 #endif // STATIC_PLUGIN_APP_H_
