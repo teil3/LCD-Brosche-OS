@@ -32,7 +32,7 @@ arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 
 ## Architecture Overview
 
-### App-Based Plugin System
+### App-Based Architecture
 The firmware implements a simple OS with an app manager that orchestrates multiple independent apps:
 
 - **App Interface** (`Core/App.h`): Abstract base class defining lifecycle hooks:
@@ -159,6 +159,28 @@ Currently, only `SlideshowApp` handles these events via callbacks:
 7. Force-compile: Add `#include "Apps/YourApp.cpp"` at bottom of .ino
 
 ## Hardware Constraints & Rules
+
+### ESP32 Memory Architecture
+Understanding the ESP32's memory layout is critical for development:
+
+**Separate Memory Regions:**
+- **Flash (Program Storage)**: 1.31 MB available for compiled code (app0 partition)
+  - Current usage: ~1.29 MB (98%)
+  - Very limited space for additional features
+- **IRAM (Instruction RAM)**: ~130 KB total for executable code
+  - Shared between firmware and runtime operations
+  - Cannot be measured accurately via heap_caps at runtime when fully utilized
+- **DRAM (Data RAM)**: ~320 KB total for variables, heap, and stack
+  - ~150-280 KB free depending on runtime state
+- **LittleFS**: 9 MB partition in flash for persistent data (images, files)
+  - Completely separate from code storage
+  - Images uploaded here do NOT consume code space
+
+**Key Constraints:**
+- Flash usage is near maximum (98%) - minimal room for new static code
+- Dynamic code loading (plugins) is not feasible due to IRAM exhaustion
+- New features should focus on optimizing existing code or using external storage
+- Images and data files use LittleFS storage, not code space
 
 ### Pin Configuration (Config.h)
 **DO NOT CHANGE** without explicit confirmation:
