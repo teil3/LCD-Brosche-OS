@@ -10,7 +10,7 @@ constexpr int8_t kOutlineOffsets[][2] = {
     {-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
 
 bool fontLoaded = false;
-int16_t cachedLineHeight = BoardOSFont::DejaVuSansBold20Ascent + BoardOSFont::DejaVuSansBold20Descent;
+int16_t cachedLineHeight = BoardOSFont::DejaVuSansBold16Ascent + BoardOSFont::DejaVuSansBold16Descent;
 
 void ensureFont() {
   if (!fontLoaded) {
@@ -22,7 +22,7 @@ void ensureFont() {
 
 void begin() {
   if (fontLoaded) return;
-  tft.loadFont(BoardOSFont::DejaVuSansBold20);
+  tft.loadFont(BoardOSFont::DejaVuSansBold16);
   tft.setTextWrap(false);
   cachedLineHeight = tft.fontHeight();
   fontLoaded = true;
@@ -41,12 +41,12 @@ int16_t lineHeight() {
 
 int16_t ascent() {
   ensureFont();
-  return BoardOSFont::DejaVuSansBold20Ascent;
+  return BoardOSFont::DejaVuSansBold16Ascent;
 }
 
 int16_t descent() {
   ensureFont();
-  return BoardOSFont::DejaVuSansBold20Descent;
+  return BoardOSFont::DejaVuSansBold16Descent;
 }
 
 int16_t measure(const String& text) {

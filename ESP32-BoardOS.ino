@@ -6,9 +6,7 @@
 #include "Core/Buttons.h"
 #include "Core/AppManager.h"
 #include "Apps/SlideshowApp.h"
-#include "Apps/PixelFieldApp.h"
 #include "Apps/RandomImagerApp.h"
-#include "Apps/RandomPastellerApp.h"
 #include "Apps/RandomSquareIntoneApp.h"
 #include "Apps/RandomPixelIntoneApp.h"
 #include "Apps/RandomChaoticLinesApp.h"
@@ -38,9 +36,7 @@ static const char* btnEventName(BtnEvent e) {
 // Apps
 AppManager appman;
 SlideshowApp app_slideshow;
-PixelFieldApp app_pixel_field;
 RandomImagerApp app_random_imager;
-RandomPastellerApp app_random_pasteller;
 RandomPixelIntoneApp app_pixel_blocks;
 RandomSquareIntoneApp app_square_intone;
 RandomChaoticLinesApp app_random_lines;
@@ -82,12 +78,10 @@ void setup() {
   if (kUsbDebug) Serial.println("[BOOT] buttons ready");
 
   appman.add(&app_slideshow);
-  appman.add(&app_pixel_field);
   appman.add(&app_pixel_blocks);
   appman.add(&app_random_lines);
   appman.add(&app_random_stripes);
   appman.add(&app_random_imager);
-  appman.add(&app_random_pasteller);
   appman.add(&app_square_intone);
   appman.begin();
   if (kUsbDebug) Serial.println("[BOOT] appman.begin done");
@@ -221,9 +215,7 @@ void loop() {
 #include "Core/Storage.cpp"
 #include "Core/TextRenderer.cpp"
 #include "Apps/SlideshowApp.cpp"
-#include "Apps/PixelFieldApp.cpp"
 #include "Apps/RandomImagerApp.cpp"
-#include "Apps/RandomPastellerApp.cpp"
 #include "Apps/RandomSquareIntoneApp.cpp"
 #include "Apps/RandomPixelIntoneApp.cpp"
 #include "Apps/RandomChaoticLinesApp.cpp"
