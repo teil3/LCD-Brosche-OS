@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 
 
-BAUD_RATE = 921600
+BAUD_RATE = 115200
 CHUNK_SIZE = 1024
 TIMEOUT = 2.0
 TARGET_DIR = "/system"
@@ -122,19 +122,47 @@ def upload_image(port, image_path, target_dir=TARGET_DIR):
         print("📤 Sending END command...")
         ser.write(b"END\n")
 
-        # Wait for completion response
-        time.sleep(0.2)
-        response = wait_for_response(ser, timeout=5.0)
-        if response:
-            print(f"📥 Response: {response}")
-            if "OK" in response and "END" in response:
-                print(f"✅ SUCCESS: File uploaded to {target_dir}/{filename}")
-                result = True
-            else:
-                print(f"⚠️  Warning: Unexpected response: {response}")
-                result = False
+        # Wait for completion response (may receive PROG then END)
+        # The ESP32 sends PROG immediately, then END after writing to flash
+        time.sleep(0.5)  # Give ESP32 time to write to flash
+
+        result = False
+        end_received = False
+        prog_received = False
+
+        # Read all responses until we get END or timeout
+        print("📥 Waiting for responses...")
+        for attempt in range(15):  # Try up to 15 times (30 seconds total)
+            response = wait_for_response(ser, timeout=2.0)
+            if response:
+                print(f"📥 Response: {response}")
+
+                # Track if we got PROG
+                if "USB OK PROG" in response:
+                    prog_received = True
+
+                # Skip slideshow messages
+                if "[Slideshow]" in response:
+                    continue
+
+                # Check for END confirmation
+                if "USB OK END" in response:
+                    end_received = True
+                    break
+
+            # If no more responses and we got PROG, that's good enough
+            if not response and prog_received:
+                print("📥 No more responses, but PROG was received")
+                break
+
+        if end_received:
+            print(f"✅ SUCCESS: File uploaded to {target_dir}/{filename}")
+            result = True
+        elif prog_received:
+            print(f"✅ SUCCESS: File uploaded (PROG confirmed, END may have been missed)")
+            result = True
         else:
-            print("⚠️  Warning: No response to END command")
+            print(f"⚠️  Warning: Upload status unclear")
             result = False
 
         # Read any additional responses

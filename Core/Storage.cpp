@@ -21,6 +21,16 @@ bool ensureFlashSlidesDir() {
   return true;
 }
 
+bool ensureDirectory(const char* path) {
+  if (!path || !path[0]) {
+    return false;
+  }
+  if (LittleFS.exists(path)) {
+    return true;
+  }
+  return LittleFS.mkdir(path);
+}
+
 bool clearFlashSlidesDir() {
   if (!LittleFS.exists(kFlashSlidesDir)) {
     return true;

@@ -39,6 +39,7 @@ struct TransferSession {
   uint8_t* ramBuffer = nullptr;
   size_t ramCapacity = 0;
   char filename[kFilenameCapacity];
+  char targetDir[kFilenameCapacity];
 };
 
 QueueHandle_t gEventQueue = nullptr;
@@ -108,7 +109,8 @@ void sendErr(const char* code, const char* fmt = nullptr, ...) {
 
 void cleanupFileOnError() {
   if (!gSession.filename[0]) return;
-  String path = String(kFlashSlidesDir) + "/" + gSession.filename;
+  const char* dir = gSession.targetDir[0] ? gSession.targetDir : kFlashSlidesDir;
+  String path = String(dir) + "/" + gSession.filename;
   if (!LittleFS.exists(path)) {
     return;
   }
@@ -141,6 +143,7 @@ void resetSession() {
   gSession.endHintSent = false;
   gSession.progressPending = false;
   std::memset(gSession.filename, 0, sizeof(gSession.filename));
+  std::memset(gSession.targetDir, 0, sizeof(gSession.targetDir));
 }
 
 bool validateSize(size_t sz) {
@@ -192,26 +195,32 @@ void sanitizeFilename(const char* requested, char* out, size_t outLen) {
   }
 }
 
-void generateUniqueFilename(char* out, size_t outLen) {
+void generateUniqueFilename(char* out, size_t outLen, const char* dir) {
   uint32_t now = millis();
   std::snprintf(out, outLen, "usb_%08lu.jpg", static_cast<unsigned long>(now));
 
-  String path = String(kFlashSlidesDir) + "/" + out;
+  String path = String(dir) + "/" + out;
   uint16_t attempt = 1;
   while (LittleFS.exists(path) && attempt < 1000) {
     std::snprintf(out, outLen, "usb_%08lu_%u.jpg",
                   static_cast<unsigned long>(now), attempt);
-    path = String(kFlashSlidesDir) + "/" + out;
+    path = String(dir) + "/" + out;
     ++attempt;
   }
 }
 
-void ensureUniqueOnFs(char* nameBuf, size_t bufLen) {
+void ensureUniqueOnFs(char* nameBuf, size_t bufLen, const char* dir) {
   if (!nameBuf || !nameBuf[0]) {
-    generateUniqueFilename(nameBuf, bufLen);
+    generateUniqueFilename(nameBuf, bufLen, dir);
     return;
   }
 
+  // For /system directory, always overwrite (no unique names)
+  if (dir && std::strcmp(dir, "/system") == 0) {
+    return;  // Use the filename as-is, will overwrite existing file
+  }
+
+  // For other directories (e.g., /slides), make filename unique
   String base(nameBuf);
   String ext(".jpg");
   int dotIdx = base.lastIndexOf('.');
@@ -220,7 +229,7 @@ void ensureUniqueOnFs(char* nameBuf, size_t bufLen) {
     base = base.substring(0, dotIdx);
   }
 
-  String path = String(kFlashSlidesDir) + "/" + String(nameBuf);
+  String path = String(dir) + "/" + String(nameBuf);
   if (!LittleFS.exists(path)) {
     return;
   }
@@ -230,27 +239,33 @@ void ensureUniqueOnFs(char* nameBuf, size_t bufLen) {
     if (candidate.length() >= static_cast<int>(bufLen)) {
       continue;
     }
-    path = String(kFlashSlidesDir) + "/" + candidate;
+    path = String(dir) + "/" + candidate;
     if (!LittleFS.exists(path)) {
       std::snprintf(nameBuf, bufLen, "%s", candidate.c_str());
       return;
     }
   }
 
-  generateUniqueFilename(nameBuf, bufLen);
+  generateUniqueFilename(nameBuf, bufLen, dir);
 }
 
-bool beginTransfer(size_t size, const char* requestedName) {
+bool beginTransfer(size_t size, const char* requestedName, const char* targetDir = nullptr) {
   if (!gTransfersEnabled) {
     sendErr("DISABLED", "Modus nicht aktiv");
     postEvent(SerialImageTransfer::EventType::Error, "", size, "USB-Modus nicht aktiv");
     return false;
   }
-  if (!ensureFlashSlidesDir()) {
-    sendErr("FLASHDIR", "LittleFS Fehler");
-    postEvent(SerialImageTransfer::EventType::Error, "", size, "LittleFS Fehler");
+
+  // Use provided directory or default to /slides
+  const char* dir = (targetDir && targetDir[0]) ? targetDir : kFlashSlidesDir;
+
+  // Ensure target directory exists
+  if (!ensureDirectory(dir)) {
+    sendErr("DIRFAIL", "Verzeichnis konnte nicht erstellt werden");
+    postEvent(SerialImageTransfer::EventType::Error, "", size, "Verzeichnis-Fehler");
     return false;
   }
+
   if (!validateSize(size)) {
     sendErr("SIZE", "Ungültige Größe");
     postEvent(SerialImageTransfer::EventType::Error, "", size, "Ungültige Dateigröße");
@@ -266,9 +281,9 @@ bool beginTransfer(size_t size, const char* requestedName) {
   filename[0] = '\0';
   sanitizeFilename(requestedName, filename, sizeof(filename));
   if (!filename[0]) {
-    generateUniqueFilename(filename, sizeof(filename));
+    generateUniqueFilename(filename, sizeof(filename), dir);
   }
-  ensureUniqueOnFs(filename, sizeof(filename));
+  ensureUniqueOnFs(filename, sizeof(filename), dir);
 
   if (size <= kMaxImageSize) {
     uint8_t* buffer = static_cast<uint8_t*>(malloc(size));
@@ -279,7 +294,7 @@ bool beginTransfer(size_t size, const char* requestedName) {
   }
 
   if (!gSession.ramBuffer) {
-    String path = String(kFlashSlidesDir) + "/" + filename;
+    String path = String(dir) + "/" + filename;
     gSession.file = LittleFS.open(path.c_str(), FILE_WRITE);
     if (!gSession.file) {
       sendErr("OPEN", "Datei konnte nicht angelegt werden");
@@ -297,6 +312,7 @@ bool beginTransfer(size_t size, const char* requestedName) {
   gSession.endHintSent = false;
   gSession.progressPending = false;
   std::snprintf(gSession.filename, sizeof(gSession.filename), "%s", filename);
+  std::snprintf(gSession.targetDir, sizeof(gSession.targetDir), "%s", dir);
 
   sendOk("START", "%s %lu", gSession.filename, static_cast<unsigned long>(size));
 
@@ -344,6 +360,7 @@ void completeTransfer() {
 
   char fname[sizeof(gSession.filename)];
   std::snprintf(fname, sizeof(fname), "%s", gSession.filename);
+  const char* dir = gSession.targetDir[0] ? gSession.targetDir : kFlashSlidesDir;
   size_t received = gSession.received;
   size_t expected = gSession.expected;
   bool progressPending = gSession.progressPending;
@@ -351,7 +368,7 @@ void completeTransfer() {
   bool ramMode = (ramPtr != nullptr);
 
   if (ramMode) {
-    String path = String(kFlashSlidesDir) + "/" + fname;
+    String path = String(dir) + "/" + fname;
     File out = LittleFS.open(path.c_str(), FILE_WRITE);
     if (!out) {
       sendErr("FLASH", "Datei konnte nicht angelegt werden");
@@ -462,7 +479,7 @@ void processLine(const char* line) {
     const char* ptr = line + 5;
     while (*ptr == ' ') ++ptr;
     if (!*ptr) {
-      sendErr("STARTFMT", "START <size> [name]");
+      sendErr("STARTFMT", "START <size> [name] [directory]");
       return;
     }
     char* endPtr = nullptr;
@@ -471,9 +488,27 @@ void processLine(const char* line) {
       sendErr("STARTFMT", "Ungültige Größe");
       return;
     }
+
+    // Parse filename (second argument)
     while (endPtr && *endPtr == ' ') ++endPtr;
-    const char* name = (endPtr && *endPtr) ? endPtr : nullptr;
-    beginTransfer(static_cast<size_t>(sz), name);
+    const char* nameStart = endPtr;
+    const char* nameEnd = nameStart;
+    while (*nameEnd && *nameEnd != ' ') ++nameEnd;
+
+    char nameBuf[kFilenameCapacity];
+    nameBuf[0] = '\0';
+    if (nameStart && nameStart < nameEnd) {
+      size_t len = std::min<size_t>(nameEnd - nameStart, sizeof(nameBuf) - 1);
+      std::memcpy(nameBuf, nameStart, len);
+      nameBuf[len] = '\0';
+    }
+    const char* name = nameBuf[0] ? nameBuf : nullptr;
+
+    // Parse directory (third argument, optional)
+    while (*nameEnd == ' ') ++nameEnd;
+    const char* dir = (*nameEnd) ? nameEnd : nullptr;
+
+    beginTransfer(static_cast<size_t>(sz), name, dir);
     return;
   }
 

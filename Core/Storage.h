@@ -31,6 +31,7 @@ inline fs::FS* filesystemFor(SlideSource src) {
 }
 
 bool ensureFlashSlidesDir();
+bool ensureDirectory(const char* path);
 bool clearFlashSlidesDir();
 bool mountLittleFs(bool formatOnFail);
 
