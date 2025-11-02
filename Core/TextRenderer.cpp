@@ -1,6 +1,6 @@
 #include "TextRenderer.h"
 
-#include "BoardOSFont.h"
+#include <LittleFS.h>
 #include "Gfx.h"
 
 namespace TextRenderer {
@@ -10,7 +10,9 @@ constexpr int8_t kOutlineOffsets[][2] = {
     {-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
 
 bool fontLoaded = false;
-int16_t cachedLineHeight = BoardOSFont::DejaVuSansBold16Ascent + BoardOSFont::DejaVuSansBold16Descent;
+int16_t cachedLineHeight = 19;  // Default fallback (15 ascent + 4 descent)
+int16_t cachedAscent = 15;
+int16_t cachedDescent = 4;
 
 void ensureFont() {
   if (!fontLoaded) {
@@ -22,9 +24,37 @@ void ensureFont() {
 
 void begin() {
   if (fontLoaded) return;
-  tft.loadFont(BoardOSFont::DejaVuSansBold16);
+
+  // Load font from LittleFS into RAM
+  // Note: TFT_eSPI cannot read directly from LittleFS files,
+  // so we load the entire font into RAM (~15 KB)
+  if (LittleFS.exists("/system/font.vlw")) {
+    File fontFile = LittleFS.open("/system/font.vlw", "r");
+    if (fontFile) {
+      size_t fontFileSize = fontFile.size();
+      uint8_t* fontData = (uint8_t*)malloc(fontFileSize);
+      if (fontData) {
+        size_t bytesRead = fontFile.readBytes((char*)fontData, fontFileSize);
+        if (bytesRead == fontFileSize) {
+          tft.loadFont(fontData);
+          // Note: fontData is intentionally NOT freed - TFT_eSPI uses it
+        } else {
+          free(fontData);
+        }
+      }
+      fontFile.close();
+    }
+  }
+  // If font loading failed, TFT_eSPI will use its default font
+
   tft.setTextWrap(false);
+
+  // Cache font metrics
   cachedLineHeight = tft.fontHeight();
+  // TFT_eSPI doesn't provide direct ascent/descent, estimate from height
+  cachedAscent = (cachedLineHeight * 15) / 19;  // ~79% of height
+  cachedDescent = cachedLineHeight - cachedAscent;
+
   fontLoaded = true;
 }
 
@@ -41,12 +71,12 @@ int16_t lineHeight() {
 
 int16_t ascent() {
   ensureFont();
-  return BoardOSFont::DejaVuSansBold16Ascent;
+  return cachedAscent;
 }
 
 int16_t descent() {
   ensureFont();
-  return BoardOSFont::DejaVuSansBold16Descent;
+  return cachedDescent;
 }
 
 int16_t measure(const String& text) {
