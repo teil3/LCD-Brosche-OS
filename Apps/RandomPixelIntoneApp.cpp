@@ -11,7 +11,7 @@
 namespace {
 constexpr uint8_t kIntoneVariation = 4;
 constexpr uint16_t kIntoneBurstPx = 50;
-constexpr uint16_t kIntoneSteps[] = {5, 10, 20, 40, 80, 160};
+constexpr uint16_t kIntoneSteps[] = {1, 2, 5, 10, 20, 40, 80, 160};
 constexpr uint8_t kIntoneStepCount = sizeof(kIntoneSteps) / sizeof(kIntoneSteps[0]);
 constexpr uint32_t kIntoneIntervals[] = {10, 20, 40, 80, 160, 240, 480, 960, 1920, 3840};
 constexpr uint8_t kIntoneIntervalCount = sizeof(kIntoneIntervals) / sizeof(kIntoneIntervals[0]);
