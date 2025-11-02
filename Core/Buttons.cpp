@@ -1,5 +1,6 @@
 #include "Buttons.h"
 
+#ifdef USB_DEBUG
 static const char* eventName(BtnEvent e) {
   switch (e) {
     case BtnEvent::Single: return "Single";
@@ -9,10 +10,7 @@ static const char* eventName(BtnEvent e) {
     default:               return "None";
   }
 }
-
-namespace {
-constexpr bool kButtonDebug = false;
-}
+#endif
 
 void ButtonState::begin() {
   pinMode(cfg_.pin, cfg_.pullup ? INPUT_PULLUP : INPUT);
@@ -30,9 +28,9 @@ BtnEvent ButtonState::poll() {
 
   // Edge + Debounce
   if (level != lastLevel_ && (now - lastChange_) >= DEBOUNCE_MS) {
-    if (kButtonDebug) {
+    #ifdef USB_DEBUG
       Serial.printf("[BTN DBG] pin%u raw=%d logical=%d\n", cfg_.pin, raw, level);
-    }
+    #endif
     lastLevel_ = level;
     lastChange_ = now;
     bool isDown = !level; // pullup: LOW=pressed
@@ -43,9 +41,9 @@ BtnEvent ButtonState::poll() {
   // Long
   if (pressed_ && !longFired_ && (now - pressStart_) >= LONG_MS) {
     longFired_ = true; clickCount_ = 0;
-    if (kButtonDebug) {
+    #ifdef USB_DEBUG
       Serial.printf("[BTN] pin%u %s\n", cfg_.pin, eventName(BtnEvent::Long));
-    }
+    #endif
     return BtnEvent::Long;
   }
 
@@ -57,9 +55,9 @@ BtnEvent ButtonState::poll() {
       if (clickCount_ >= 3) out = BtnEvent::Triple;
       else if (clickCount_ == 2) out = BtnEvent::Double;
       clickCount_ = 0;
-      if (kButtonDebug) {
+      #ifdef USB_DEBUG
         Serial.printf("[BTN] pin%u %s\n", cfg_.pin, eventName(out));
-      }
+      #endif
       return out;
     }
   }

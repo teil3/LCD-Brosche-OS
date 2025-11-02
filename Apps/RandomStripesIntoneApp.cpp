@@ -119,7 +119,9 @@ void RandomStripesIntoneApp::onButton(uint8_t index, BtnEvent e) {
   switch (e) {
     case BtnEvent::Single:
       nextStep_();
-      Serial.printf("[StripesIntone] height=%u\n", currentStripeHeight_());
+      #ifdef USB_DEBUG
+        Serial.printf("[StripesIntone] height=%u\n", currentStripeHeight_());
+      #endif
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
@@ -127,7 +129,9 @@ void RandomStripesIntoneApp::onButton(uint8_t index, BtnEvent e) {
       break;
     case BtnEvent::Double:
       slower_();
-      Serial.printf("[StripesIntone] interval=%lums\n", static_cast<unsigned long>(currentInterval_()));
+      #ifdef USB_DEBUG
+        Serial.printf("[StripesIntone] interval=%lums\n", static_cast<unsigned long>(currentInterval_()));
+      #endif
       reseed_();
       drawBurst_();
       showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");

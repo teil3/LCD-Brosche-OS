@@ -363,14 +363,20 @@ void SlideshowApp::cancelCopy_() {
 
 bool SlideshowApp::ensureFlashReady_() {
   if (!mountLittleFs(false)) {
-    Serial.println("[Slideshow] LittleFS mount retry");
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] LittleFS mount retry");
+    #endif
     if (!mountLittleFs(true)) {
-      Serial.println("[Slideshow] LittleFS format+mount failed");
+      #ifdef USB_DEBUG
+        Serial.println("[Slideshow] LittleFS format+mount failed");
+      #endif
       return false;
     }
   }
   if (!ensureFlashSlidesDir()) {
-    Serial.println("[Slideshow] ensureFlashSlidesDir failed");
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] ensureFlashSlidesDir failed");
+    #endif
     return false;
   }
   return true;
@@ -384,11 +390,15 @@ bool SlideshowApp::ensureSdReady_() {
   digitalWrite(TFT_CS_PIN, HIGH);
   bool ok = SD.begin(SD_CS_PIN, sdSPI, 5000000);
   if (!ok) {
-    Serial.println("[Slideshow] SD init retry @2MHz");
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] SD init retry @2MHz");
+    #endif
     ok = SD.begin(SD_CS_PIN, sdSPI, 2000000);
   }
   if (!ok) {
-    Serial.println("[Slideshow] SD init failed");
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] SD init failed");
+    #endif
   }
   return ok;
 }
@@ -407,7 +417,9 @@ bool SlideshowApp::prepareCopyQueue_() {
   }
   std::vector<String> sdFiles;
   if (!readDirectoryEntries_(&SD, dir, sdFiles)) {
-    Serial.printf("[Slideshow] prepareCopyQueue: readDirectoryEntries failed for '%s'\n", dir.c_str());
+    #ifdef USB_DEBUG
+      Serial.printf("[Slideshow] prepareCopyQueue: readDirectoryEntries failed for '%s'\n", dir.c_str());
+    #endif
     return false;
   }
 
@@ -423,7 +435,9 @@ bool SlideshowApp::prepareCopyQueue_() {
 
     File f = SD.open(path.c_str(), FILE_READ);
     if (!f) {
-      Serial.printf("[Slideshow] copy queue open fail: %s\n", path.c_str());
+      #ifdef USB_DEBUG
+        Serial.printf("[Slideshow] copy queue open fail: %s\n", path.c_str());
+      #endif
       continue;
     }
     size_t size = f.size();
@@ -438,12 +452,16 @@ bool SlideshowApp::prepareCopyQueue_() {
   }
 
   if (items.empty()) {
-    Serial.println("[Slideshow] prepareCopyQueue: no JPEG files on SD");
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] prepareCopyQueue: no JPEG files on SD");
+    #endif
     return false;
   }
 
   if (!ensureFlashReady_()) {
-    Serial.println("[Slideshow] prepareCopyQueue: ensureFlashReady_ failed");
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] prepareCopyQueue: ensureFlashReady_ failed");
+    #endif
     return false;
   }
 
@@ -452,16 +470,20 @@ bool SlideshowApp::prepareCopyQueue_() {
   });
 
   if (!clearFlashSlidesDir()) {
-    Serial.println("[Slideshow] WARN: Flash clear failed (continue)");
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] WARN: Flash clear failed (continue)");
+    #endif
   }
 
   copyQueue_ = std::move(items);
   for (const auto& item : copyQueue_) {
     copyBytesTotal_ += item.size;
   }
-  Serial.printf("[Slideshow] prepareCopyQueue: %u files, total=%u bytes\n",
-                static_cast<unsigned>(copyQueue_.size()),
-                static_cast<unsigned>(copyBytesTotal_));
+  #ifdef USB_DEBUG
+    Serial.printf("[Slideshow] prepareCopyQueue: %u files, total=%u bytes\n",
+                  static_cast<unsigned>(copyQueue_.size()),
+                  static_cast<unsigned>(copyBytesTotal_));
+  #endif
   return true;
 }
 
@@ -692,9 +714,13 @@ void SlideshowApp::performDeleteAll_() {
   for (const String& path : flashFiles) {
     if (LittleFS.remove(path.c_str())) {
       deleteCount_++;
-      Serial.printf("[Delete] Removed: %s\n", path.c_str());
+      #ifdef USB_DEBUG
+        Serial.printf("[Delete] Removed: %s\n", path.c_str());
+      #endif
     } else {
-      Serial.printf("[Delete] FAILED to remove: %s\n", path.c_str());
+      #ifdef USB_DEBUG
+        Serial.printf("[Delete] FAILED to remove: %s\n", path.c_str());
+      #endif
     }
   }
 
@@ -715,9 +741,13 @@ void SlideshowApp::performDeleteAll_() {
 
 void SlideshowApp::performDeleteSingle_(const String& path) {
   if (LittleFS.remove(path.c_str())) {
-    Serial.printf("[Delete] Removed: %s\n", path.c_str());
+    #ifdef USB_DEBUG
+      Serial.printf("[Delete] Removed: %s\n", path.c_str());
+    #endif
   } else {
-    Serial.printf("[Delete] FAILED to remove: %s\n", path.c_str());
+    #ifdef USB_DEBUG
+      Serial.printf("[Delete] FAILED to remove: %s\n", path.c_str());
+    #endif
   }
 }
 
@@ -742,14 +772,18 @@ void SlideshowApp::showCurrent_() {
 
   File test = fs->open(path, FILE_READ);
   if (!test) {
-    Serial.printf("[Slideshow] open FAIL: %s\n", path.c_str());
+    #ifdef USB_DEBUG
+      Serial.printf("[Slideshow] open FAIL: %s\n", path.c_str());
+    #endif
     return;
   }
   uint8_t sig[2] = {0, 0};
   size_t n = test.read(sig, 2);
   test.close();
   if (n != 2 || sig[0] != 0xFF || sig[1] != 0xD8) {
-    Serial.printf("[Slideshow] WARN SOI: %s\n", path.c_str());
+    #ifdef USB_DEBUG
+      Serial.printf("[Slideshow] WARN SOI: %s\n", path.c_str());
+    #endif
     return;
   }
 
@@ -763,7 +797,9 @@ void SlideshowApp::showCurrent_() {
     rc = TJpgDec.drawFsJpg(0, 0, path.c_str(), LittleFS);
   }
   if (rc != JDR_OK) {
-    Serial.printf("[Slideshow] draw fail (%d): %s\n", rc, path.c_str());
+    #ifdef USB_DEBUG
+      Serial.printf("[Slideshow] draw fail (%d): %s\n", rc, path.c_str());
+    #endif
     return;
   }
 
@@ -781,7 +817,9 @@ void SlideshowApp::showCurrent_() {
   }
   drawToastOverlay_();
 
-  Serial.printf("[Slideshow] OK (%s): %s\n", slideSourceLabel(source_), path.c_str());
+  #ifdef USB_DEBUG
+    Serial.printf("[Slideshow] OK (%s): %s\n", slideSourceLabel(source_), path.c_str());
+  #endif
 
   if (controlMode_ == ControlMode::StorageMenu) {
     markStorageMenuDirty_();
@@ -1339,7 +1377,9 @@ bool SlideshowApp::rebuildFileListFrom_(SlideSource src) {
 
 bool SlideshowApp::rebuildFileList_() {
   if (source_ == SlideSource::SDCard && !ensureSdReady_()) {
-    Serial.println("[Slideshow] rebuild: SD not ready");
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] rebuild: SD not ready");
+    #endif
   }
   if (rebuildFileListFrom_(source_)) {
     idx_ = 0;
@@ -1347,7 +1387,9 @@ bool SlideshowApp::rebuildFileList_() {
   }
 
   if (source_ == SlideSource::SDCard) {
-    Serial.println("[Slideshow] SD leer – auf Flash umschalten");
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] SD leer – auf Flash umschalten");
+    #endif
     if (rebuildFileListFrom_(SlideSource::Flash)) {
       source_ = SlideSource::Flash;
       idx_ = 0;
@@ -1590,7 +1632,9 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
         applyDwell_();
         timeSinceSwitch_ = 0;
         showToast_(dwellToastLabel_(), kToastShortMs);
-        Serial.printf("[Slideshow] dwell=%lu ms\n", (unsigned long)dwell_ms);
+        #ifdef USB_DEBUG
+          Serial.printf("[Slideshow] dwell=%lu ms\n", (unsigned long)dwell_ms);
+        #endif
       }
       break;
 

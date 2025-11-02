@@ -19,10 +19,7 @@
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
 ButtonState btn2({(uint8_t)BTN2_PIN, true});
 
-namespace {
-constexpr bool kUsbDebug = false;
-}
-
+#ifdef USB_DEBUG
 static const char* btnEventName(BtnEvent e) {
   switch (e) {
     case BtnEvent::Single: return "Single";
@@ -32,6 +29,7 @@ static const char* btnEventName(BtnEvent e) {
     default:               return "None";
   }
 }
+#endif
 
 // Apps
 AppManager appman;
@@ -50,32 +48,47 @@ void setup() {
   delay(100);
   // Warten, bis der Monitor dran ist (nur kurz)
   for (int i=0;i<20;i++){ if (Serial) break; delay(10); }
-  if (kUsbDebug) Serial.println("[BOOT] setup start");
+  #ifdef USB_DEBUG
+    Serial.println("[BOOT] setup start");
+  #endif
 
   bool lfs_ok = mountLittleFs(false);
   if (!lfs_ok) {
-    if (kUsbDebug) Serial.println("[BOOT] LittleFS mount failed, try format");
+    #ifdef USB_DEBUG
+      Serial.println("[BOOT] LittleFS mount failed, try format");
+    #endif
     lfs_ok = mountLittleFs(true);
   }
   if (lfs_ok) {
     if (!ensureFlashSlidesDir()) {
-      if (kUsbDebug) Serial.println("[BOOT] ensureFlashSlidesDir failed");
+      #ifdef USB_DEBUG
+        Serial.println("[BOOT] ensureFlashSlidesDir failed");
+      #endif
     } else {
-      if (kUsbDebug) Serial.println("[BOOT] LittleFS ready");
+      #ifdef USB_DEBUG
+        Serial.println("[BOOT] LittleFS ready");
+      #endif
     }
   } else {
-    if (kUsbDebug) Serial.println("[BOOT] LittleFS unavailable");
+    #ifdef USB_DEBUG
+      Serial.println("[BOOT] LittleFS unavailable");
+    #endif
   }
 
   gfxBegin();
-  if (kUsbDebug) Serial.println("[BOOT] gfxBegin done");
-
-  if (kUsbDebug) Serial.printf("[BOOT] BOOT_MS=%u\n", BOOT_MS);
+  #ifdef USB_DEBUG
+    Serial.println("[BOOT] gfxBegin done");
+    Serial.printf("[BOOT] BOOT_MS=%u\n", BOOT_MS);
+  #endif
   drawBootLogo(tft, BOOT_MS);
-  if (kUsbDebug) Serial.println("[BOOT] bootlogo done");
+  #ifdef USB_DEBUG
+    Serial.println("[BOOT] bootlogo done");
+  #endif
 
   btn1.begin(); btn2.begin();
-  if (kUsbDebug) Serial.println("[BOOT] buttons ready");
+  #ifdef USB_DEBUG
+    Serial.println("[BOOT] buttons ready");
+  #endif
 
   appman.add(&app_slideshow);
   appman.add(&app_pixel_blocks);
@@ -84,12 +97,18 @@ void setup() {
   appman.add(&app_random_imager);
   appman.add(&app_square_intone);
   appman.begin();
-  if (kUsbDebug) Serial.println("[BOOT] appman.begin done");
+  #ifdef USB_DEBUG
+    Serial.println("[BOOT] appman.begin done");
+  #endif
 
   BleImageTransfer::begin();
-  if (kUsbDebug) Serial.println("[BOOT] BLE ready");
+  #ifdef USB_DEBUG
+    Serial.println("[BOOT] BLE ready");
+  #endif
   SerialImageTransfer::begin();
-  if (kUsbDebug) Serial.println("[BOOT] USB ready");
+  #ifdef USB_DEBUG
+    Serial.println("[BOOT] USB ready");
+  #endif
 }
 
 static void pumpBleEvents() {
@@ -131,20 +150,20 @@ static void pumpBleEvents() {
 static void pumpUsbEvents() {
   SerialImageTransfer::Event evt;
   while (SerialImageTransfer::pollEvent(&evt)) {
-    const char* typeStr = "";
-    switch (evt.type) {
-      case SerialImageTransfer::EventType::Started:   typeStr = "STARTED"; break;
-      case SerialImageTransfer::EventType::Completed: typeStr = "DONE"; break;
-      case SerialImageTransfer::EventType::Error:     typeStr = "ERROR"; break;
-      case SerialImageTransfer::EventType::Aborted:   typeStr = "ABORT"; break;
-    }
-    if (kUsbDebug) {
+    #ifdef USB_DEBUG
+      const char* typeStr = "";
+      switch (evt.type) {
+        case SerialImageTransfer::EventType::Started:   typeStr = "STARTED"; break;
+        case SerialImageTransfer::EventType::Completed: typeStr = "DONE"; break;
+        case SerialImageTransfer::EventType::Error:     typeStr = "ERROR"; break;
+        case SerialImageTransfer::EventType::Aborted:   typeStr = "ABORT"; break;
+      }
       Serial.printf("[USB] EVENT %s size=%lu file=%s msg=%s\n",
                     typeStr,
                     static_cast<unsigned long>(evt.size),
                     evt.filename,
                     evt.message);
-    }
+    #endif
 
     App* active = appman.activeApp();
     if (active == &app_slideshow) {
@@ -167,8 +186,10 @@ static void pumpUsbEvents() {
 }
 
 void loop() {
-  static bool first=true;
-  if (first) { Serial.println("[LOOP] enter"); first=false; }
+  #ifdef USB_DEBUG
+    static bool first=true;
+    if (first) { Serial.println("[LOOP] enter"); first=false; }
+  #endif
   static uint32_t last = millis();
   uint32_t now = millis();
   uint32_t dt = now - last;
@@ -177,7 +198,9 @@ void loop() {
   // Globale Button-Logik (BTN1): App-Wechsel & Backlight
   BtnEvent e1 = btn1.poll();
   if (e1 != BtnEvent::None) {
-    if (kUsbDebug) Serial.printf("[BTN] BTN1 %s\n", btnEventName(e1));
+    #ifdef USB_DEBUG
+      Serial.printf("[BTN] BTN1 %s\n", btnEventName(e1));
+    #endif
     switch (e1) {
       case BtnEvent::Single: appman.next(); break;
       case BtnEvent::Double: /* frei: z.B. App-List OSD */ break;
@@ -190,7 +213,9 @@ void loop() {
   // App-seitige Events (BTN2)
   BtnEvent e2 = btn2.poll();
   if (e2 != BtnEvent::None) {
-    if (kUsbDebug) Serial.printf("[BTN] BTN2 %s\n", btnEventName(e2));
+    #ifdef USB_DEBUG
+      Serial.printf("[BTN] BTN2 %s\n", btnEventName(e2));
+    #endif
     appman.dispatchBtn(2, e2);
   }
 

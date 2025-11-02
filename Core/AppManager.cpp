@@ -12,9 +12,11 @@ void AppManager::setActive(int i) {
   if (i < 0 || i >= (int)apps_.size()) return;
   if (active_ >= 0) apps_[active_]->shutdown();
   active_ = i;
-  if (Serial) {
-    Serial.printf("[APP] activate %s (%d/%d)\n", apps_[active_]->name(), active_ + 1, (int)apps_.size());
-  }
+  #ifdef USB_DEBUG
+    if (Serial) {
+      Serial.printf("[APP] activate %s (%d/%d)\n", apps_[active_]->name(), active_ + 1, (int)apps_.size());
+    }
+  #endif
   tft.fillScreen(TFT_BLACK);
   int16_t textY = (tft.height() - TextRenderer::lineHeight()) / 2;
   if (textY < 0) textY = 0;

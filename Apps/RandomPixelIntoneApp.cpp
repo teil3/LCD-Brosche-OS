@@ -122,7 +122,9 @@ void RandomPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
   switch (e) {
     case BtnEvent::Single:
       nextStep_();
-      Serial.printf("[PixelIntone] step=%u\n", currentStep_());
+      #ifdef USB_DEBUG
+        Serial.printf("[PixelIntone] step=%u\n", currentStep_());
+      #endif
       tft.fillScreen(TFT_BLACK);
       reseed_();
       drawBurst_();
@@ -130,7 +132,9 @@ void RandomPixelIntoneApp::onButton(uint8_t index, BtnEvent e) {
       break;
     case BtnEvent::Double:
       slower_();
-      Serial.printf("[PixelIntone] interval=%lums\n", static_cast<unsigned long>(currentInterval_()));
+      #ifdef USB_DEBUG
+        Serial.printf("[PixelIntone] interval=%lums\n", static_cast<unsigned long>(currentInterval_()));
+      #endif
       reseed_();
       drawBurst_();
       showStatus_(String("Bremse ") + String(currentInterval_()) + "ms");

@@ -22,7 +22,6 @@ constexpr uint32_t kTransferTimeoutMs = 15000;        // 15s Inaktivität -> Abb
 constexpr size_t   kChunkBufferSize   = 1024;         // Puffer für eingehende Blöcke
 constexpr size_t   kFilenameCapacity  = sizeof(SerialImageTransfer::Event::filename);
 constexpr size_t   kLineBufferSize    = 160;
-constexpr bool     kUsbDebug          = false;
 
 enum class RxState : uint8_t { Idle = 0, Receiving, AwaitEnd };
 
@@ -322,9 +321,9 @@ bool beginTransfer(size_t size, const char* requestedName, const char* targetDir
                 static_cast<unsigned long>(size));
   postEvent(SerialImageTransfer::EventType::Started, gSession.filename, size, msg);
 
-  if (kUsbDebug) {
+  #ifdef USB_DEBUG
     Serial.printf("[USB] START %s (%lu bytes)\n", gSession.filename, static_cast<unsigned long>(size));
-  }
+  #endif
   return true;
 }
 
@@ -345,11 +344,11 @@ void abortTransfer(const char* reason, SerialImageTransfer::EventType evtType) {
 
   sendErr(reason ? reason : "ABORT");
   postEvent(evtType, fname, received, reason ? reason : "");
-  if (kUsbDebug) {
+  #ifdef USB_DEBUG
     Serial.printf("[USB] ABORT (%s) after %lu bytes\n",
                   reason ? reason : "no-reason",
                   static_cast<unsigned long>(received));
-  }
+  #endif
 }
 
 void completeTransfer() {
@@ -404,11 +403,11 @@ void completeTransfer() {
   }
   sendOk("END", "%s %lu", fname, static_cast<unsigned long>(received));
   postEvent(SerialImageTransfer::EventType::Completed, fname, received, "USB Übertragung abgeschlossen");
-  if (kUsbDebug) {
+  #ifdef USB_DEBUG
     Serial.printf("[USB] COMPLETE %s (%lu bytes)\n",
                   fname,
                   static_cast<unsigned long>(received));
-  }
+  #endif
 }
 
 void processData() {
@@ -540,15 +539,15 @@ void processLine(const char* line) {
   }
 
   if (!line[0] || std::strlen(line) <= 2 || line[0] == '[' || line[0] == '<' || line[0] == '!' || line[0] == '=') {
-    if (kUsbDebug) {
+    #ifdef USB_DEBUG
       Serial.printf("[USB] IGN %s\n", line);
-    }
+    #endif
     return;
   }
 
-  if (kUsbDebug) {
+  #ifdef USB_DEBUG
     Serial.printf("[USB] UNKNOWN CMD %s\n", line);
-  }
+  #endif
   // Kein sendErr, damit Browser-Transfers nicht abgebrochen werden.
 }
 

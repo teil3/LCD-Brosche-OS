@@ -22,22 +22,28 @@ void gfxBegin() {
   digitalWrite(TFT_CS_PIN, HIGH);
   bool sd_ok = SD.begin(SD_CS_PIN, sdSPI, 5000000);     // 5 MHz
   if (!sd_ok) {
-    Serial.println("[GFX] SD @5MHz FAIL, retry @2MHz");
+    #ifdef USB_DEBUG
+      Serial.println("[GFX] SD @5MHz FAIL, retry @2MHz");
+    #endif
     sd_ok = SD.begin(SD_CS_PIN, sdSPI, 2000000);        // Fallback 2 MHz
   }
   if (!sd_ok) {
-    Serial.println("[GFX] SD init FAILED");
+    #ifdef USB_DEBUG
+      Serial.println("[GFX] SD init FAILED");
+    #endif
   } else {
-    // Mini-Diagnose
-    uint8_t type = SD.cardType();
-    Serial.printf("[GFX] SD OK, type=%u\n", type);
-    File root = SD.open("/");
-    if (root) {
-      int shown = 0;
-      for (File f = root.openNextFile(); f && shown < 5; f = root.openNextFile(), ++shown) {
-        Serial.printf("[GFX] /%s%s\n", f.isDirectory()?"<DIR> ":"", f.name());
+    #ifdef USB_DEBUG
+      // Mini-Diagnose
+      uint8_t type = SD.cardType();
+      Serial.printf("[GFX] SD OK, type=%u\n", type);
+      File root = SD.open("/");
+      if (root) {
+        int shown = 0;
+        for (File f = root.openNextFile(); f && shown < 5; f = root.openNextFile(), ++shown) {
+          Serial.printf("[GFX] /%s%s\n", f.isDirectory()?"<DIR> ":"", f.name());
+        }
       }
-    }
+    #endif
   }
 
   // --- TFT danach ---
@@ -51,5 +57,7 @@ void gfxBegin() {
   TJpgDec.setCallback(tft_output_cb);
   TJpgDec.setSwapBytes(true);
 
-  Serial.println("[GFX] init ok");
+  #ifdef USB_DEBUG
+    Serial.println("[GFX] init ok");
+  #endif
 }

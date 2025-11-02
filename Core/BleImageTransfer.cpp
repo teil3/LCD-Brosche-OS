@@ -259,7 +259,9 @@ bool beginTransfer(size_t size, const std::string& requestedName) {
                 static_cast<unsigned long>(size));
   postEvent(BleImageTransfer::EventType::Started, gSession.filename, size, msg);
 
-  Serial.printf("[BLE] START %s (%lu bytes)\n", gSession.filename, (unsigned long)size);
+  #ifdef USB_DEBUG
+    Serial.printf("[BLE] START %s (%lu bytes)\n", gSession.filename, (unsigned long)size);
+  #endif
   return true;
 }
 
@@ -280,9 +282,11 @@ void abortTransfer(const char* reason, BleImageTransfer::EventType evtType) {
   }
 
   postEvent(evtType, fname, received, reason ? reason : "");
-  Serial.printf("[BLE] ABORT (%s) after %lu bytes\n",
-                reason ? reason : "no-reason",
-                static_cast<unsigned long>(received));
+  #ifdef USB_DEBUG
+    Serial.printf("[BLE] ABORT (%s) after %lu bytes\n",
+                  reason ? reason : "no-reason",
+                  static_cast<unsigned long>(received));
+  #endif
 }
 
 void completeTransfer() {
@@ -305,9 +309,11 @@ void completeTransfer() {
   sendStatus(status);
 
   postEvent(BleImageTransfer::EventType::Completed, fname, received, "Übertragung abgeschlossen");
-  Serial.printf("[BLE] COMPLETE %s (%lu bytes)\n",
-                fname,
-                static_cast<unsigned long>(received));
+  #ifdef USB_DEBUG
+    Serial.printf("[BLE] COMPLETE %s (%lu bytes)\n",
+                  fname,
+                  static_cast<unsigned long>(received));
+  #endif
 }
 
 class ControlCallbacks : public BLECharacteristicCallbacks {
@@ -399,11 +405,15 @@ class ChunkCallbacks : public BLECharacteristicCallbacks {
 
 class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* server) override {
-    Serial.println("[BLE] central connected");
+    #ifdef USB_DEBUG
+      Serial.println("[BLE] central connected");
+    #endif
   }
 
   void onDisconnect(BLEServer* server) override {
-    Serial.println("[BLE] central disconnected");
+    #ifdef USB_DEBUG
+      Serial.println("[BLE] central disconnected");
+    #endif
     if (gSession.active) {
       abortTransfer("DISCONNECT", BleImageTransfer::EventType::Aborted);
     }
@@ -458,7 +468,9 @@ void begin() {
   advertising->start();
 
   gStarted = true;
-  Serial.println("[BLE] Image transfer service ready");
+  #ifdef USB_DEBUG
+    Serial.println("[BLE] Image transfer service ready");
+  #endif
 }
 
 void tick() {

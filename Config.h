@@ -1,6 +1,10 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+// --- Debug Options ---
+// Uncomment to enable USB debug messages (costs ~3-5 KB Flash)
+// #define USB_DEBUG
+
 // --- feste Pins (Board) ---
 inline constexpr int SPI_SCK_PIN   = 14;
 inline constexpr int SPI_MOSI_PIN  = 15;
