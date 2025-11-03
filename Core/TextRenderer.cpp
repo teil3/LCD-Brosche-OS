@@ -23,7 +23,16 @@ void ensureFont() {
 }  // namespace
 
 void begin() {
-  if (fontLoaded) return;
+  #ifdef USB_DEBUG
+    Serial.printf("[TextRenderer] begin() called, fontLoaded=%d\n", fontLoaded);
+  #endif
+
+  if (fontLoaded) {
+    #ifdef USB_DEBUG
+      Serial.println("[TextRenderer] Font already loaded, skipping");
+    #endif
+    return;
+  }
 
   // Load font from LittleFS into RAM
   // Note: TFT_eSPI cannot read directly from LittleFS files,
@@ -32,18 +41,39 @@ void begin() {
     File fontFile = LittleFS.open("/system/font.vlw", "r");
     if (fontFile) {
       size_t fontFileSize = fontFile.size();
+      #ifdef USB_DEBUG
+        Serial.printf("[TextRenderer] Loading font, size=%lu bytes\n", static_cast<unsigned long>(fontFileSize));
+      #endif
       uint8_t* fontData = (uint8_t*)malloc(fontFileSize);
       if (fontData) {
         size_t bytesRead = fontFile.readBytes((char*)fontData, fontFileSize);
         if (bytesRead == fontFileSize) {
           tft.loadFont(fontData);
           // Note: fontData is intentionally NOT freed - TFT_eSPI uses it
+          #ifdef USB_DEBUG
+            Serial.println("[TextRenderer] Font loaded successfully");
+          #endif
         } else {
           free(fontData);
+          #ifdef USB_DEBUG
+            Serial.println("[TextRenderer] Font read failed");
+          #endif
         }
+      } else {
+        #ifdef USB_DEBUG
+          Serial.println("[TextRenderer] Font malloc failed");
+        #endif
       }
       fontFile.close();
+    } else {
+      #ifdef USB_DEBUG
+        Serial.println("[TextRenderer] Failed to open font file");
+      #endif
     }
+  } else {
+    #ifdef USB_DEBUG
+      Serial.println("[TextRenderer] Font file not found");
+    #endif
   }
   // If font loading failed, TFT_eSPI will use its default font
 
@@ -56,12 +86,29 @@ void begin() {
   cachedDescent = cachedLineHeight - cachedAscent;
 
   fontLoaded = true;
+  #ifdef USB_DEBUG
+    Serial.printf("[TextRenderer] Font metrics: height=%d\n", cachedLineHeight);
+  #endif
 }
 
 void end() {
-  if (!fontLoaded) return;
+  #ifdef USB_DEBUG
+    Serial.printf("[TextRenderer] end() called, fontLoaded=%d\n", fontLoaded);
+  #endif
+
+  if (!fontLoaded) {
+    #ifdef USB_DEBUG
+      Serial.println("[TextRenderer] Font not loaded, skipping");
+    #endif
+    return;
+  }
+
   tft.unloadFont();
   fontLoaded = false;
+
+  #ifdef USB_DEBUG
+    Serial.println("[TextRenderer] Font unloaded");
+  #endif
 }
 
 int16_t lineHeight() {

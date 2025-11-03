@@ -11,6 +11,7 @@
 #include "Apps/RandomPixelIntoneApp.h"
 #include "Apps/RandomChaoticLinesApp.h"
 #include "Apps/RandomStripesIntoneApp.h"
+#include "Apps/TextApp.h"
 #include "Core/Storage.h"
 #include "Core/BleImageTransfer.h"
 #include "Core/SerialImageTransfer.h"
@@ -39,6 +40,7 @@ RandomPixelIntoneApp app_pixel_blocks;
 RandomSquareIntoneApp app_square_intone;
 RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
+TextApp app_text;
 
 void setup() {
   Serial.setRxBufferSize(8192);
@@ -91,6 +93,7 @@ void setup() {
   #endif
 
   appman.add(&app_slideshow);
+  appman.add(&app_text);
   appman.add(&app_pixel_blocks);
   appman.add(&app_random_lines);
   appman.add(&app_random_stripes);
@@ -245,5 +248,6 @@ void loop() {
 #include "Apps/RandomPixelIntoneApp.cpp"
 #include "Apps/RandomChaoticLinesApp.cpp"
 #include "Apps/RandomStripesIntoneApp.cpp"
+#include "Apps/TextApp.cpp"
 #include "Core/BleImageTransfer.cpp"
 #include "Core/SerialImageTransfer.cpp"

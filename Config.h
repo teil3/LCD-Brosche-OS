@@ -3,7 +3,7 @@
 
 // --- Debug Options ---
 // Uncomment to enable USB debug messages (costs ~3-5 KB Flash)
-// #define USB_DEBUG
+#define USB_DEBUG
 
 // --- feste Pins (Board) ---
 inline constexpr int SPI_SCK_PIN   = 14;

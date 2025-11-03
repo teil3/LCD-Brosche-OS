@@ -214,12 +214,13 @@ void ensureUniqueOnFs(char* nameBuf, size_t bufLen, const char* dir) {
     return;
   }
 
-  // For /system directory, always overwrite (no unique names)
-  if (dir && std::strcmp(dir, "/system") == 0) {
+  // Only generate unique names for /slides directory
+  // For all other directories (/, /system, etc.), overwrite existing files
+  if (dir && std::strcmp(dir, kFlashSlidesDir) != 0) {
     return;  // Use the filename as-is, will overwrite existing file
   }
 
-  // For other directories (e.g., /slides), make filename unique
+  // For /slides directory, make filename unique
   String base(nameBuf);
   String ext(".jpg");
   int dotIdx = base.lastIndexOf('.');
