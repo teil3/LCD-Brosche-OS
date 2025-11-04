@@ -17,21 +17,28 @@ public:
 
 private:
   enum class DisplayMode : uint8_t {
-    SingleLine = 0,
-    MultiLine = 1,
-    BigWords = 2,
-    BigLetters = 3
+    TextBlock = 0,
+    BigWords = 1,
+    BigLetters = 2
+  };
+
+  enum class TextAlign : uint8_t {
+    Left = 0,
+    Center = 1,
+    Right = 2
   };
 
   // Configuration
-  DisplayMode mode_ = DisplayMode::SingleLine;
+  DisplayMode mode_ = DisplayMode::TextBlock;
   String text_ = "Hallo Welt!";
   uint16_t color_ = 0xFFFF;  // White
   uint16_t bgColor_ = 0x0000;  // Black
   uint8_t textSize_ = 2;
   String fontName_ = "FreeSansBold18pt";
-  const GFXfont* currentFont_ = nullptr;
+  bool fontLoaded_ = false;
+  bool fontLoadFailed_ = false;
   bool fontExplicit_ = false;
+  TextAlign alignment_ = TextAlign::Center;
   uint32_t letterSpeed_ = 1000;  // Big display change speed (ms per step)
 
   // Runtime state
@@ -49,18 +56,23 @@ private:
   void parseConfigLine_(const String& line);
   DisplayMode stringToMode_(const String& str) const;
   uint16_t parseColor_(const String& str) const;
-  void drawSingleLine_();
-  void drawMultiLine_();
+  void drawTextBlock_();
   void drawBigLetter_();
   void drawBigWord_();
   void nextMode_();
   void cycleSpeed_();
   void reloadConfig_();
+  void cycleAlignment_();
   void showStatus_(const String& msg);
   uint32_t currentSpeed_() const;
   const char* modeName_() const;
+  const char* alignmentName_() const;
   void chooseFont_();
   void applyFont_();
-  void setCanvasFont_();
+  bool loadFont_(const String& name);
+  void unloadFont_();
+  bool ensureFontLoaded_();
+  String resolveFontPath_(const String& name) const;
+  bool loadSpriteFont_(TFT_eSprite& sprite, const String& name);
   void rebuildWords_();
 };

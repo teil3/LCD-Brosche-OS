@@ -106,6 +106,38 @@ cp assets/boot_logo_200.jpg /tmp/bootlogo.jpg
 python3 tools/upload_system_image.py /dev/ttyACM0 /tmp/bootlogo.jpg
 ```
 
+### Dateien auflisten (LittleFS)
+
+```bash
+# Vollständige Übersicht ab Root
+python3 tools/list_littlefs.py --port /dev/ttyACM0 --root /
+
+# Nur Fonts-Verzeichnis prüfen
+python3 tools/list_littlefs.py --port /dev/ttyACM0 --root /system/fonts
+
+# Gesamtkapazität/Freiheit abfragen
+python3 - <<'PY'
+import serial
+
+PORT = '/dev/ttyACM0'
+BAUD = 115200
+
+with serial.Serial(PORT, BAUD, timeout=0.5) as ser:
+    ser.write(b'PING\n')
+    # Best effort: erste Antwort verwerfen
+    ser.readline()
+    ser.write(b'FSINFO\n')
+    while True:
+        line = ser.readline()
+        if not line:
+            continue
+        text = line.decode('utf-8', 'replace').strip()
+        print(text)
+        if text.startswith('USB OK FSINFO') or text.startswith('USB ERR'):
+            break
+PY
+```
+
 ## Protokoll-Details
 
 Das Script nutzt das erweiterte SerialImageTransfer-Protokoll:
@@ -127,6 +159,9 @@ END
 - `USB OK START bootlogo.jpg 12345` → Transfer gestartet
 - `USB OK END bootlogo.jpg 12345` → Transfer erfolgreich
 - `USB ERR <code> <message>` → Fehler
+- `USB OK LIST F bootlogo.jpg 12345` → Eintrag während `LIST` (Typ `F`=File, `D`=Directory)
+- `USB OK LISTDONE 7` → `LIST` abgeschlossen, hier mit 7 Einträgen
+- `USB OK FSINFO 8388608 1234567 7154041` → LittleFS-Statistik (Total/Used/Free in Bytes)
 
 ## Flash-Speicher freigeben (Optional)
 

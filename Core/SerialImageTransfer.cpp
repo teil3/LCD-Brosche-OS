@@ -123,6 +123,68 @@ void cleanupFileOnError() {
   }
 }
 
+void listDirectory(const char* dirArg) {
+  String dir = (dirArg && dirArg[0]) ? String(dirArg) : String("/");
+  dir.trim();
+  if (dir.isEmpty()) dir = "/";
+  if (!dir.startsWith("/")) {
+    dir = "/" + dir;
+  }
+
+  // Normalise trailing slash (except root)
+  while (dir.length() > 1 && dir.endsWith("/")) {
+    dir.remove(dir.length() - 1);
+  }
+
+  File root = LittleFS.open(dir.c_str(), FILE_READ);
+  if (!root) {
+    sendErr("LISTOPEN", "%s", dir.c_str());
+    return;
+  }
+  if (!root.isDirectory()) {
+    root.close();
+    sendErr("LISTTYPE", "%s", dir.c_str());
+    return;
+  }
+
+  size_t count = 0;
+  while (true) {
+    File entry = root.openNextFile();
+    if (!entry) break;
+
+    String name = entry.name();
+    if (name.startsWith(dir)) {
+      name = name.substring(dir.length());
+    }
+    if (name.startsWith("/")) {
+      name.remove(0, 1);
+    }
+    if (name.isEmpty()) {
+      name = entry.name();
+    }
+
+    bool isDir = entry.isDirectory();
+    unsigned long size = isDir ? 0UL : static_cast<unsigned long>(entry.size());
+    sendOk("LIST", "%c %s %lu", isDir ? 'D' : 'F', name.c_str(), size);
+    entry.close();
+    ++count;
+    delay(0);
+  }
+
+  root.close();
+  sendOk("LISTDONE", "%lu", static_cast<unsigned long>(count));
+}
+
+void sendFsInfo() {
+  size_t total = LittleFS.totalBytes();
+  size_t used = LittleFS.usedBytes();
+  size_t available = (total >= used) ? (total - used) : 0;
+  sendOk("FSINFO", "%lu %lu %lu",
+         static_cast<unsigned long>(total),
+         static_cast<unsigned long>(used),
+         static_cast<unsigned long>(available));
+}
+
 void resetSession() {
   if (gSession.file) {
     gSession.file.close();
@@ -512,6 +574,13 @@ void processLine(const char* line) {
     return;
   }
 
+  if (std::strncmp(line, "LIST", 4) == 0) {
+    const char* ptr = line + 4;
+    while (*ptr == ' ') ++ptr;
+    listDirectory(ptr);
+    return;
+  }
+
   if (std::strcmp(line, "END") == 0) {
     if (gSession.state != RxState::AwaitEnd) {
       sendErr("NOACTIVE", "Kein aktiver Transfer");
@@ -536,6 +605,11 @@ void processLine(const char* line) {
 
   if (std::strcmp(line, "PING") == 0) {
     sendOk("PONG");
+    return;
+  }
+
+  if (std::strcmp(line, "FSINFO") == 0) {
+    sendFsInfo();
     return;
   }
 

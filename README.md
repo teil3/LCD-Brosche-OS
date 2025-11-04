@@ -101,6 +101,40 @@ arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 - Funktioniert in Chromium-basierten Desktop-Browsern (HTTPS oder `localhost` erforderlich).
 - USB-Senden: Browser fragt nach dem USB-Port, uebertraegt das JPEG in 1 KB-Blöcken, zeigt den Fortschritt an und schickt das Bild direkt in den Flash der Brosche.
 
+## LittleFS-Tools
+- `tools/upload_system_image.py /dev/ttyACM0 <datei> [/ziel]` – Uebertraegt Dateien nach LittleFS (Standard `/system`).
+- `tools/list_littlefs.py --port /dev/ttyACM0 --root /system/fonts` – Listet rekursiv Inhalte und zeigt gleichzeitig mit `FSINFO` Total/Used/Free in KB an.
+- Serielle Kommandos (USB-Transfer-Modus aktivieren, 115200 Bd):
+  - `PING` → `USB OK PONG`
+  - `LIST /system/fonts` → `USB OK LIST …` sowie `USB OK LISTDONE`
+  - `FSINFO` → `USB OK FSINFO <total> <used> <free>` (Bytes)
+
+## TextApp (SmoothFont)
+- Nutzt ausschliesslich SmoothFonts (`*.vlw`), die auf LittleFS unter `/system/fonts/` liegen.
+- Konfiguration via `/textapp.cfg` (Upload nach LittleFS). Wichtige Schluessel:
+  - `TEXT=Zeile 1|Zeile 2|…` → `|` erzeugt Zeilenumbrueche.
+  - `FONT=FreeSansBold18pt` → Basisname ohne `.vlw` (Upload wandelt nach Kleinbuchstaben, z. B. `/system/fonts/freesansbold18pt.vlw`).
+  - `ALIGN=left|center|right` → Startausrichtung (optional, Standard `center`).
+  - `MODE=text|big_words|big_letters` → Initialer Modus (Standard `text`).
+- Steuerung (BTN2, waehrend die TextApp aktiv ist):
+  - Single: Moduswechsel (Textblock → BigWords → BigLetters → …)
+  - Double: Geschwindigkeit fuer BigWords/BigLetters (200/500/1000/2000/3000 ms)
+  - Long: Im Textblock-Modus Ausrichtung zyklisch (links → zentriert → rechts)
+- Textblock-Modus zeichnet den Absatz komplett in ein Sprite, skaliert ihn proportional, zentriert ihn vertikal und wendet die gewaehlte Ausrichtung an. BigWords/BigLetters skalieren SmoothFonts ebenfalls proportional (~80 % Breite bzw. ~70 % Hoehe).
+- Fallback: Fehlt der SmoothFont, erscheint eine Statusmeldung und es wird die interne pixelige Schrift genutzt.
+
+### Fonts hochladen
+```bash
+python3 tools/upload_system_image.py /dev/ttyACM0 assets/fonts/FreeSansBold18pt.vlw /system/fonts
+python3 tools/upload_system_image.py /dev/ttyACM0 assets/fonts/FreeSansBold24pt.vlw /system/fonts
+python3 tools/upload_system_image.py /dev/ttyACM0 assets/fonts/FreeSerif18pt.vlw /system/fonts
+```
+Pruefen, ob die Fonts vorhanden sind und wie viel Speicher noch frei ist:
+```bash
+python3 tools/list_littlefs.py --port /dev/ttyACM0 --root /system/fonts
+```
+Die Ausgabe enthaelt neben der Dateiliste auch `LittleFS: total/used/free` in KB (nutzt das neue `FSINFO`-Kommando).
+
 ## Dokumentation
 - [Datenblatt (DE)](<docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf>) - Boarddatenblatt und Anschlussplan
 - [User Manual (EN)](<docs/1.28ESP32-Round-TFT-Board_User-Manual_V1.12_EN.pdf>) - Englische Referenz zum Basismodul

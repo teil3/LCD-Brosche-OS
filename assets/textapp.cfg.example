@@ -31,10 +31,11 @@ COLOR=0xFFFF
 BG_COLOR=0x001F
 
 # Schriftwahl:
-# - Für die TextApp stehen aktuell nur folgende GFX-FreeFonts zur Verfügung:
-#     FreeSans18pt, FreeSansBold18pt, FreeSansBold24pt, FreeSerif18pt
-# - FONT setzt die Schrift explizit. Wird kein FONT angegeben, schaltet SIZE nur zwischen
-#   FreeSansBold18pt (SIZE < 4) und FreeSansBold24pt (SIZE >= 4) um.
+# - FONT erwartet den Basisnamen einer `.vlw`-SmoothFont-Datei in `/system/fonts/` (ohne `.vlw`).
+#   Beispiel: `FreeSansBold18pt` → `/system/fonts/freesansbold18pt.vlw` (Upload wandelt in Kleinbuchstaben).
+# - Vorhandene Beispiele: FreeSans18pt, FreeSansBold18pt, FreeSansBold24pt, FreeSerif18pt.
+# - Ohne `FONT` steuert SIZE nur, ob FreeSansBold18pt (SIZE < 4) oder FreeSansBold24pt geladen wird.
+# - Fehlt eine Datei, verwendet die App automatisch die kleine Systemschrift.
 FONT=FreeSansBold18pt
 #SIZE=2
 
@@ -68,4 +69,4 @@ LETTER_SPEED=600
 # MODE=single_line
 # TEXT=Serif Demo
 # COLOR=0xFFFF
-# FONT=FreeSerif18pt
+# FONT=FreeSerif18pt  # erwartet `/system/fonts/FreeSerif18pt.vlw`
