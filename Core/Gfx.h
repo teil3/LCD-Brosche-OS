@@ -5,6 +5,10 @@
 #define SMOOTH_FONT
 #endif
 
+#ifndef LOAD_GFXFF
+#define LOAD_GFXFF
+#endif
+
 #include <SPI.h>
 #include <SD.h>
 #include <TFT_eSPI.h>

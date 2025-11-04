@@ -1,5 +1,7 @@
 # TextApp Konfigurationsdatei
 # Diese Datei muss als /textapp.cfg auf das LittleFS hochgeladen werden
+# LCD-Brosche muss im Transfer-Modus sein.
+#python3 tools/upload_system_image.py /dev/ttyACM0 '/home/litwan/src/LCD-brosche/ESP32-D0WD-V3-TFT-1.28V1.1/ESP32-BoardOS/assets/textapp.cfg'  /
 #
 # Format: KEY=VALUE (eine Einstellung pro Zeile)
 # Kommentare beginnen mit #
@@ -7,18 +9,18 @@
 # Anzeigemodus:
 # - single_line   = Eine Zeile zentriert
 # - multi_line    = Mehrere Zeilen (nutze | als Zeilenumbruch)
-# - marquee       = Horizontale Laufschrift
-# - big_letters   = Einzelne große Buchstaben nacheinander
+# - big_words     = Einzelne grosse Wörter nacheinander
+# - big_letters   = Einzelne grosse Buchstaben nacheinander
 MODE=single_line
 
 # Text zum Anzeigen
 # Für multi_line Modus: nutze | für Zeilenumbrüche
 # Beispiel: TEXT=Zeile 1|Zeile 2|Zeile 3
-TEXT=Hallo Welt!
+TEXT=Teil3 GmbH | online 3D-Drucken | mach dein Teil!
 
 # Farbe im RGB565-Format (Hex)
 # Beispiele:
-#   0xFFFF = Weiß
+#   0xFFFF = Weiss
 #   0xF800 = Rot
 #   0x07E0 = Grün
 #   0x001F = Blau
@@ -26,34 +28,44 @@ TEXT=Hallo Welt!
 #   0xF81F = Magenta
 #   0x07FF = Cyan
 COLOR=0xFFFF
+BG_COLOR=0x001F
 
-# Schriftgröße (1-10)
-# 1 = sehr klein, 10 = sehr groß
-SIZE=2
+# Schriftwahl:
+# - Für die TextApp stehen aktuell nur folgende GFX-FreeFonts zur Verfügung:
+#     FreeSans18pt, FreeSansBold18pt, FreeSansBold24pt, FreeSerif18pt
+# - FONT setzt die Schrift explizit. Wird kein FONT angegeben, schaltet SIZE nur zwischen
+#   FreeSansBold18pt (SIZE < 4) und FreeSansBold24pt (SIZE >= 4) um.
+FONT=FreeSansBold18pt
+#SIZE=2
 
-# Geschwindigkeit in Millisekunden
-# Für marquee und big_letters Modi
-# Kleinere Werte = schneller (10-5000)
-SPEED=50
+# Geschwindigkeit in Millisekunden (gemeinsamer Wert für Wörter & Buchstaben)
+# Kleinere Werte = schneller (10-10000). Keys LETTER_SPEED, WORD_SPEED oder CYCLE_SPEED funktionieren identisch.
+LETTER_SPEED=600
 
 # Beispiel-Konfigurationen:
 #
-# Laufschrift:
-# MODE=marquee
-# TEXT=Willkommen zur Maker Faire 2025!
+# Grosse Wörter:
+# MODE=big_words
+# TEXT=Teil3 online 3D-Drucken
 # COLOR=0x07E0
-# SIZE=3
-# SPEED=30
+# FONT=FreeSansBold24pt
+# WORD_SPEED=300
 #
-# Große Buchstaben:
+# Grosse Buchstaben:
 # MODE=big_letters
 # TEXT=HELLO
 # COLOR=0xF800
-# SIZE=10
-# SPEED=500
+# FONT=FreeSansBold24pt
+# LETTER_SPEED=500
 #
 # Mehrzeilig:
 # MODE=multi_line
 # TEXT=Zeile 1|Zeile 2|Zeile 3
 # COLOR=0x001F
-# SIZE=2
+# FONT=FreeSansBold18pt
+#
+# Serif-Beispiel:
+# MODE=single_line
+# TEXT=Serif Demo
+# COLOR=0xFFFF
+# FONT=FreeSerif18pt

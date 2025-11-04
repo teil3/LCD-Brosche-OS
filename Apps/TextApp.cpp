@@ -1,51 +1,72 @@
 #include "TextApp.h"
+
 #include "Config.h"
 #include "Core/Gfx.h"
 #include "Core/Storage.h"
 #include "Core/TextRenderer.h"
 #include <LittleFS.h>
+#include <algorithm>
+#include <ctype.h>
+#include <vector>
 
-// TextApp uses bitmap fonts instead of smooth fonts for scalability
+#ifndef LOAD_GFXFF
+#define LOAD_GFXFF
+#endif
+
+extern const GFXfont FreeSans18pt7b;
+extern const GFXfont FreeSansBold18pt7b;
+extern const GFXfont FreeSansBold24pt7b;
+extern const GFXfont FreeSerif18pt7b;
 
 namespace {
 constexpr const char* kConfigPath = "/textapp.cfg";
-constexpr uint32_t kMarqueeSpeeds[] = {10, 30, 50, 100, 200};
-constexpr uint8_t kMarqueeSpeedCount = sizeof(kMarqueeSpeeds) / sizeof(kMarqueeSpeeds[0]);
-constexpr uint32_t kLetterSpeeds[] = {200, 500, 1000, 2000, 3000};
-constexpr uint8_t kLetterSpeedCount = sizeof(kLetterSpeeds) / sizeof(kLetterSpeeds[0]);
+constexpr uint32_t kCycleSpeeds[] = {200, 500, 1000, 2000, 3000};
+constexpr uint8_t kCycleSpeedCount = sizeof(kCycleSpeeds) / sizeof(kCycleSpeeds[0]);
+
+struct FontMapEntry {
+  const char* name;
+  const GFXfont* font;
+};
+
+constexpr FontMapEntry kFontMap[] = {
+    {"FreeSans18pt", &FreeSans18pt7b},
+    {"FreeSansBold18pt", &FreeSansBold18pt7b},
+    {"FreeSansBold24pt", &FreeSansBold24pt7b},
+    {"FreeSerif18pt", &FreeSerif18pt7b},
+};
+
+constexpr size_t kFontMapCount = sizeof(kFontMap) / sizeof(kFontMap[0]);
+
+const FontMapEntry* lookupFont(const String& name) {
+  for (size_t i = 0; i < kFontMapCount; ++i) {
+    if (name.equalsIgnoreCase(kFontMap[i].name)) {
+      return &kFontMap[i];
+    }
+  }
+  return nullptr;
 }
+}  // namespace
 
 void TextApp::init() {
-  #ifdef USB_DEBUG
-    Serial.println("[TextApp] init() starting");
-  #endif
-
   timeAccum_ = 0;
-  marqueeX_ = TFT_W;
-  marqueeLastX_ = TFT_W;
-  marqueeWidth_ = 0;
-  marqueeY_ = 0;
   bigLetterIndex_ = 0;
+  bigWordIndex_ = 0;
+  wordsDirty_ = true;
+  words_.clear();
   pauseUntil_ = 0;
   needsRedraw_ = true;
   needsFullRedraw_ = true;
-  speedIndex_ = 2;  // Default to 50ms
 
-  // Properly unload smooth font and use scalable bitmap font
-  TextRenderer::end();  // This sets fontLoaded=false and unloads font
-  tft.setTextFont(1);   // Use built-in font 1 (standard font, 8px base, scalable)
-  tft.setTextSize(1);   // Reset to size 1 first
+  TextRenderer::end();
+  fontExplicit_ = false;
+  currentFont_ = nullptr;
 
-  #ifdef USB_DEBUG
-    Serial.println("[TextApp] Switched to bitmap font");
-  #endif
+  loadConfig_();
+  chooseFont_();
+  applyFont_();
+  rebuildWords_();
 
   tft.fillScreen(bgColor_);
-  loadConfig_();
-
-  #ifdef USB_DEBUG
-    Serial.println("[TextApp] init() complete");
-  #endif
 }
 
 void TextApp::tick(uint32_t delta_ms) {
@@ -56,20 +77,9 @@ void TextApp::tick(uint32_t delta_ms) {
     }
     pauseUntil_ = 0;
     needsRedraw_ = true;
-    tft.fillScreen(bgColor_);
   }
 
-  if (mode_ == DisplayMode::Marquee) {
-    timeAccum_ += delta_ms;
-    while (timeAccum_ >= marqueeSpeed_) {
-      timeAccum_ -= marqueeSpeed_;
-      marqueeX_--;
-      if (marqueeX_ < -marqueeWidth_) {
-        marqueeX_ = TFT_W;
-      }
-      needsRedraw_ = true;
-    }
-  } else if (mode_ == DisplayMode::BigLetters) {
+  if (mode_ == DisplayMode::BigLetters) {
     timeAccum_ += delta_ms;
     while (timeAccum_ >= letterSpeed_) {
       timeAccum_ -= letterSpeed_;
@@ -79,14 +89,29 @@ void TextApp::tick(uint32_t delta_ms) {
       }
       needsRedraw_ = true;
     }
+  } else if (mode_ == DisplayMode::BigWords) {
+    if (wordsDirty_) {
+      rebuildWords_();
+    }
+    if (words_.empty()) {
+      return;
+    }
+    timeAccum_ += delta_ms;
+    while (timeAccum_ >= letterSpeed_) {
+      timeAccum_ -= letterSpeed_;
+      bigWordIndex_++;
+      if (bigWordIndex_ >= words_.size()) {
+        bigWordIndex_ = 0;
+      }
+      needsRedraw_ = true;
+    }
   }
 }
 
 void TextApp::draw() {
-  if (!needsRedraw_) {
-    return;
-  }
-  needsRedraw_ = false;
+  if (!needsRedraw_) return;
+
+  tft.fillScreen(bgColor_);
 
   switch (mode_) {
     case DisplayMode::SingleLine:
@@ -95,26 +120,19 @@ void TextApp::draw() {
     case DisplayMode::MultiLine:
       drawMultiLine_();
       break;
-    case DisplayMode::Marquee:
-      drawMarquee_();
+    case DisplayMode::BigWords:
+      drawBigWord_();
       break;
     case DisplayMode::BigLetters:
       drawBigLetter_();
       break;
   }
+
+  needsRedraw_ = false;
 }
 
 void TextApp::shutdown() {
-  // Restore smooth font for other apps
-  #ifdef USB_DEBUG
-    Serial.println("[TextApp] Restoring smooth font...");
-  #endif
-
-  TextRenderer::begin();  // Reload smooth font (will unload bitmap font first)
-
-  #ifdef USB_DEBUG
-    Serial.println("[TextApp] Smooth font restored");
-  #endif
+  TextRenderer::begin();
 }
 
 void TextApp::onButton(uint8_t index, BtnEvent e) {
@@ -136,48 +154,20 @@ void TextApp::onButton(uint8_t index, BtnEvent e) {
 }
 
 void TextApp::loadConfig_() {
-  #ifdef USB_DEBUG
-    Serial.println("[TextApp] loadConfig_() called");
-  #endif
-
-  // LittleFS is already mounted in setup(), no need to mount again
-
   if (!LittleFS.exists(kConfigPath)) {
-    #ifdef USB_DEBUG
-      Serial.printf("[TextApp] Config not found at %s, using defaults\n", kConfigPath);
-    #endif
     return;
   }
 
   File f = LittleFS.open(kConfigPath, "r");
-  if (!f) {
-    #ifdef USB_DEBUG
-      Serial.println("[TextApp] Failed to open config");
-    #endif
-    return;
-  }
-
-  #ifdef USB_DEBUG
-    Serial.printf("[TextApp] Config file opened, size: %lu bytes\n", static_cast<unsigned long>(f.size()));
-  #endif
+  if (!f) return;
 
   while (f.available()) {
     String line = f.readStringUntil('\n');
     line.trim();
-    if (line.length() > 0 && !line.startsWith("#")) {
-      #ifdef USB_DEBUG
-        Serial.printf("[TextApp] Parsing line: %s\n", line.c_str());
-      #endif
-      parseConfigLine_(line);
-    }
+    if (line.isEmpty() || line.startsWith("#")) continue;
+    parseConfigLine_(line);
   }
   f.close();
-
-  #ifdef USB_DEBUG
-    Serial.printf("[TextApp] Config loaded: mode=%d, text='%s', color=0x%04X, bg=0x%04X, size=%d, marquee_speed=%lu, letter_speed=%lu\n",
-                  static_cast<int>(mode_), text_.c_str(), color_, bgColor_, textSize_,
-                  static_cast<unsigned long>(marqueeSpeed_), static_cast<unsigned long>(letterSpeed_));
-  #endif
 }
 
 void TextApp::parseConfigLine_(const String& line) {
@@ -193,30 +183,38 @@ void TextApp::parseConfigLine_(const String& line) {
     mode_ = stringToMode_(value);
   } else if (key.equalsIgnoreCase("TEXT")) {
     text_ = value;
-    // Replace | with newline for multi-line mode
     text_.replace("|", "\n");
+    wordsDirty_ = true;
   } else if (key.equalsIgnoreCase("COLOR")) {
     color_ = parseColor_(value);
   } else if (key.equalsIgnoreCase("BG_COLOR") || key.equalsIgnoreCase("BGCOLOR")) {
     bgColor_ = parseColor_(value);
   } else if (key.equalsIgnoreCase("SIZE")) {
-    textSize_ = value.toInt();
-    if (textSize_ < 1) textSize_ = 1;
-    if (textSize_ > 10) textSize_ = 10;
-  } else if (key.equalsIgnoreCase("MARQUEE_SPEED")) {
-    marqueeSpeed_ = value.toInt();
-    if (marqueeSpeed_ < 10) marqueeSpeed_ = 10;
-    if (marqueeSpeed_ > 5000) marqueeSpeed_ = 5000;
-  } else if (key.equalsIgnoreCase("LETTER_SPEED")) {
+    int sz = value.toInt();
+    if (sz < 1) sz = 1;
+    if (sz > 10) sz = 10;
+    textSize_ = static_cast<uint8_t>(sz);
+    fontExplicit_ = false;
+  } else if (key.equalsIgnoreCase("FONT")) {
+    const FontMapEntry* entry = lookupFont(value);
+    if (entry) {
+      currentFont_ = entry->font;
+      fontName_ = entry->name;
+      fontExplicit_ = true;
+    }
+  } else if (key.equalsIgnoreCase("LETTER_SPEED") || key.equalsIgnoreCase("WORD_SPEED") ||
+             key.equalsIgnoreCase("CYCLE_SPEED")) {
+    letterSpeed_ = value.toInt();
+    if (letterSpeed_ < 10) letterSpeed_ = 10;
+    if (letterSpeed_ > 10000) letterSpeed_ = 10000;
+  } else if (key.equalsIgnoreCase("WORD_SPEED")) {
     letterSpeed_ = value.toInt();
     if (letterSpeed_ < 10) letterSpeed_ = 10;
     if (letterSpeed_ > 10000) letterSpeed_ = 10000;
   } else if (key.equalsIgnoreCase("SPEED")) {
-    // Legacy support: set both speeds
     uint32_t spd = value.toInt();
-    if (spd >= 10 && spd <= 5000) {
-      marqueeSpeed_ = spd;
-      letterSpeed_ = spd * 10;  // Letters are slower
+    if (spd >= 10 && spd <= 10000) {
+      letterSpeed_ = spd;
     }
   }
 }
@@ -224,162 +222,314 @@ void TextApp::parseConfigLine_(const String& line) {
 TextApp::DisplayMode TextApp::stringToMode_(const String& str) const {
   if (str.equalsIgnoreCase("single_line")) return DisplayMode::SingleLine;
   if (str.equalsIgnoreCase("multi_line")) return DisplayMode::MultiLine;
-  if (str.equalsIgnoreCase("marquee")) return DisplayMode::Marquee;
+  if (str.equalsIgnoreCase("big_words") ||
+      str.equalsIgnoreCase("words"))
+    return DisplayMode::BigWords;
   if (str.equalsIgnoreCase("big_letters")) return DisplayMode::BigLetters;
   return DisplayMode::SingleLine;
 }
 
 uint16_t TextApp::parseColor_(const String& str) const {
-  // Parse hex color (e.g., "0xFFFF" or "FFFF")
   String hex = str;
   if (hex.startsWith("0x") || hex.startsWith("0X")) {
     hex = hex.substring(2);
   }
-
   unsigned long val = strtoul(hex.c_str(), nullptr, 16);
   return static_cast<uint16_t>(val & 0xFFFF);
 }
 
 void TextApp::drawSingleLine_() {
-  if (needsFullRedraw_) {
-    tft.fillScreen(bgColor_);
-    needsFullRedraw_ = false;
-  }
+  tft.setTextColor(color_, bgColor_);
+  chooseFont_();
+  setCanvasFont_();
 
-  tft.setTextSize(textSize_);
-  tft.setTextColor(color_, bgColor_);  // Set background to avoid artifacts
-
-  // Calculate centered position
-  int16_t w = tft.textWidth(text_.c_str());
   int16_t h = tft.fontHeight();
-
+  if (h <= 0) h = 16;
+  int16_t w = tft.textWidth(text_);
   int16_t x = (TFT_W - w) / 2;
-  int16_t y = (TFT_H - h) / 2;
+  if (x < 0) x = 0;
+  int16_t baseline = (TFT_H - h) / 2 + h - 1;
 
-  tft.setCursor(x, y);
+  tft.setCursor(x, baseline);
   tft.print(text_);
 }
 
 void TextApp::drawMultiLine_() {
-  if (needsFullRedraw_) {
-    tft.fillScreen(bgColor_);
-    needsFullRedraw_ = false;
-  }
-
-  tft.setTextSize(textSize_);
-  tft.setTextColor(color_, bgColor_);  // Set background to avoid artifacts
-
-  // Split text by newlines and draw each line centered
-  String remaining = text_;
-  int16_t startY = 20;  // Start from top with margin
-  int16_t lineHeight = tft.fontHeight() + 4;  // Line height with spacing
-
-  while (remaining.length() > 0) {
-    int nlPos = remaining.indexOf('\n');
-    String line;
-    if (nlPos >= 0) {
-      line = remaining.substring(0, nlPos);
-      remaining = remaining.substring(nlPos + 1);
-    } else {
-      line = remaining;
-      remaining = "";
-    }
-
-    if (line.length() > 0) {
-      int16_t w = tft.textWidth(line.c_str());
-
-      int16_t x = (TFT_W - w) / 2;
-      tft.setCursor(x, startY);
-      tft.print(line);
-
-      startY += lineHeight;
-      if (startY >= TFT_H) break;  // Stop if we run out of screen space
-    }
-  }
-}
-
-void TextApp::drawMarquee_() {
-  tft.setTextSize(textSize_);
-
-  // Prepare text for marquee: replace newlines with spaces
-  String displayText = text_;
-  displayText.replace("\n", " ");
-
-  // Calculate text dimensions if not done yet
-  if (marqueeWidth_ == 0) {
-    marqueeWidth_ = tft.textWidth(displayText.c_str());
-    marqueeY_ = (TFT_H - tft.fontHeight()) / 2;
-  }
-
-  // Full redraw on first frame or after mode change
-  if (needsFullRedraw_) {
-    tft.fillScreen(bgColor_);
-    needsFullRedraw_ = false;
-    marqueeLastX_ = marqueeX_;
-  } else {
-    // Smart clear: only clear the regions that need it
-    int16_t textHeight = tft.fontHeight();
-
-    // If text moved left, clear the trailing edge
-    if (marqueeX_ < marqueeLastX_) {
-      int16_t clearX = marqueeX_ + marqueeWidth_;
-      int16_t clearW = marqueeLastX_ - marqueeX_;
-
-      // Clamp to screen bounds
-      if (clearX < TFT_W && clearW > 0) {
-        if (clearX + clearW > TFT_W) {
-          clearW = TFT_W - clearX;
-        }
-        tft.fillRect(clearX, marqueeY_, clearW, textHeight, bgColor_);
-      }
-
-      // Also clear the wrapped text on the right if text went off screen
-      if (marqueeLastX_ + marqueeWidth_ > TFT_W && marqueeX_ < 0) {
-        int16_t wrapClearX = 0;
-        int16_t wrapClearW = -marqueeX_;
-        if (wrapClearW > marqueeWidth_) wrapClearW = marqueeWidth_;
-        tft.fillRect(wrapClearX, marqueeY_, wrapClearW, textHeight, bgColor_);
-      }
-    }
-  }
-
-  // Draw text at current position with background color for clean overdraw
   tft.setTextColor(color_, bgColor_);
-  tft.setCursor(marqueeX_, marqueeY_);
-  tft.print(displayText);
+  chooseFont_();
+  setCanvasFont_();
 
-  marqueeLastX_ = marqueeX_;
-}
-
-void TextApp::drawBigLetter_() {
-  if (needsFullRedraw_) {
-    tft.fillScreen(bgColor_);
-    needsFullRedraw_ = false;
-  } else {
-    // Clear screen for big letters (they're large and change completely)
-    tft.fillScreen(bgColor_);
+  std::vector<String> lines;
+  String remaining = text_;
+  while (true) {
+    int nl = remaining.indexOf('\n');
+    if (nl < 0) {
+      lines.push_back(remaining);
+      break;
+    }
+    lines.push_back(remaining.substring(0, nl));
+    remaining = remaining.substring(nl + 1);
   }
 
-  if (text_.length() == 0 || bigLetterIndex_ >= text_.length()) {
+  int16_t lineHeight = tft.fontHeight();
+  if (lineHeight <= 0) lineHeight = 16;
+  int16_t totalHeight = lines.size() * lineHeight + (lines.size() ? (lines.size() - 1) * 4 : 0);
+  int16_t y = (TFT_H - totalHeight) / 2;
+  if (y < 0) y = 0;
+
+  for (const String& line : lines) {
+    if (!line.isEmpty()) {
+      int16_t w = tft.textWidth(line);
+      int16_t x = (TFT_W - w) / 2;
+      if (x < 0) x = 0;
+      int16_t baseline = y + lineHeight - 1;
+      tft.setCursor(x, baseline);
+      tft.print(line);
+    }
+    y += lineHeight + 4;
+    if (y >= TFT_H) break;
+  }
+}
+
+void TextApp::drawBigWord_() {
+  if (wordsDirty_) {
+    rebuildWords_();
+  }
+  if (words_.empty()) return;
+  if (bigWordIndex_ >= words_.size()) bigWordIndex_ = 0;
+
+  const String& word = words_[bigWordIndex_];
+
+  if (!currentFont_) {
+    chooseFont_();
+  }
+
+  const GFXfont* baseFont = currentFont_ ? currentFont_ : &FreeSansBold18pt7b;
+  const GFXfont* candidates[] = {
+      baseFont,
+      &FreeSansBold24pt7b,
+      &FreeSansBold18pt7b,
+      &FreeSans18pt7b,
+  };
+
+  TFT_eSprite wordSprite(&tft);
+  wordSprite.setColorDepth(16);
+  wordSprite.setTextWrap(false);
+  wordSprite.setTextColor(color_, bgColor_);
+
+  const GFXfont* font = nullptr;
+  int16_t srcWidth = 1;
+  int16_t srcHeight = 32;
+
+  for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
+    const GFXfont* candidate = candidates[i];
+    if (!candidate) continue;
+    bool alreadyUsed = false;
+    for (size_t j = 0; j < i; ++j) {
+      if (candidate == candidates[j]) {
+        alreadyUsed = true;
+        break;
+      }
+    }
+    if (alreadyUsed) continue;
+
+    wordSprite.setFreeFont(candidate);
+    int16_t h = wordSprite.fontHeight();
+    if (h <= 0) h = 32;
+    int16_t w = wordSprite.textWidth(word.c_str());
+    if (w <= 0) w = 1;
+
+    font = candidate;
+    srcHeight = h;
+    srcWidth = w;
+    if (w <= TFT_W) {
+      break;
+    }
+  }
+
+  if (!font) {
+    font = &FreeSansBold18pt7b;
+    wordSprite.setFreeFont(font);
+    srcHeight = wordSprite.fontHeight();
+    if (srcHeight <= 0) srcHeight = 24;
+    srcWidth = wordSprite.textWidth(word.c_str());
+    if (srcWidth <= 0) srcWidth = 1;
+  }
+
+  if (!wordSprite.createSprite(srcWidth, srcHeight)) {
+    // Fallback to direct draw if sprite allocation fails
+    tft.setTextColor(color_, bgColor_);
+    tft.setFreeFont(font);
+    tft.setTextWrap(false);
+
+    int16_t h = tft.fontHeight();
+    if (h <= 0) h = srcHeight;
+    int16_t w = tft.textWidth(word.c_str());
+    if (w <= 0) w = srcWidth;
+    int16_t x = (TFT_W - w) / 2;
+    if (x < 0) x = 0;
+    int16_t baseline = (TFT_H + h) / 2 - 1;
+
+    tft.setCursor(x, baseline);
+    tft.print(word);
     return;
   }
 
-  char letter[2] = {text_[bigLetterIndex_], '\0'};
+  wordSprite.fillSprite(bgColor_);
+  wordSprite.setCursor(0, srcHeight - 1);
+  wordSprite.print(word);
 
-  // Use large text size to fill screen
-  uint8_t bigSize = 10;  // Maximum size
-  tft.setTextSize(bigSize);
-  tft.setTextColor(color_);
+  int32_t minX = srcWidth, minY = srcHeight;
+  int32_t maxX = -1, maxY = -1;
+  for (int32_t y = 0; y < srcHeight; ++y) {
+    for (int32_t x = 0; x < srcWidth; ++x) {
+      if (wordSprite.readPixel(x, y) != bgColor_) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
 
-  // Calculate centered position
-  int16_t w = tft.textWidth(letter);
-  int16_t h = tft.fontHeight();
+  if (maxX < minX || maxY < minY) {
+    wordSprite.deleteSprite();
+    return;
+  }
 
-  int16_t x = (TFT_W - w) / 2;
-  int16_t y = (TFT_H - h) / 2;
+  int32_t contentW = maxX - minX + 1;
+  int32_t contentH = maxY - minY + 1;
 
-  tft.setCursor(x, y);
-  tft.print(letter);
+  int32_t destX = (TFT_W - contentW) / 2;
+  int32_t destY = (TFT_H - contentH) / 2;
+  if (destX < 0) destX = 0;
+  if (destY < 0) destY = 0;
+
+  for (int32_t y = 0; y < contentH; ++y) {
+    int32_t srcY = minY + y;
+    for (int32_t x = 0; x < contentW; ++x) {
+      int32_t srcX = minX + x;
+      uint16_t pixel = wordSprite.readPixel(srcX, srcY);
+      if (pixel != bgColor_) {
+        int32_t drawX = destX + x;
+        int32_t drawY = destY + y;
+        if (drawX >= 0 && drawX < TFT_W && drawY >= 0 && drawY < TFT_H) {
+          tft.drawPixel(drawX, drawY, pixel);
+        }
+      }
+    }
+  }
+
+  wordSprite.deleteSprite();
+}
+
+void TextApp::drawBigLetter_() {
+  if (text_.isEmpty()) return;
+  if (bigLetterIndex_ >= text_.length()) bigLetterIndex_ = 0;
+
+  char symbol = text_[bigLetterIndex_];
+  if (symbol == '\n' || symbol == '\r') {
+    return;
+  }
+
+  String letter = String(symbol);
+
+  if (!currentFont_) {
+    chooseFont_();
+  }
+  const GFXfont* font = currentFont_ ? currentFont_ : &FreeSansBold24pt7b;
+
+  TFT_eSprite letterSprite(&tft);
+  letterSprite.setColorDepth(16);
+  letterSprite.setFreeFont(font);
+  letterSprite.setTextWrap(false);
+  letterSprite.setTextColor(color_, bgColor_);
+
+  int16_t srcHeight = letterSprite.fontHeight();
+  if (srcHeight <= 0) srcHeight = 32;
+  int16_t srcWidth = letterSprite.textWidth(letter.c_str());
+  if (srcWidth <= 0) srcWidth = 1;
+
+  if (!letterSprite.createSprite(srcWidth, srcHeight)) {
+    // Fallback: draw without scaling if sprite allocation fails
+    tft.setTextColor(color_, bgColor_);
+    tft.setFreeFont(font);
+    tft.setTextWrap(false);
+
+    int16_t h = tft.fontHeight();
+    if (h <= 0) h = 32;
+    int16_t w = tft.textWidth(letter.c_str());
+    int16_t x = (TFT_W - w) / 2;
+    if (x < 0) x = 0;
+    int16_t baseline = (TFT_H + h) / 2 - 1;
+
+    tft.setCursor(x, baseline);
+    tft.print(letter);
+    return;
+  }
+
+  letterSprite.fillSprite(bgColor_);
+  letterSprite.setCursor(0, srcHeight - 1);
+  letterSprite.print(letter);
+
+  // Compute tight bounding box to keep glyph centred after baseline offset
+  int32_t minX = srcWidth, minY = srcHeight;
+  int32_t maxX = -1, maxY = -1;
+  for (int32_t y = 0; y < srcHeight; ++y) {
+    for (int32_t x = 0; x < srcWidth; ++x) {
+      if (letterSprite.readPixel(x, y) != bgColor_) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    letterSprite.deleteSprite();
+    return;
+  }
+
+  int32_t contentW = maxX - minX + 1;
+  int32_t contentH = maxY - minY + 1;
+
+  const float targetHeight = TFT_H * 0.7f;
+  float scale = targetHeight / static_cast<float>(contentH);
+  if (scale < 1.0f) scale = 1.0f;
+
+  const float maxScaleWidth = static_cast<float>(TFT_W) / static_cast<float>(contentW);
+  const float maxScaleHeight = static_cast<float>(TFT_H) / static_cast<float>(contentH);
+  scale = std::min(scale, maxScaleWidth);
+  scale = std::min(scale, maxScaleHeight);
+  if (scale < 1.0f) scale = 1.0f;
+
+  int32_t scaledW = std::max<int32_t>(1, static_cast<int32_t>(contentW * scale));
+  int32_t scaledH = std::max<int32_t>(1, static_cast<int32_t>(contentH * scale));
+  if (scaledW > TFT_W) scaledW = TFT_W;
+  if (scaledH > TFT_H) scaledH = TFT_H;
+
+  int32_t destX = (TFT_W - scaledW) / 2;
+  int32_t destY = (TFT_H - scaledH) / 2;
+  if (destX < 0) destX = 0;
+  if (destY < 0) destY = 0;
+
+  for (int32_t dy = 0; dy < scaledH; ++dy) {
+    int32_t srcY = minY + (dy * contentH) / scaledH;
+    for (int32_t dx = 0; dx < scaledW; ++dx) {
+      int32_t srcX = minX + (dx * contentW) / scaledW;
+      uint16_t pixel = letterSprite.readPixel(srcX, srcY);
+      if (pixel != bgColor_) {
+        int32_t x = destX + dx;
+        int32_t y = destY + dy;
+        if (x >= 0 && x < TFT_W && y >= 0 && y < TFT_H) {
+          tft.drawPixel(x, y, pixel);
+        }
+      }
+    }
+  }
+
+  letterSprite.deleteSprite();
 }
 
 void TextApp::nextMode_() {
@@ -387,130 +537,151 @@ void TextApp::nextMode_() {
   current = (current + 1) % 4;
   mode_ = static_cast<DisplayMode>(current);
 
-  // Reset animation state
-  marqueeX_ = TFT_W;
-  marqueeLastX_ = TFT_W;
-  marqueeWidth_ = 0;  // Force recalculation with new mode
-  marqueeY_ = 0;
   bigLetterIndex_ = 0;
+  bigWordIndex_ = 0;
+  wordsDirty_ = true;
   timeAccum_ = 0;
   needsRedraw_ = true;
   needsFullRedraw_ = true;
 
-  tft.fillScreen(bgColor_);
-  showStatus_(String("Modus: ") + modeName_());
+  if (mode_ == DisplayMode::BigWords) {
+    rebuildWords_();
+  }
 
-  #ifdef USB_DEBUG
-    Serial.printf("[TextApp] Mode changed to %s\n", modeName_());
-  #endif
+  showStatus_(String("Modus: ") + modeName_());
 }
 
 void TextApp::cycleSpeed_() {
-  // Cycle speed based on current mode
-  if (mode_ == DisplayMode::Marquee) {
-    speedIndex_ = (speedIndex_ + 1) % kMarqueeSpeedCount;
-    marqueeSpeed_ = kMarqueeSpeeds[speedIndex_];
-    timeAccum_ = 0;
-    showStatus_(String("Tempo: ") + String(marqueeSpeed_) + "ms");
-    #ifdef USB_DEBUG
-      Serial.printf("[TextApp] Marquee speed changed to %lums\n", static_cast<unsigned long>(marqueeSpeed_));
-    #endif
-  } else if (mode_ == DisplayMode::BigLetters) {
-    speedIndex_ = (speedIndex_ + 1) % kLetterSpeedCount;
-    letterSpeed_ = kLetterSpeeds[speedIndex_];
+  if (mode_ == DisplayMode::BigLetters || mode_ == DisplayMode::BigWords) {
+    speedIndex_ = (speedIndex_ + 1) % kCycleSpeedCount;
+    letterSpeed_ = kCycleSpeeds[speedIndex_];
     timeAccum_ = 0;
     showStatus_(String("Tempo: ") + String(letterSpeed_) + "ms");
-    #ifdef USB_DEBUG
-      Serial.printf("[TextApp] Letter speed changed to %lums\n", static_cast<unsigned long>(letterSpeed_));
-    #endif
   }
 }
 
 void TextApp::reloadConfig_() {
-  #ifdef USB_DEBUG
-    Serial.println("[TextApp] reloadConfig_() called");
-  #endif
-
-  // Reset to defaults
   mode_ = DisplayMode::SingleLine;
   text_ = "Hallo Welt!";
   color_ = 0xFFFF;
   bgColor_ = 0x0000;
   textSize_ = 2;
-  marqueeSpeed_ = 50;
+  fontExplicit_ = false;
+  currentFont_ = nullptr;
+  fontName_ = "FreeSansBold18pt";
   letterSpeed_ = 1000;
 
   loadConfig_();
+  chooseFont_();
+  applyFont_();
+  wordsDirty_ = true;
+  rebuildWords_();
 
-  // Reset animation state
-  marqueeX_ = TFT_W;
-  marqueeLastX_ = TFT_W;
-  marqueeWidth_ = 0;
-  marqueeY_ = 0;
   bigLetterIndex_ = 0;
+  bigWordIndex_ = 0;
   timeAccum_ = 0;
   needsRedraw_ = true;
   needsFullRedraw_ = true;
 
-  // Clear screen and show status
-  tft.fillScreen(bgColor_);
   showStatus_("Config geladen");
-
-  #ifdef USB_DEBUG
-    Serial.println("[TextApp] Config reloaded successfully");
-  #endif
 }
 
 void TextApp::showStatus_(const String& msg) {
-  // Draw status message using current bitmap font (don't trigger TextRenderer!)
-  tft.setTextSize(2);  // Medium size for status messages
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.fillScreen(bgColor_);
+  tft.setFreeFont(&FreeSansBold18pt7b);
+  tft.setTextWrap(false);
+  tft.setTextColor(TFT_WHITE, bgColor_);
 
-  int16_t w = tft.textWidth(msg.c_str());
   int16_t h = tft.fontHeight();
-
+  if (h <= 0) h = 24;
+  int16_t w = tft.textWidth(msg);
   int16_t x = (TFT_W - w) / 2;
-  int16_t y = (TFT_H - h) / 2;
+  if (x < 0) x = 0;
+  int16_t baseline = (TFT_H - h) / 2 + h - 1;
 
-  // Draw with simple outline for readability
-  tft.setTextColor(TFT_BLACK);
-  tft.setCursor(x - 1, y);
-  tft.print(msg);
-  tft.setCursor(x + 1, y);
-  tft.print(msg);
-  tft.setCursor(x, y - 1);
-  tft.print(msg);
-  tft.setCursor(x, y + 1);
-  tft.print(msg);
-
-  // Draw main text
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(x, y);
+  tft.setCursor(x, baseline);
   tft.print(msg);
 
   pauseUntil_ = millis() + 1000;
-
-  #ifdef USB_DEBUG
-    Serial.printf("[TextApp] Status shown: %s\n", msg.c_str());
-  #endif
+  needsRedraw_ = true;
 }
 
 uint32_t TextApp::currentSpeed_() const {
-  // This is now only used for compatibility, actual speeds are mode-specific
-  if (mode_ == DisplayMode::Marquee) {
-    return marqueeSpeed_;
-  } else if (mode_ == DisplayMode::BigLetters) {
-    return letterSpeed_;
-  }
-  return 50;  // Default
+  if (mode_ == DisplayMode::BigLetters || mode_ == DisplayMode::BigWords) return letterSpeed_;
+  return 50;
 }
 
 const char* TextApp::modeName_() const {
   switch (mode_) {
     case DisplayMode::SingleLine: return "1 Zeile";
     case DisplayMode::MultiLine: return "Mehrere";
-    case DisplayMode::Marquee: return "Laufschrift";
-    case DisplayMode::BigLetters: return "Grosse";
-    default: return "?";
+    case DisplayMode::BigWords: return "Woerter";
+    case DisplayMode::BigLetters: return "Buchstaben";
   }
+  return "?";
+}
+
+void TextApp::chooseFont_() {
+  if (!fontExplicit_) {
+    if (textSize_ >= 4) {
+      currentFont_ = &FreeSansBold24pt7b;
+      fontName_ = "FreeSansBold24pt";
+    } else {
+      currentFont_ = &FreeSansBold18pt7b;
+      fontName_ = "FreeSansBold18pt";
+    }
+  }
+  if (!currentFont_) {
+    currentFont_ = &FreeSansBold18pt7b;
+    fontName_ = "FreeSansBold18pt";
+  }
+}
+
+void TextApp::applyFont_() {
+  chooseFont_();
+  tft.setFreeFont(currentFont_);
+  tft.setTextWrap(false);
+}
+
+void TextApp::setCanvasFont_() {
+  tft.setFreeFont(currentFont_);
+  tft.setTextWrap(false);
+}
+
+void TextApp::rebuildWords_() {
+  words_.clear();
+
+  if (text_.isEmpty()) {
+    bigWordIndex_ = 0;
+    wordsDirty_ = false;
+    return;
+  }
+
+  String current;
+  current.reserve(text_.length());
+
+  for (size_t i = 0; i < static_cast<size_t>(text_.length()); ++i) {
+    char c = text_[i];
+    if (isspace(static_cast<unsigned char>(c))) {
+      if (current.length()) {
+        words_.push_back(current);
+        current = "";
+      }
+    } else {
+      current += c;
+    }
+  }
+
+  if (current.length()) {
+    words_.push_back(current);
+  }
+
+  String trimmed = text_;
+  trimmed.trim();
+  if (words_.empty() && !trimmed.isEmpty()) {
+    words_.push_back(trimmed);
+  }
+
+  bigWordIndex_ = 0;
+  wordsDirty_ = false;
 }

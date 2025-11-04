@@ -1,6 +1,10 @@
 #pragma once
 #include "Core/App.h"
 #include <Arduino.h>
+#include <vector>
+
+class TFT_eSPI;
+class TFT_eSprite;
 
 class TextApp : public App {
 public:
@@ -15,7 +19,7 @@ private:
   enum class DisplayMode : uint8_t {
     SingleLine = 0,
     MultiLine = 1,
-    Marquee = 2,
+    BigWords = 2,
     BigLetters = 3
   };
 
@@ -25,21 +29,21 @@ private:
   uint16_t color_ = 0xFFFF;  // White
   uint16_t bgColor_ = 0x0000;  // Black
   uint8_t textSize_ = 2;
-  uint32_t marqueeSpeed_ = 50;  // Marquee scroll speed (ms per pixel)
-  uint32_t letterSpeed_ = 1000;  // Big letter change speed (ms per letter)
+  String fontName_ = "FreeSansBold18pt";
+  const GFXfont* currentFont_ = nullptr;
+  bool fontExplicit_ = false;
+  uint32_t letterSpeed_ = 1000;  // Big display change speed (ms per step)
 
   // Runtime state
   uint32_t timeAccum_ = 0;
-  int16_t marqueeX_ = 0;
-  int16_t marqueeLastX_ = 0;
-  int16_t marqueeWidth_ = 0;
-  int16_t marqueeY_ = 0;
   size_t bigLetterIndex_ = 0;
+  size_t bigWordIndex_ = 0;
+  bool wordsDirty_ = true;
+  std::vector<String> words_;
   uint32_t pauseUntil_ = 0;
   bool needsRedraw_ = true;
   bool needsFullRedraw_ = true;
   uint8_t speedIndex_ = 2;  // Index into speed table
-
   // Methods
   void loadConfig_();
   void parseConfigLine_(const String& line);
@@ -47,12 +51,16 @@ private:
   uint16_t parseColor_(const String& str) const;
   void drawSingleLine_();
   void drawMultiLine_();
-  void drawMarquee_();
   void drawBigLetter_();
+  void drawBigWord_();
   void nextMode_();
   void cycleSpeed_();
   void reloadConfig_();
   void showStatus_(const String& msg);
   uint32_t currentSpeed_() const;
   const char* modeName_() const;
+  void chooseFont_();
+  void applyFont_();
+  void setCanvasFont_();
+  void rebuildWords_();
 };
