@@ -169,6 +169,14 @@ void ensureUniqueOnFs(char* nameBuf, size_t bufLen) {
     return;
   }
 
+  // Special case: config files should always be overwritten, never made unique
+  // This includes textapp.cfg and any other .cfg files
+  String filename(nameBuf);
+  if (filename.endsWith(".cfg") || filename.endsWith(".txt") || filename.endsWith(".json")) {
+    // Overwrite existing config files - do not make unique
+    return;
+  }
+
   String base(nameBuf);
   String ext(".jpg");
   int dotIdx = base.lastIndexOf('.');
@@ -231,7 +239,15 @@ bool beginTransfer(size_t size, const std::string& requestedName) {
 
   ensureUniqueOnFs(filename, sizeof(filename));
 
-  String path = String(kFlashSlidesDir) + "/" + filename;
+  // Config files (.cfg, .txt, .json) go to root (/), images go to /slides
+  String filenameStr(filename);
+  String path;
+  if (filenameStr.endsWith(".cfg") || filenameStr.endsWith(".txt") || filenameStr.endsWith(".json")) {
+    path = String("/") + filename;  // Root directory for config files
+  } else {
+    path = String(kFlashSlidesDir) + "/" + filename;  // /slides for images
+  }
+
   gSession.file = LittleFS.open(path.c_str(), FILE_WRITE);
   if (!gSession.file) {
     sendStatus("ERR:OPEN");

@@ -23,3 +23,6 @@ abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZäöüÄÖÜàâéèêëîï
 
 
 python3 tools/list_littlefs.py --port /dev/ttyACM0 --root /system/fonts
+
+#zeigt welcher port aktuell ist
+ls -la /dev/tty{ACM,USB}* 2>/dev/null

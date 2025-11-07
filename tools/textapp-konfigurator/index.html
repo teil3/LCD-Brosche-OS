@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TextApp Konfigurator für die LCD-Brosche</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; background: #f8f9fb; color: #1f252d; }
+    header { margin-bottom: 1rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+    .header__text { flex: 1 1 320px; min-width: 0; }
+    .header__logo { display: block; flex: 0 0 auto; width: 160px; margin-left: auto; order: 0; }
+    .header__logo img { display: block; width: 100%; max-width: 100%; height: auto; }
+    @media (max-width: 680px) {
+      header { flex-direction: column; align-items: center; text-align: center; }
+      .header__text { flex: 1 1 auto; }
+      .header__logo { order: -1; margin-left: 0; margin-bottom: .75rem; }
+    }
+    h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem; }
+    .muted { opacity: .75; }
+    .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin: .75rem 0; }
+    .config-section { background: #fff; border-radius: .8rem; padding: 1.25rem; margin: 1.25rem 0; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .config-section h2 { font-size: 1.1rem; margin: 0 0 1rem; }
+    .form-group { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .9rem; }
+    .form-group label { font-weight: 500; font-size: .95rem; }
+    .form-group-inline { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+    .preview { position: relative; display: block; width: 358.2857142857px; height: 350.0571428571px; margin: 2.5rem auto 0; }
+    .preview__viewport { position: absolute; top: 43.7142857143px; left: 55.0285714286px; width: 240px; height: 240px; border-radius: 50%; overflow: hidden; border: 1px solid #c9c9c9; box-shadow: 0 1px 8px rgba(0,0,0,.08); background: #000; }
+    .preview__viewport::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+    canvas { display: block; width: 100%; height: 100%; }
+    .preview__mask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; object-fit: cover; }
+    button, select, input[type="number"], input[type="text"], textarea { padding: .55rem .8rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: #ffffff; color: inherit; font-family: inherit; font-size: inherit; }
+    textarea { resize: vertical; min-height: 180px; font-family: ui-monospace, monospace; font-size: .9rem; line-height: 1.4; }
+    button { cursor: pointer; font-weight: 500; }
+    button:hover:not(:disabled) { background: #f5f5f5; }
+    button[disabled] { opacity: .5; cursor: not-allowed; }
+    button.primary { background: #4a90e2; color: white; border-color: #4a90e2; }
+    button.primary:hover:not(:disabled) { background: #3d7bc4; }
+    input[type="color"] { height: 2.5rem; padding: .2rem; cursor: pointer; }
+    input[type="range"] { flex: 1; min-width: 120px; }
+    .actions { margin: 1.5rem 0 0; display: flex; gap: .75rem; flex-wrap: wrap; }
+    .expert-toggle { margin-top: .5rem; }
+    .expert-mode { display: none; margin-top: 1rem; }
+    .expert-mode.active { display: block; }
+    .version-tag { font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; margin-top: .4rem; color: #4a90e2; }
+    code { background: rgba(127,127,127,.15); padding: .1rem .3rem; border-radius: .3rem; font-family: ui-monospace, monospace; font-size: .9em; }
+    .color-preview { display: inline-block; width: 1.5rem; height: 1.5rem; border-radius: .3rem; border: 1px solid #c9c9c9; vertical-align: middle; margin-left: .5rem; }
+    .speed-value { min-width: 4rem; text-align: right; font-weight: 500; }
+    footer { margin-top: 2rem; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header__text">
+      <h1>TextApp Konfigurator</h1>
+      <p class="muted">Konfiguriere die TextApp für deine LCD-Brosche. Ändere Text, Farben und Modi und lade die Konfiguration per Bluetooth oder USB auf die Brosche hoch.</p>
+      <p class="muted version-tag" id="tool-version">V0.4.1</p>
+    </div>
+    <a class="header__logo" href="https://www.teil3.ch" target="_blank" rel="noopener">
+      <img src="../bildaufbereiter/teil3_logo.svg" alt="Teil3 Logo" width="160" height="95" />
+    </a>
+  </header>
+
+  <div class="preview">
+    <div class="preview__viewport">
+      <canvas id="cv" width="240" height="240"></canvas>
+    </div>
+    <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske.png" alt="Maske der LCD-Brosche" />
+  </div>
+
+  <div class="config-section">
+    <h2>Konfiguration laden</h2>
+    <div class="form-group">
+      <label for="cfg-upload">Von Datei laden</label>
+      <input type="file" id="cfg-upload" accept=".cfg,.txt" />
+    </div>
+    <div class="form-group">
+      <label>Von Brosche laden (USB)</label>
+      <button type="button" id="load-from-brosche">textapp.cfg von Brosche laden</button>
+      <p class="muted" style="font-size: .85rem; margin-top: .25rem;">Brosche muss im Transfer-Modus sein (BTN2 lang halten in Diashow).</p>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <h2>Textinhalt</h2>
+    <div class="form-group">
+      <label for="text-input">Text (Mehrzeilig: Nutze Enter oder | für Zeilenumbrüche)</label>
+      <textarea id="text-input" rows="3">Hallo Welt!</textarea>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <h2>Anzeigemodus</h2>
+    <div class="form-group">
+      <label for="mode-select">Modus</label>
+      <select id="mode-select">
+        <option value="text">Textblock (mehrzeilig)</option>
+        <option value="big_words">Große Wörter (nacheinander)</option>
+        <option value="big_letters">Große Buchstaben (nacheinander)</option>
+      </select>
+    </div>
+    <div class="form-group" id="align-group">
+      <label for="align-select">Textausrichtung (nur bei Textblock)</label>
+      <select id="align-select">
+        <option value="left">Links</option>
+        <option value="center" selected>Zentriert</option>
+        <option value="right">Rechts</option>
+      </select>
+    </div>
+    <div class="form-group" id="speed-group" style="display: none;">
+      <label for="speed-input">Geschwindigkeit (10-10000 ms)</label>
+      <div class="form-group-inline">
+        <input type="range" id="speed-input" min="10" max="10000" value="1000" step="10" />
+        <span class="speed-value" id="speed-value">1000 ms</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <h2>Farben</h2>
+    <div class="form-group">
+      <label for="color-input">Textfarbe <span class="color-preview" id="color-preview"></span></label>
+      <div class="form-group-inline">
+        <input type="color" id="color-input" value="#ffffff" />
+        <input type="text" id="color-hex" value="#ffffff" style="width: 8rem;" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="bgcolor-input">Hintergrundfarbe <span class="color-preview" id="bgcolor-preview"></span></label>
+      <div class="form-group-inline">
+        <input type="color" id="bgcolor-input" value="#000000" />
+        <input type="text" id="bgcolor-hex" value="#000000" style="width: 8rem;" />
+      </div>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <h2>Schriftart</h2>
+    <div class="form-group">
+      <label for="font-select">Font</label>
+      <select id="font-select">
+        <option value="FreeSans18pt">FreeSans 18pt</option>
+        <option value="FreeSansBold18pt" selected>FreeSansBold 18pt</option>
+        <option value="FreeSansBold24pt">FreeSansBold 24pt</option>
+        <option value="FreeSerif18pt">FreeSerif 18pt</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <button type="button" class="expert-toggle" id="expert-toggle">🔧 Expert-Modus</button>
+    <div class="expert-mode" id="expert-mode">
+      <div class="form-group">
+        <label for="cfg-editor">textapp.cfg direkt bearbeiten</label>
+        <textarea id="cfg-editor"></textarea>
+      </div>
+      <p class="muted" style="font-size: .85rem;">Änderungen hier überschreiben die obigen Einstellungen beim Hochladen. Syntax: <code>KEY=VALUE</code></p>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="download-cfg" class="primary">Als textapp.cfg herunterladen</button>
+    <button id="send-usb">Über USB senden</button>
+    <button id="send-ble">Per Bluetooth senden</button>
+    <p id="status" class="muted" aria-live="polite" style="width: 100%;"></p>
+  </div>
+
+  <footer>
+    <p class="muted">Hinweis: Die Konfiguration wird als <code>/textapp.cfg</code> auf der Brosche gespeichert. Die TextApp liest diese Datei beim Start.</p>
+    <p class="muted">Transfer-Modus aktivieren: In der Diashow-App BTN2 lang halten, bis "TRANSFER" angezeigt wird.</p>
+  </footer>
+
+  <script type="module">
+    const TOOL_VERSION = 'V0.4.1';
+    const cv = document.getElementById('cv');
+    const ctx = cv.getContext('2d');
+    const cfgUpload = document.getElementById('cfg-upload');
+    const loadFromBroscheBtn = document.getElementById('load-from-brosche');
+    const textInput = document.getElementById('text-input');
+    const modeSelect = document.getElementById('mode-select');
+    const alignSelect = document.getElementById('align-select');
+    const speedInput = document.getElementById('speed-input');
+    const speedValue = document.getElementById('speed-value');
+    const colorInput = document.getElementById('color-input');
+    const colorHex = document.getElementById('color-hex');
+    const colorPreview = document.getElementById('color-preview');
+    const bgcolorInput = document.getElementById('bgcolor-input');
+    const bgcolorHex = document.getElementById('bgcolor-hex');
+    const bgcolorPreview = document.getElementById('bgcolor-preview');
+    const fontSelect = document.getElementById('font-select');
+    const expertToggle = document.getElementById('expert-toggle');
+    const expertMode = document.getElementById('expert-mode');
+    const cfgEditor = document.getElementById('cfg-editor');
+    const downloadBtn = document.getElementById('download-cfg');
+    const usbBtn = document.getElementById('send-usb');
+    const bleBtn = document.getElementById('send-ble');
+    const statusEl = document.getElementById('status');
+    const alignGroup = document.getElementById('align-group');
+    const speedGroup = document.getElementById('speed-group');
+
+    const BLE_UUIDS = {
+      service: '12345678-1234-1234-1234-1234567890ab',
+      chunk: 'abcd0001-1234-1234-1234-1234567890ab',
+      control: 'abcd0002-1234-1234-1234-1234567890ab'
+    };
+    const textEncoder = new TextEncoder();
+    const textDecoder = new TextDecoder();
+
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    let isSending = false;
+    let animationFrame = 0;
+    let currentWordIndex = 0;
+    let currentLetterIndex = 0;
+    let lastAnimTime = 0;
+
+    // RGB888 to RGB565 conversion
+    function rgb888ToRgb565(r, g, b) {
+      const r5 = (r >> 3) & 0x1F;
+      const g6 = (g >> 2) & 0x3F;
+      const b5 = (b >> 3) & 0x1F;
+      return (r5 << 11) | (g6 << 5) | b5;
+    }
+
+    function rgb565ToRgb888(rgb565) {
+      const r5 = (rgb565 >> 11) & 0x1F;
+      const g6 = (rgb565 >> 5) & 0x3F;
+      const b5 = rgb565 & 0x1F;
+      const r = (r5 << 3) | (r5 >> 2);
+      const g = (g6 << 2) | (g6 >> 4);
+      const b = (b5 << 3) | (b5 >> 2);
+      return { r, g, b };
+    }
+
+    function hexToRgb565(hex) {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (!result) return 0xFFFF;
+      const r = parseInt(result[1], 16);
+      const g = parseInt(result[2], 16);
+      const b = parseInt(result[3], 16);
+      return rgb888ToRgb565(r, g, b);
+    }
+
+    function rgb565ToHex(rgb565) {
+      const { r, g, b } = rgb565ToRgb888(rgb565);
+      return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+
+    function getConfig() {
+      const text = textInput.value.replace(/\n/g, '|');
+      const mode = modeSelect.value;
+      const align = alignSelect.value;
+      const speed = parseInt(speedInput.value, 10);
+      const color = hexToRgb565(colorInput.value);
+      const bgcolor = hexToRgb565(bgcolorInput.value);
+      const font = fontSelect.value;
+
+      return { text, mode, align, speed, color, bgcolor, font };
+    }
+
+    function generateCfg() {
+      const cfg = getConfig();
+      let lines = [];
+      lines.push('# TextApp Konfiguration');
+      lines.push('# Generiert mit TextApp Konfigurator');
+      lines.push('');
+      lines.push(`MODE=${cfg.mode}`);
+      lines.push(`TEXT=${cfg.text}`);
+      lines.push(`COLOR=0x${cfg.color.toString(16).toUpperCase().padStart(4, '0')}`);
+      lines.push(`BG_COLOR=0x${cfg.bgcolor.toString(16).toUpperCase().padStart(4, '0')}`);
+      lines.push(`FONT=${cfg.font}`);
+      lines.push(`ALIGN=${cfg.align}`);
+      lines.push(`SPEED=${cfg.speed}`);
+      return lines.join('\n');
+    }
+
+    function updateCfgEditor() {
+      cfgEditor.value = generateCfg();
+    }
+
+    function updatePreview() {
+      const cfg = getConfig();
+      const bgColor = rgb565ToHex(cfg.bgcolor);
+      const fgColor = rgb565ToHex(cfg.color);
+
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, 240, 240);
+      ctx.fillStyle = fgColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const text = cfg.text.replace(/\|/g, '\n');
+
+      if (cfg.mode === 'text') {
+        // TextBlock mode
+        const lines = text.split('\n').filter(l => l.trim());
+        const fontSize = cfg.font.includes('24pt') ? 24 : 18;
+        ctx.font = `${fontSize}px sans-serif`;
+
+        const lineHeight = fontSize + 4;
+        const totalHeight = lines.length * lineHeight;
+        let y = (240 - totalHeight) / 2 + fontSize / 2;
+
+        lines.forEach(line => {
+          let x = 120; // center
+          ctx.textAlign = cfg.align === 'left' ? 'left' : cfg.align === 'right' ? 'right' : 'center';
+          if (cfg.align === 'left') x = 10;
+          if (cfg.align === 'right') x = 230;
+
+          ctx.fillText(line, x, y);
+          y += lineHeight;
+        });
+      } else if (cfg.mode === 'big_words') {
+        // BigWords mode
+        const words = text.split(/[\s\n|]+/).filter(w => w.trim());
+        if (words.length === 0) return;
+
+        const word = words[currentWordIndex % words.length];
+        const fontSize = cfg.font.includes('24pt') ? 48 : 36;
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(word, 120, 120);
+      } else if (cfg.mode === 'big_letters') {
+        // BigLetters mode
+        const chars = text.replace(/[\n|]/g, '').split('').filter(c => c.trim());
+        if (chars.length === 0) return;
+
+        const char = chars[currentLetterIndex % chars.length];
+        const fontSize = cfg.font.includes('24pt') ? 80 : 64;
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(char, 120, 120);
+      }
+    }
+
+    function animate() {
+      const cfg = getConfig();
+      const now = Date.now();
+
+      if (cfg.mode === 'big_words' && now - lastAnimTime > cfg.speed) {
+        const words = cfg.text.split(/[\s\n|]+/).filter(w => w.trim());
+        if (words.length > 0) {
+          currentWordIndex = (currentWordIndex + 1) % words.length;
+          lastAnimTime = now;
+          updatePreview();
+        }
+      } else if (cfg.mode === 'big_letters' && now - lastAnimTime > cfg.speed) {
+        const chars = cfg.text.replace(/[\n|]/g, '').split('').filter(c => c.trim());
+        if (chars.length > 0) {
+          currentLetterIndex = (currentLetterIndex + 1) % chars.length;
+          lastAnimTime = now;
+          updatePreview();
+        }
+      }
+
+      animationFrame = requestAnimationFrame(animate);
+    }
+
+    function updateUI() {
+      const mode = modeSelect.value;
+      alignGroup.style.display = mode === 'text' ? 'flex' : 'none';
+      speedGroup.style.display = (mode === 'big_words' || mode === 'big_letters') ? 'flex' : 'none';
+
+      currentWordIndex = 0;
+      currentLetterIndex = 0;
+      lastAnimTime = Date.now();
+
+      updatePreview();
+      updateCfgEditor();
+    }
+
+    function updateColorPreview() {
+      colorPreview.style.backgroundColor = colorInput.value;
+      colorHex.value = colorInput.value.toUpperCase();
+
+      bgcolorPreview.style.backgroundColor = bgcolorInput.value;
+      bgcolorHex.value = bgcolorInput.value.toUpperCase();
+    }
+
+    function setStatus(msg) {
+      if (statusEl) statusEl.textContent = msg;
+    }
+
+    function parseCfgFile(content) {
+      const lines = content.split('\n');
+      const config = {};
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx < 0) continue;
+
+        const key = trimmed.substring(0, eqIdx).trim().toUpperCase();
+        const value = trimmed.substring(eqIdx + 1).trim();
+
+        config[key] = value;
+      }
+
+      return config;
+    }
+
+    function applyCfgToUI(config) {
+      // Text
+      if (config.TEXT) {
+        textInput.value = config.TEXT.replace(/\|/g, '\n');
+      }
+
+      // Mode
+      if (config.MODE) {
+        const mode = config.MODE.toLowerCase();
+        if (mode.includes('word')) modeSelect.value = 'big_words';
+        else if (mode.includes('letter')) modeSelect.value = 'big_letters';
+        else modeSelect.value = 'text';
+      }
+
+      // Alignment
+      if (config.ALIGN) {
+        alignSelect.value = config.ALIGN.toLowerCase();
+      }
+
+      // Speed
+      if (config.SPEED || config.LETTER_SPEED || config.WORD_SPEED || config.CYCLE_SPEED) {
+        const speed = parseInt(config.SPEED || config.LETTER_SPEED || config.WORD_SPEED || config.CYCLE_SPEED, 10);
+        if (!isNaN(speed) && speed >= 10 && speed <= 10000) {
+          speedInput.value = speed;
+          speedValue.textContent = speed + ' ms';
+        }
+      }
+
+      // Colors
+      if (config.COLOR) {
+        const rgb565 = parseInt(config.COLOR.replace(/^0x/i, ''), 16);
+        if (!isNaN(rgb565)) {
+          const hex = rgb565ToHex(rgb565);
+          colorInput.value = hex;
+          colorHex.value = hex.toUpperCase();
+        }
+      }
+
+      if (config.BG_COLOR || config.BGCOLOR) {
+        const rgb565 = parseInt((config.BG_COLOR || config.BGCOLOR).replace(/^0x/i, ''), 16);
+        if (!isNaN(rgb565)) {
+          const hex = rgb565ToHex(rgb565);
+          bgcolorInput.value = hex;
+          bgcolorHex.value = hex.toUpperCase();
+        }
+      }
+
+      // Font
+      if (config.FONT) {
+        const fontName = config.FONT.replace(/\.vlw$/i, '').replace(/^\/+/, '');
+        // Try to match font name
+        const options = Array.from(fontSelect.options);
+        const match = options.find(opt => opt.value.toLowerCase() === fontName.toLowerCase());
+        if (match) {
+          fontSelect.value = match.value;
+        }
+      }
+
+      updateColorPreview();
+      updateUI();
+      setStatus('Konfiguration geladen');
+    }
+
+    async function loadCfgFile(file) {
+      try {
+        const text = await file.text();
+        const config = parseCfgFile(text);
+        applyCfgToUI(config);
+
+        // Also update expert mode editor
+        if (expertMode.classList.contains('active')) {
+          cfgEditor.value = text;
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Fehler beim Laden der Konfigurationsdatei: ' + (error?.message || error));
+      }
+    }
+
+    async function downloadCfg() {
+      const content = expertMode.classList.contains('active') ? cfgEditor.value : generateCfg();
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'textapp.cfg';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatus('textapp.cfg heruntergeladen');
+    }
+
+    async function sendViaUsb() {
+      if (!('serial' in navigator)) {
+        alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge verwenden.');
+        return;
+      }
+      if (isSending) return;
+
+      const content = expertMode.classList.contains('active') ? cfgEditor.value : generateCfg();
+      const bytes = textEncoder.encode(content);
+      let port = null;
+
+      try {
+        isSending = true;
+        setStatus('Seriellen Port auswählen...');
+
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await port.close();
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await port.open({ baudRate: 115200 });
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const writer = port.writable.getWriter();
+
+        setStatus('Sende START...');
+        // Send with explicit "/" directory to overwrite existing file
+        await writer.write(textEncoder.encode(`START ${bytes.length} textapp.cfg /\n`));
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        setStatus('Sende Daten...');
+        await writer.write(bytes);
+        await new Promise(resolve => setTimeout(resolve, Math.max(1000, (bytes.length * 10 / 115200) * 1000 + 1000)));
+
+        setStatus('Sende END...');
+        await writer.write(textEncoder.encode('END\n'));
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        await writer.releaseLock();
+        writer = null;
+        await port.close();
+
+        setStatus('textapp.cfg erfolgreich übertragen ✅');
+      } catch (error) {
+        console.error(error);
+        const msg = error?.message || error?.toString() || 'Unbekannter Fehler';
+        setStatus('Fehler: ' + msg);
+        alert('USB-Übertragung fehlgeschlagen: ' + msg);
+
+        try {
+          if (port) await port.close();
+        } catch (_) {}
+      } finally {
+        isSending = false;
+      }
+    }
+
+    async function sendViaBle() {
+      if (!('bluetooth' in navigator)) {
+        alert('WebBluetooth wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge verwenden.');
+        return;
+      }
+      if (isSending) return;
+
+      const content = expertMode.classList.contains('active') ? cfgEditor.value : generateCfg();
+      const bytes = textEncoder.encode(content);
+      let device = null;
+      let server = null;
+
+      try {
+        isSending = true;
+        setStatus('Brosche auswählen...');
+
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'Brosche' }],
+          optionalServices: [BLE_UUIDS.service]
+        });
+
+        setStatus('Verbinde...');
+        server = await device.gatt.connect();
+        const service = await server.getPrimaryService(BLE_UUIDS.service);
+        const control = await service.getCharacteristic(BLE_UUIDS.control);
+        const chunk = await service.getCharacteristic(BLE_UUIDS.chunk);
+
+        await control.startNotifications();
+
+        setStatus('Sende START...');
+        await control.writeValue(textEncoder.encode(`START:${bytes.length}:textapp.cfg`));
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        setStatus('Sende Daten...');
+        const chunkSize = 20;
+        for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+          const slice = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
+          await chunk.writeValue(slice);
+
+          if ((offset / chunkSize) % 10 === 0) {
+            const pct = Math.min(100, Math.round((offset / bytes.length) * 100));
+            setStatus(`Sende ${pct}%...`);
+          }
+          await new Promise(resolve => setTimeout(resolve, 4));
+        }
+
+        setStatus('Sende END...');
+        await control.writeValue(textEncoder.encode('END'));
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        setStatus('textapp.cfg erfolgreich übertragen ✅');
+
+        if (server?.connected) server.disconnect();
+      } catch (error) {
+        console.error(error);
+        const msg = error?.message || error?.toString() || 'Unbekannter Fehler';
+        setStatus('Fehler: ' + msg);
+        alert('BLE-Übertragung fehlgeschlagen: ' + msg);
+
+        try {
+          if (server?.connected) server.disconnect();
+        } catch (_) {}
+      } finally {
+        isSending = false;
+      }
+    }
+
+    function createLineReader(reader) {
+      const decoder = new TextDecoder();
+      let pending = new Uint8Array(0);
+
+      const appendBytes = (chunk) => {
+        if (!chunk || !chunk.length) return;
+        if (pending.length === 0) {
+          pending = chunk.slice();
+        } else {
+          const merged = new Uint8Array(pending.length + chunk.length);
+          merged.set(pending, 0);
+          merged.set(chunk, pending.length);
+          pending = merged;
+        }
+      };
+
+      const tryExtractLine = () => {
+        for (let i = 0; i < pending.length; i++) {
+          if (pending[i] === 0x0A) { // '\n'
+            const lineBytes = pending.slice(0, i);
+            pending = pending.slice(i + 1);
+            let line = decoder.decode(lineBytes);
+            if (line.endsWith('\r')) {
+              line = line.slice(0, -1);
+            }
+            return line;
+          }
+        }
+        return null;
+      };
+
+      return {
+        async readLine(timeoutMs) {
+          const deadline = (typeof timeoutMs === 'number')
+            ? performance.now() + timeoutMs
+            : null;
+          while (true) {
+            const bufferedLine = tryExtractLine();
+            if (bufferedLine !== null) {
+              return bufferedLine;
+            }
+
+            const readPromise = reader.read();
+            let result;
+            if (deadline !== null) {
+              const remaining = deadline - performance.now();
+              if (remaining <= 0) {
+                throw new Error('Timeout beim Lesen von Gerätedaten');
+              }
+              result = await Promise.race([
+                readPromise,
+                delay(Math.max(remaining, 0)).then(() => ({ timeout: true })),
+              ]);
+              if (result?.timeout) {
+                throw new Error('Timeout beim Lesen von Gerätedaten');
+              }
+            } else {
+              result = await readPromise;
+            }
+
+            if (result.done) {
+              if (pending.length > 0) {
+                const line = decoder.decode(pending);
+                pending = new Uint8Array(0);
+                return line.replace(/\r$/, '');
+              }
+              throw new Error('Verbindung geschlossen');
+            }
+
+            if (result.value) {
+              if (typeof result.value === 'string') {
+                appendBytes(textEncoder.encode(result.value));
+              } else if (result.value instanceof Uint8Array) {
+                appendBytes(result.value);
+              } else if (ArrayBuffer.isView(result.value)) {
+                appendBytes(new Uint8Array(result.value.buffer, result.value.byteOffset, result.value.byteLength));
+              } else if (result.value instanceof ArrayBuffer) {
+                appendBytes(new Uint8Array(result.value));
+              }
+            }
+          }
+        },
+        drainRemainder() {
+          const leftover = pending;
+          pending = new Uint8Array(0);
+          return leftover;
+        }
+      };
+    }
+
+    async function waitForUsbLine(lineReader, predicate, timeoutMs) {
+      const deadline = performance.now() + timeoutMs;
+      while (true) {
+        const remaining = deadline - performance.now();
+        if (remaining <= 0) {
+          throw new Error('Timeout beim Warten auf Antwort des Geräts');
+        }
+        const line = (await lineReader.readLine(Math.max(remaining, 50))).trim();
+        if (!line) continue;
+        if (!line.startsWith('USB')) {
+          continue;
+        }
+        const payload = line.slice(3).trimStart();
+        if (payload.startsWith('ERR')) {
+          const message = payload.substring(3).trim();
+          throw new Error(message || 'Gerätefehler');
+        }
+        if (payload.startsWith('OK PROG')) {
+          const parts = payload.split(/\s+/);
+          if (parts.length >= 4) {
+            const received = Number(parts[2]);
+            const total = Number(parts[3]);
+            if (Number.isFinite(received) && Number.isFinite(total) && total > 0) {
+              const pct = Math.min(100, Math.round((received / total) * 100));
+              setStatus(`Gerät empfängt ${pct}% (${received} / ${total} Bytes)`);
+            }
+          }
+          continue;
+        }
+        if (payload.startsWith('OK MSG')) {
+          const msg = payload.substring(6).trim();
+          if (msg) setStatus(msg);
+          continue;
+        }
+        if (predicate(payload)) {
+          return payload;
+        }
+      }
+    }
+
+    async function loadFromBrosche() {
+      if (!('serial' in navigator)) {
+        alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge verwenden.');
+        return;
+      }
+      if (isSending) return;
+
+      let port = null;
+      let writer = null;
+      let reader = null;
+      let lineReader = null;
+
+      try {
+        isSending = true;
+        setStatus('Seriellen Port auswählen...');
+
+        port = await navigator.serial.requestPort();
+
+        // Port reset cycle (monitor trick)
+        setStatus('Verbindung wird vorbereitet...');
+        try {
+          await port.open({ baudRate: 115200 });
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await port.close();
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (err) {
+          console.warn('Port reset failed (non-critical):', err);
+        }
+
+        await port.open({ baudRate: 115200 });
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        if (!port.writable || !port.readable) {
+          throw new Error('Port bietet keine Lese-/Schreibstreams.');
+        }
+
+        reader = port.readable.getReader();
+        lineReader = createLineReader(reader);
+        writer = port.writable.getWriter();
+
+        // PING check with retries
+        setStatus('Prüfe Verbindung...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        let pingSuccess = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            if (attempt > 1) {
+              setStatus(`Warte auf Transfer-Modus... (Versuch ${attempt}/3)`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            await writer.write(textEncoder.encode('PING\n'));
+
+            const pong = await waitForUsbLine(
+              lineReader,
+              (payload) => payload.startsWith('OK PONG') || payload.startsWith('ERR'),
+              3000
+            );
+
+            if (pong.startsWith('ERR')) {
+              throw new Error('Gerät meldet Fehler');
+            }
+
+            pingSuccess = true;
+            break;
+          } catch (err) {
+            console.warn(`PING attempt ${attempt} failed:`, err);
+          }
+        }
+
+        if (!pingSuccess) {
+          throw new Error('Transfer-Modus nicht aktiv. Bitte BTN2 lang halten bis "TRANSFER" angezeigt wird.');
+        }
+
+        // Send READ command
+        setStatus('Lade textapp.cfg von Brosche...');
+        await writer.write(textEncoder.encode('READ /textapp.cfg\n'));
+
+        // Wait for OK READ response with file size
+        const readResponse = await waitForUsbLine(
+          lineReader,
+          (payload) => payload.startsWith('OK READ') || payload.startsWith('ERR'),
+          5000
+        );
+
+        if (readResponse.startsWith('ERR')) {
+          if (readResponse.includes('nicht gefunden') || readResponse.includes('NOENT')) {
+            throw new Error('textapp.cfg nicht auf der Brosche gefunden. Erstelle zuerst eine Konfiguration.');
+          }
+          throw new Error(readResponse);
+        }
+
+        // Parse size from "OK READ <size> <filename>"
+        const parts = readResponse.split(/\s+/);
+        if (parts.length < 3) {
+          throw new Error('Ungültige READ-Antwort vom Gerät');
+        }
+
+        const fileSize = parseInt(parts[2], 10);
+        if (!Number.isFinite(fileSize) || fileSize <= 0) {
+          throw new Error('Ungültige Dateigröße: ' + parts[2]);
+        }
+
+        setStatus(`Empfange ${fileSize} Bytes...`);
+
+        const prebuffer = lineReader ? lineReader.drainRemainder() : new Uint8Array(0);
+        lineReader = null;
+
+        // Now we need to read raw bytes from the serial port
+        const fileData = new Uint8Array(fileSize);
+        let bytesRead = 0;
+
+        if (prebuffer.length > 0) {
+          const prefetched = Math.min(prebuffer.length, fileSize);
+          fileData.set(prebuffer.subarray(0, prefetched), 0);
+          bytesRead = prefetched;
+        }
+
+        const readDeadline = performance.now() + 10000; // 10 second timeout
+
+        while (bytesRead < fileSize) {
+          if (performance.now() > readDeadline) {
+            throw new Error('Timeout beim Empfangen der Datei');
+          }
+
+          // Use Promise.race to add timeout to read operation
+          const readPromise = reader.read();
+          const timeoutPromise = new Promise((resolve) =>
+            setTimeout(() => resolve({ timeout: true }), 200)
+          );
+
+          const result = await Promise.race([readPromise, timeoutPromise]);
+
+          // If timeout but we have all bytes, we're done
+          if (result.timeout) {
+            if (bytesRead >= fileSize) {
+              break; // All bytes received, exit successfully
+            }
+            continue; // Keep trying
+          }
+
+          const { value, done } = result;
+
+          if (done) {
+            if (bytesRead >= fileSize) {
+              break; // All bytes received
+            }
+            throw new Error('Verbindung geschlossen während des Empfangs');
+          }
+
+          if (value) {
+            const bytesToCopy = Math.min(value.length, fileSize - bytesRead);
+            fileData.set(value.subarray(0, bytesToCopy), bytesRead);
+            bytesRead += bytesToCopy;
+
+            if (bytesRead % 100 === 0 || bytesRead === fileSize) {
+              const pct = Math.round((bytesRead / fileSize) * 100);
+              setStatus(`Empfange ${pct}% (${bytesRead}/${fileSize} Bytes)`);
+            }
+
+            // Small delay to let serial buffer catch up
+            if (bytesRead < fileSize) {
+              await new Promise(resolve => setTimeout(resolve, 5));
+            }
+          }
+        }
+
+        await reader.releaseLock();
+        reader = null;
+        lineReader = null;
+
+        // Convert to text
+        const fileContent = textDecoder.decode(fileData);
+
+        // Parse and apply configuration
+        const config = parseCfgFile(fileContent);
+        applyCfgToUI(config);
+
+        setStatus(`textapp.cfg erfolgreich von Brosche geladen (${fileSize} Bytes) ✅`);
+
+        await writer.releaseLock();
+        await port.close();
+
+      } catch (error) {
+        console.error(error);
+        const msg = error?.message || error?.toString() || 'Unbekannter Fehler';
+        setStatus('Fehler: ' + msg);
+        alert('Laden von Brosche fehlgeschlagen: ' + msg);
+
+        try {
+          if (writer) {
+            await writer.releaseLock();
+            writer = null;
+          }
+          if (reader) {
+            await reader.cancel();
+            reader = null;
+            lineReader = null;
+          }
+          if (port) await port.close();
+        } catch (_) {}
+      } finally {
+        isSending = false;
+      }
+    }
+
+    // Event Listeners
+    cfgUpload.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        await loadCfgFile(file);
+        cfgUpload.value = ''; // Reset input
+      }
+    });
+
+    textInput.addEventListener('input', updateUI);
+    modeSelect.addEventListener('change', updateUI);
+    alignSelect.addEventListener('change', updateUI);
+    speedInput.addEventListener('input', () => {
+      speedValue.textContent = speedInput.value + ' ms';
+      updateUI();
+    });
+    colorInput.addEventListener('input', () => {
+      updateColorPreview();
+      updateUI();
+    });
+    colorHex.addEventListener('change', () => {
+      if (/^#[0-9A-Fa-f]{6}$/.test(colorHex.value)) {
+        colorInput.value = colorHex.value;
+        updateColorPreview();
+        updateUI();
+      }
+    });
+    bgcolorInput.addEventListener('input', () => {
+      updateColorPreview();
+      updateUI();
+    });
+    bgcolorHex.addEventListener('change', () => {
+      if (/^#[0-9A-Fa-f]{6}$/.test(bgcolorHex.value)) {
+        bgcolorInput.value = bgcolorHex.value;
+        updateColorPreview();
+        updateUI();
+      }
+    });
+    fontSelect.addEventListener('change', updateUI);
+
+    expertToggle.addEventListener('click', () => {
+      expertMode.classList.toggle('active');
+      if (expertMode.classList.contains('active')) {
+        updateCfgEditor();
+        expertToggle.textContent = '🔧 Normal-Modus';
+      } else {
+        expertToggle.textContent = '🔧 Expert-Modus';
+      }
+    });
+
+    loadFromBroscheBtn.addEventListener('click', loadFromBrosche);
+    downloadBtn.addEventListener('click', downloadCfg);
+    usbBtn.addEventListener('click', sendViaUsb);
+    bleBtn.addEventListener('click', sendViaBle);
+
+    // Initialize
+    updateColorPreview();
+    updateUI();
+    animate();
+  </script>
+</body>
+</html>

@@ -151,8 +151,131 @@ void loop() {
   ```bash
   sudo usermod -a -G dialout $USER
   ```
-- Nur für den Browserstart nach Benutzerinteraktion erlaubt  
+- Nur für den Browserstart nach Benutzerinteraktion erlaubt
   (`navigator.serial.requestPort()` darf **nicht automatisch** aufgerufen werden)
+
+---
+
+## 🐧 Troubleshooting: Linux WebSerial Probleme
+
+### Problem: "Transfer-Modus nicht aktiv" trotz aktiviertem Transfer-Modus
+
+**Symptome:**
+- Web-App zeigt "Transfer-Modus nicht aktiv" Fehler
+- PING-Befehle schlagen fehl oder timeout
+- Python-Scripts funktionieren zuverlässig, Browser nicht
+- Manchmal funktioniert es, manchmal nicht (inkonsistentes Verhalten)
+- Windows funktioniert einwandfrei
+
+**Ursache: ModemManager**
+
+Unter Linux läuft standardmäßig der `ModemManager`-Dienst, der automatisch **alle neuen seriellen Geräte untersucht**:
+
+1. ESP32 wird per USB angeschlossen
+2. ModemManager erkennt ein serielles Gerät
+3. ModemManager sendet sofort AT-Befehle (Modem-Erkennung)
+4. Die WebSerial-Verbindung wird blockiert/gestört
+5. PING schlägt fehl → "Transfer-Modus nicht aktiv"
+
+**Warum funktioniert Python?**
+- Python ist schneller und belegt den Port vor ModemManager
+- Python kann den Port exklusiv blockieren
+
+**Warum funktioniert Windows?**
+- Windows hat keinen ModemManager
+- Serielle Ports funktionieren ohne Interferenz
+
+### Lösung 1: ModemManager temporär stoppen (Schnelltest)
+
+```bash
+# ModemManager stoppen
+sudo systemctl stop ModemManager
+
+# ESP32 ab- und wieder anstecken
+
+# Web-App testen
+
+# ModemManager wieder starten (wenn benötigt)
+sudo systemctl start ModemManager
+```
+
+### Lösung 2: ModemManager permanent deaktivieren
+
+⚠️ **Nur wenn du kein Mobilfunk-Modem verwendest!**
+
+```bash
+sudo systemctl disable ModemManager
+sudo systemctl stop ModemManager
+```
+
+### Lösung 3: ESP32 vom ModemManager blacklisten (empfohlen!)
+
+Dies ist die **beste Lösung**: ModemManager ignoriert nur den ESP32, andere Modems funktionieren weiterhin.
+
+```bash
+# 1. Finde die Vendor/Product ID deines ESP32
+lsusb | grep -i "CP210\|CH340\|FTDI\|ESP"
+
+# Beispiel-Ausgabe:
+# Bus 001 Device 005: ID 10c4:ea60 Silicon Labs CP210x UART Bridge
+#                        ^^^^:^^^^
+#                        Vendor:Product
+
+# 2. Erstelle udev-Regel (Beispiel für CP2102 - 10c4:ea60)
+sudo nano /etc/udev/rules.d/99-esp32-usb-serial.rules
+```
+
+Füge folgende Zeile ein (passe Vendor/Product ID an):
+
+```
+# Blacklist ESP32 für ModemManager
+ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ENV{ID_MM_DEVICE_IGNORE}="1"
+```
+
+Für andere USB-UART-Chips:
+- **CH340**: `idVendor=="1a86", idProduct=="7523"`
+- **FTDI**: `idVendor=="0403", idProduct=="6001"`
+- **CP2102**: `idVendor=="10c4", idProduct=="ea60"` (siehe oben)
+
+```bash
+# 3. Regeln neu laden
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
+# 4. ESP32 ab- und wieder anstecken
+
+# 5. Testen!
+```
+
+### Lösung 4: Chrome mit speziellen Flags starten
+
+```bash
+google-chrome --disable-features=WebSerialRateLimiting
+```
+
+### Debug: ModemManager-Aktivität beobachten
+
+```bash
+# Schaue ob ModemManager läuft
+systemctl status ModemManager
+
+# Beobachte ModemManager-Logs in Echtzeit
+sudo journalctl -u ModemManager -f
+
+# Dann ESP32 einstecken und beobachten
+# Du solltest AT-Befehle und Modem-Probe-Aktivität sehen
+```
+
+### Zusammenfassung
+
+| Lösung | Vorteil | Nachteil |
+|--------|---------|----------|
+| **Lösung 1** (temporär stoppen) | Schnell, einfacher Test | Nur temporär |
+| **Lösung 2** (deaktivieren) | Permanent, einfach | Mobilfunk-Modems funktionieren nicht mehr |
+| **Lösung 3** (blacklist) | ✅ **BESTE LÖSUNG** - Permanent, selektiv | Etwas mehr Konfiguration |
+| **Lösung 4** (Chrome Flags) | Kein System-Eingriff | Muss bei jedem Start gesetzt werden |
+
+**Empfehlung:** Verwende **Lösung 3** (udev blacklist) für eine dauerhafte, saubere Lösung.
 
 ---
 

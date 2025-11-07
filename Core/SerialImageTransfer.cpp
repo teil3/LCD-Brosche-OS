@@ -185,6 +185,76 @@ void sendFsInfo() {
          static_cast<unsigned long>(available));
 }
 
+void sendFile(const char* path) {
+  if (!path || !path[0]) {
+    sendErr("READPATH", "Kein Pfad angegeben");
+    return;
+  }
+
+  String filePath = String(path);
+  filePath.trim();
+
+  // Ensure path starts with /
+  if (!filePath.startsWith("/")) {
+    filePath = "/" + filePath;
+  }
+
+  if (!LittleFS.exists(filePath.c_str())) {
+    sendErr("READNOENT", "Datei nicht gefunden: %s", filePath.c_str());
+    return;
+  }
+
+  File file = LittleFS.open(filePath.c_str(), FILE_READ);
+  if (!file) {
+    sendErr("READOPEN", "Datei konnte nicht geoeffnet werden");
+    return;
+  }
+
+  if (file.isDirectory()) {
+    file.close();
+    sendErr("READDIR", "Pfad ist ein Verzeichnis");
+    return;
+  }
+
+  size_t fileSize = file.size();
+
+  // Extract filename from path
+  String filename = filePath;
+  int lastSlash = filename.lastIndexOf('/');
+  if (lastSlash >= 0) {
+    filename = filename.substring(lastSlash + 1);
+  }
+
+  // Send header
+  sendOk("READ", "%lu %s", static_cast<unsigned long>(fileSize), filename.c_str());
+
+  #ifdef USB_DEBUG
+    Serial.printf("[USB] READ %s (%lu bytes)\n", filePath.c_str(), static_cast<unsigned long>(fileSize));
+  #endif
+
+  // Send file content as raw bytes
+  uint8_t buffer[512];
+  size_t totalSent = 0;
+
+  while (file.available()) {
+    size_t bytesRead = file.readBytes((char*)buffer, sizeof(buffer));
+    if (bytesRead == 0) break;
+
+    Serial.write(buffer, bytesRead);
+    totalSent += bytesRead;
+    delay(0); // Yield to prevent watchdog
+  }
+
+  file.close();
+
+  // Send end marker
+  sendOk("READEND", "%lu", static_cast<unsigned long>(totalSent));
+
+  #ifdef USB_DEBUG
+    Serial.printf("[USB] READEND %lu bytes\n", static_cast<unsigned long>(totalSent));
+  #endif
+}
+
 void resetSession() {
   if (gSession.file) {
     gSession.file.close();
@@ -610,6 +680,17 @@ void processLine(const char* line) {
 
   if (std::strcmp(line, "FSINFO") == 0) {
     sendFsInfo();
+    return;
+  }
+
+  if (std::strncmp(line, "READ", 4) == 0) {
+    const char* ptr = line + 4;
+    while (*ptr == ' ') ++ptr;
+    if (!*ptr) {
+      sendErr("READFMT", "READ <filepath>");
+      return;
+    }
+    sendFile(ptr);
     return;
   }
 
