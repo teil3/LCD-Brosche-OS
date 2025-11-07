@@ -5,9 +5,8 @@
 #define SMOOTH_FONT
 #endif
 
-#ifndef LOAD_GFXFF
-#define LOAD_GFXFF
-#endif
+// LOAD_GFXFF removed - no longer needed as we use VLW fonts only
+// Built-in fonts (1-8) work without LOAD_GFXFF
 
 #include <SPI.h>
 #include <SD.h>

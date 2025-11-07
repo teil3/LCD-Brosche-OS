@@ -289,13 +289,14 @@ void TextApp::drawTextBlock_() {
     int16_t gap = std::max<int16_t>(4, lineHeight / 5);
     int16_t totalHeight = static_cast<int16_t>(lines.size()) * lineHeight;
     if (lines.size() > 1) totalHeight += static_cast<int16_t>(lines.size() - 1) * gap;
-    int16_t y = (TFT_H - totalHeight) / 2;
+    // y is the baseline position of the first line
+    int16_t y = (TFT_H - totalHeight) / 2 + ascent;
     for (const String& line : lines) {
       int16_t width = tft.textWidth(line);
       int16_t x = (alignment_ == TextAlign::Left) ? 6 : (alignment_ == TextAlign::Right ? TFT_W - width - 6 : (TFT_W - width) / 2);
       if (x < 6) x = 6;
       if (x + width > TFT_W - 6) x = std::max<int16_t>(6, TFT_W - width - 6);
-      tft.setCursor(x, y + ascent);
+      tft.setCursor(x, y);
       tft.print(line);
       y += lineHeight + gap;
     }
@@ -324,18 +325,36 @@ void TextApp::drawTextBlock_() {
   if (!blockSprite.createSprite(spriteWidth, spriteHeight)) {
     blockSprite.unloadFont();
     blockSprite.deleteSprite();
-    // Fallback to direct drawing (same as above)
+    // Fallback to direct drawing
     ensureFontLoaded_();
     tft.fillScreen(bgColor_);
-    int16_t baseY = (TFT_H - totalHeight) / 2;
+
+    // Use middle datum for vertical centering
+    tft.setTextDatum(ML_DATUM);
+
+    // Calculate Y position for each line (middle of line)
+    int16_t startY = (TFT_H - totalHeight) / 2 + lineHeight / 2;
+    int16_t y = startY;
+
     for (const String& line : lines) {
-      int16_t width = tft.textWidth(line);
-      int16_t x = (alignment_ == TextAlign::Left) ? 6 : (alignment_ == TextAlign::Right ? TFT_W - width - 6 : (TFT_W - width) / 2);
-      if (x < 6) x = 6;
-      if (x + width > TFT_W - 6) x = std::max<int16_t>(6, TFT_W - width - 6);
-      tft.setCursor(x, baseY + ascent);
-      tft.print(line);
-      baseY += lineHeight + gap;
+      int16_t x;
+      switch (alignment_) {
+        case TextAlign::Left:
+          x = 6;
+          tft.setTextDatum(ML_DATUM);  // Middle-Left
+          break;
+        case TextAlign::Center:
+          x = TFT_W / 2;
+          tft.setTextDatum(MC_DATUM);  // Middle-Center
+          break;
+        case TextAlign::Right:
+          x = TFT_W - 6;
+          tft.setTextDatum(MR_DATUM);  // Middle-Right
+          break;
+      }
+
+      tft.drawString(line, x, y);
+      y += lineHeight + gap;
     }
     return;
   }
@@ -343,7 +362,9 @@ void TextApp::drawTextBlock_() {
   blockSprite.fillSprite(bgColor_);
   blockSprite.setTextDatum(BL_DATUM);
 
-  int16_t y = margin + ascent;
+  // Draw text starting from top of sprite (only baseline offset)
+  // Bounding box calculation will find actual text bounds
+  int16_t y = ascent;
   for (const auto& line : lines) {
     int16_t width = blockSprite.textWidth(line.c_str());
     int16_t x;
