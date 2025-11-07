@@ -6,7 +6,7 @@
   <title>TextApp Konfigurator für die LCD-Brosche</title>
   <style>
     :root { color-scheme: light; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; background: #f8f9fb; color: #1f252d; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 920px; margin: 1.5rem auto; padding: 0 1rem; background: #f8f9fb; color: #1f252d; }
     header { margin-bottom: 1rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
     .header__text { flex: 1 1 320px; min-width: 0; }
     .header__logo { display: block; flex: 0 0 auto; width: 160px; margin-left: auto; order: 0; }
@@ -16,138 +16,168 @@
       .header__text { flex: 1 1 auto; }
       .header__logo { order: -1; margin-left: 0; margin-bottom: .75rem; }
     }
-    h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem; }
+    h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0; }
     .muted { opacity: .75; }
     .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin: .75rem 0; }
-    .config-section { background: #fff; border-radius: .8rem; padding: 1.25rem; margin: 1.25rem 0; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .header__title-row { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; margin-bottom: .3rem; }
+    .layout { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
+    .layout__config { flex: 1 1 460px; min-width: 320px; }
+    .layout__side { flex: 0 1 280px; min-width: 240px; display: flex; flex-direction: column; gap: 1rem; }
+    .config-flex-row { display: flex; gap: 1rem; flex-wrap: nowrap; }
+    .config-flex-item { flex: 1 1 180px; min-width: 0; }
+    .config-section { background: #fff; border-radius: .8rem; padding: 1rem; margin: .85rem 0; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .config-section--compact { padding: .9rem; }
+    .config-section--text textarea { min-height: 150px; }
     .config-section h2 { font-size: 1.1rem; margin: 0 0 1rem; }
     .form-group { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .9rem; }
     .form-group label { font-weight: 500; font-size: .95rem; }
     .form-group-inline { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-    .preview { position: relative; display: block; width: 358.2857142857px; height: 350.0571428571px; margin: 2.5rem auto 0; }
-    .preview__viewport { position: absolute; top: 43.7142857143px; left: 55.0285714286px; width: 240px; height: 240px; border-radius: 50%; overflow: hidden; border: 1px solid #c9c9c9; box-shadow: 0 1px 8px rgba(0,0,0,.08); background: #000; }
+    .preview { position: relative; display: block; width: 270px; height: 262.5px; margin: 0 auto; }
+    .preview__viewport { position: absolute; top: 32.8px; left: 41.3px; width: 180px; height: 180px; border-radius: 50%; overflow: hidden; border: 1px solid #c9c9c9; box-shadow: 0 1px 8px rgba(0,0,0,.08); background: #000; }
     .preview__viewport::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
     canvas { display: block; width: 100%; height: 100%; }
-    .preview__mask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; object-fit: cover; }
-    button, select, input[type="number"], input[type="text"], textarea { padding: .55rem .8rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: #ffffff; color: inherit; font-family: inherit; font-size: inherit; }
-    textarea { resize: vertical; min-height: 180px; font-family: ui-monospace, monospace; font-size: .9rem; line-height: 1.4; }
-    button { cursor: pointer; font-weight: 500; }
-    button:hover:not(:disabled) { background: #f5f5f5; }
+    .preview__mask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; object-fit: cover; transform: translateY(1px); }
+    button, select, input[type="number"], input[type="text"], textarea { padding: .45rem .8rem; border-radius: .55rem; border: 1px solid #c9c9c9; background: #ffffff; color: inherit; font-family: inherit; font-size: .95rem; }
+    textarea { resize: vertical; min-height: 150px; font-family: ui-monospace, monospace; font-size: .9rem; line-height: 1.4; }
+    button { cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; }
+    button:hover:not(:disabled) { background: #f0f2f7; }
     button[disabled] { opacity: .5; cursor: not-allowed; }
     button.primary { background: #4a90e2; color: white; border-color: #4a90e2; }
     button.primary:hover:not(:disabled) { background: #3d7bc4; }
+    .ghost-btn { border-color: #9aa5b5; color: #1f252d; background: rgba(74,144,226,0.08); padding: .4rem .7rem; font-size: .9rem; width: 100%; }
+    .ghost-btn:hover { background: rgba(74,144,226,0.15); }
     input[type="color"] { height: 2.5rem; padding: .2rem; cursor: pointer; }
     input[type="range"] { flex: 1; min-width: 120px; }
-    .actions { margin: 1.5rem 0 0; display: flex; gap: .75rem; flex-wrap: wrap; }
+    .actions { margin: .75rem 0 0; display: flex; gap: .6rem; flex-wrap: wrap; }
+    .actions--compact button { flex: 1 1 120px; }
     .expert-toggle { margin-top: .5rem; }
     .expert-mode { display: none; margin-top: 1rem; }
     .expert-mode.active { display: block; }
-    .version-tag { font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; margin-top: .4rem; color: #4a90e2; }
+    .version-tag { font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; color: #4a90e2; }
     code { background: rgba(127,127,127,.15); padding: .1rem .3rem; border-radius: .3rem; font-family: ui-monospace, monospace; font-size: .9em; }
-    .color-preview { display: inline-block; width: 1.5rem; height: 1.5rem; border-radius: .3rem; border: 1px solid #c9c9c9; vertical-align: middle; margin-left: .5rem; }
     .speed-value { min-width: 4rem; text-align: right; font-weight: 500; }
     footer { margin-top: 2rem; font-size: .9rem; }
+    .compact-text { font-size: .85rem; margin-bottom: .5rem; }
+    .tiny-note { font-size: .78rem; margin-top: .35rem; }
+    .status-line { flex: 1 1 100%; font-size: .85rem; margin-top: .25rem; }
+    .text-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+    .text-actions__group { display: flex; flex: 1 1 auto; gap: .5rem; flex-wrap: wrap; }
+    .load-card { border: 1px dashed #c9c9c9; border-radius: .65rem; padding: .75rem; background: #f4f7fc; }
+    .load-card h3 { margin: 0 0 .35rem; font-size: 1rem; }
+    .load-card p { margin: 0 0 .5rem; font-size: .85rem; }
+    @media (max-width: 720px) {
+      .layout { flex-direction: column; }
+      .layout__side { width: 100%; flex-direction: row; flex-wrap: wrap; justify-content: space-between; order: -1; margin-bottom: 1rem; }
+      .preview { margin-bottom: 1rem; }
+      .ghost-btn { width: auto; }
+      .config-flex-row { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
   <header>
     <div class="header__text">
-      <h1>TextApp Konfigurator</h1>
+      <div class="header__title-row">
+        <h1>TextApp Konfigurator</h1>
+        <span class="version-tag" id="tool-version">V0.4.1</span>
+      </div>
       <p class="muted">Konfiguriere die TextApp für deine LCD-Brosche. Ändere Text, Farben und Modi und lade die Konfiguration per Bluetooth oder USB auf die Brosche hoch.</p>
-      <p class="muted version-tag" id="tool-version">V0.4.1</p>
     </div>
     <a class="header__logo" href="https://www.teil3.ch" target="_blank" rel="noopener">
       <img src="../bildaufbereiter/teil3_logo.svg" alt="Teil3 Logo" width="160" height="95" />
     </a>
   </header>
 
-  <div class="preview">
-    <div class="preview__viewport">
-      <canvas id="cv" width="240" height="240"></canvas>
-    </div>
-    <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske.png" alt="Maske der LCD-Brosche" />
-  </div>
+  <div class="layout">
+    <div class="layout__config">
+      <div class="config-section config-section--text">
+        <h2>Textinhalt</h2>
+        <div class="form-group">
+          <textarea id="text-input" rows="4" aria-label="Text">Hallo Welt!</textarea>
+        </div>
+        <div class="text-actions">
+          <button id="download-cfg" class="primary">textapp.cfg speichern</button>
+          <div class="text-actions__group">
+            <button id="send-usb" class="primary">Über USB senden</button>
+            <button id="send-ble">Per Bluetooth senden</button>
+          </div>
+        </div>
+        <p id="status" class="muted status-line" aria-live="polite"></p>
+      </div>
 
-  <div class="config-section">
-    <h2>Konfiguration laden</h2>
-    <div class="form-group">
-      <label for="cfg-upload">Von Datei laden</label>
-      <input type="file" id="cfg-upload" accept=".cfg,.txt" />
-    </div>
-    <div class="form-group">
-      <label>Von Brosche laden (USB)</label>
-      <button type="button" id="load-from-brosche">textapp.cfg von Brosche laden</button>
-      <p class="muted" style="font-size: .85rem; margin-top: .25rem;">Brosche muss im Transfer-Modus sein (BTN2 lang halten in Diashow).</p>
-    </div>
-  </div>
+      <div class="config-flex-row">
+        <div class="config-section config-flex-item">
+          <h2>Anzeigenmodus</h2>
+          <div class="form-group">
+            <label for="mode-select">Modus</label>
+            <select id="mode-select">
+              <option value="text">Textblock (mehrzeilig)</option>
+              <option value="big_words">Wörter (nacheinander)</option>
+              <option value="big_letters">Buchstaben (nacheinander)</option>
+            </select>
+          </div>
+          <div class="form-group" id="align-group">
+            <label for="align-select">Textausrichtung</label>
+            <select id="align-select">
+              <option value="left">Links</option>
+              <option value="center" selected>Zentriert</option>
+              <option value="right">Rechts</option>
+            </select>
+          </div>
+          <div class="form-group" id="speed-group" style="display: none;">
+            <label for="speed-input">Geschwindigkeit</label>
+            <div class="form-group-inline">
+              <input type="range" id="speed-input" min="10" max="10000" value="1000" step="10" />
+              <span class="speed-value" id="speed-value">1000 ms</span>
+            </div>
+          </div>
+        </div>
 
-  <div class="config-section">
-    <h2>Textinhalt</h2>
-    <div class="form-group">
-      <label for="text-input">Text (Mehrzeilig: Nutze Enter oder | für Zeilenumbrüche)</label>
-      <textarea id="text-input" rows="3">Hallo Welt!</textarea>
-    </div>
-  </div>
+        <div class="config-section config-flex-item">
+          <h2>Farben</h2>
+          <div class="form-group">
+            <label for="color-input">Textfarbe</label>
+            <input type="color" id="color-input" value="#ffffff" />
+          </div>
+          <div class="form-group">
+            <label for="bgcolor-input">Hintergrundfarbe</label>
+            <input type="color" id="bgcolor-input" value="#000000" />
+          </div>
+        </div>
 
-  <div class="config-section">
-    <h2>Anzeigemodus</h2>
-    <div class="form-group">
-      <label for="mode-select">Modus</label>
-      <select id="mode-select">
-        <option value="text">Textblock (mehrzeilig)</option>
-        <option value="big_words">Große Wörter (nacheinander)</option>
-        <option value="big_letters">Große Buchstaben (nacheinander)</option>
-      </select>
+        <div class="config-section config-flex-item">
+          <h2>Schriftart</h2>
+          <div class="form-group">
+            <label for="font-select">Font</label>
+            <select id="font-select">
+              <option value="FreeSans18pt">FreeSans 18pt</option>
+              <option value="FreeSansBold18pt" selected>FreeSansBold 18pt</option>
+              <option value="FreeSansBold24pt">FreeSansBold 24pt</option>
+              <option value="FreeSerif18pt">FreeSerif 18pt</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-section load-card" style="margin-top:.5rem;">
+        <h3 style="margin:0 0 .4rem; font-size:1rem;">Konfiguration laden</h3>
+        <p class="muted compact-text" style="margin-bottom:.35rem;">Hole die aktuelle <code>textapp.cfg</code> direkt von der Brosche.</p>
+        <button type="button" class="ghost-btn" id="load-from-brosche">Von Brosche laden</button>
+        <p class="muted tiny-note" style="margin-top:.4rem;">Transfer-Modus: In der Diashow BTN2 lang halten bis "TRANSFER" angezeigt wird.</p>
+      </div>
     </div>
-    <div class="form-group" id="align-group">
-      <label for="align-select">Textausrichtung (nur bei Textblock)</label>
-      <select id="align-select">
-        <option value="left">Links</option>
-        <option value="center" selected>Zentriert</option>
-        <option value="right">Rechts</option>
-      </select>
-    </div>
-    <div class="form-group" id="speed-group" style="display: none;">
-      <label for="speed-input">Geschwindigkeit (10-10000 ms)</label>
-      <div class="form-group-inline">
-        <input type="range" id="speed-input" min="10" max="10000" value="1000" step="10" />
-        <span class="speed-value" id="speed-value">1000 ms</span>
+
+    <div class="layout__side">
+      <div class="preview">
+        <div class="preview__viewport">
+          <canvas id="cv" width="240" height="240"></canvas>
+        </div>
+        <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske.png" alt="Maske der LCD-Brosche" />
       </div>
     </div>
   </div>
 
-  <div class="config-section">
-    <h2>Farben</h2>
-    <div class="form-group">
-      <label for="color-input">Textfarbe <span class="color-preview" id="color-preview"></span></label>
-      <div class="form-group-inline">
-        <input type="color" id="color-input" value="#ffffff" />
-        <input type="text" id="color-hex" value="#ffffff" style="width: 8rem;" />
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="bgcolor-input">Hintergrundfarbe <span class="color-preview" id="bgcolor-preview"></span></label>
-      <div class="form-group-inline">
-        <input type="color" id="bgcolor-input" value="#000000" />
-        <input type="text" id="bgcolor-hex" value="#000000" style="width: 8rem;" />
-      </div>
-    </div>
-  </div>
-
-  <div class="config-section">
-    <h2>Schriftart</h2>
-    <div class="form-group">
-      <label for="font-select">Font</label>
-      <select id="font-select">
-        <option value="FreeSans18pt">FreeSans 18pt</option>
-        <option value="FreeSansBold18pt" selected>FreeSansBold 18pt</option>
-        <option value="FreeSansBold24pt">FreeSansBold 24pt</option>
-        <option value="FreeSerif18pt">FreeSerif 18pt</option>
-      </select>
-    </div>
-  </div>
-
-  <div class="config-section">
+  <div class="config-section" style="margin-top: 1rem;">
     <button type="button" class="expert-toggle" id="expert-toggle">🔧 Expert-Modus</button>
     <div class="expert-mode" id="expert-mode">
       <div class="form-group">
@@ -156,13 +186,6 @@
       </div>
       <p class="muted" style="font-size: .85rem;">Änderungen hier überschreiben die obigen Einstellungen beim Hochladen. Syntax: <code>KEY=VALUE</code></p>
     </div>
-  </div>
-
-  <div class="actions">
-    <button id="download-cfg" class="primary">Als textapp.cfg herunterladen</button>
-    <button id="send-usb">Über USB senden</button>
-    <button id="send-ble">Per Bluetooth senden</button>
-    <p id="status" class="muted" aria-live="polite" style="width: 100%;"></p>
   </div>
 
   <footer>
@@ -174,7 +197,6 @@
     const TOOL_VERSION = 'V0.4.1';
     const cv = document.getElementById('cv');
     const ctx = cv.getContext('2d');
-    const cfgUpload = document.getElementById('cfg-upload');
     const loadFromBroscheBtn = document.getElementById('load-from-brosche');
     const textInput = document.getElementById('text-input');
     const modeSelect = document.getElementById('mode-select');
@@ -182,11 +204,7 @@
     const speedInput = document.getElementById('speed-input');
     const speedValue = document.getElementById('speed-value');
     const colorInput = document.getElementById('color-input');
-    const colorHex = document.getElementById('color-hex');
-    const colorPreview = document.getElementById('color-preview');
     const bgcolorInput = document.getElementById('bgcolor-input');
-    const bgcolorHex = document.getElementById('bgcolor-hex');
-    const bgcolorPreview = document.getElementById('bgcolor-preview');
     const fontSelect = document.getElementById('font-select');
     const expertToggle = document.getElementById('expert-toggle');
     const expertMode = document.getElementById('expert-mode');
@@ -369,14 +387,6 @@
       updateCfgEditor();
     }
 
-    function updateColorPreview() {
-      colorPreview.style.backgroundColor = colorInput.value;
-      colorHex.value = colorInput.value.toUpperCase();
-
-      bgcolorPreview.style.backgroundColor = bgcolorInput.value;
-      bgcolorHex.value = bgcolorInput.value.toUpperCase();
-    }
-
     function setStatus(msg) {
       if (statusEl) statusEl.textContent = msg;
     }
@@ -433,18 +443,14 @@
       if (config.COLOR) {
         const rgb565 = parseInt(config.COLOR.replace(/^0x/i, ''), 16);
         if (!isNaN(rgb565)) {
-          const hex = rgb565ToHex(rgb565);
-          colorInput.value = hex;
-          colorHex.value = hex.toUpperCase();
+          colorInput.value = rgb565ToHex(rgb565);
         }
       }
 
       if (config.BG_COLOR || config.BGCOLOR) {
         const rgb565 = parseInt((config.BG_COLOR || config.BGCOLOR).replace(/^0x/i, ''), 16);
         if (!isNaN(rgb565)) {
-          const hex = rgb565ToHex(rgb565);
-          bgcolorInput.value = hex;
-          bgcolorHex.value = hex.toUpperCase();
+          bgcolorInput.value = rgb565ToHex(rgb565);
         }
       }
 
@@ -459,29 +465,32 @@
         }
       }
 
-      updateColorPreview();
       updateUI();
       setStatus('Konfiguration geladen');
     }
 
-    async function loadCfgFile(file) {
-      try {
-        const text = await file.text();
-        const config = parseCfgFile(text);
-        applyCfgToUI(config);
-
-        // Also update expert mode editor
-        if (expertMode.classList.contains('active')) {
-          cfgEditor.value = text;
-        }
-      } catch (error) {
-        console.error(error);
-        alert('Fehler beim Laden der Konfigurationsdatei: ' + (error?.message || error));
-      }
-    }
-
     async function downloadCfg() {
       const content = expertMode.classList.contains('active') ? cfgEditor.value : generateCfg();
+      try {
+        if (window.showSaveFilePicker) {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: 'textapp.cfg',
+            types: [{ description: 'CFG-Datei', accept: { 'text/plain': ['.cfg'] } }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(content);
+          await writable.close();
+          setStatus('textapp.cfg gespeichert');
+          return;
+        }
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          setStatus('Speichern abgebrochen');
+          return;
+        }
+        console.warn('showSaveFilePicker failed, falling back to download:', error);
+      }
+
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -491,7 +500,7 @@
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      setStatus('textapp.cfg heruntergeladen');
+      setStatus('textapp.cfg gespeichert (Download)');
     }
 
     async function sendViaUsb() {
@@ -748,9 +757,11 @@
       }
     }
 
-    async function loadFromBrosche() {
+    async function loadFromBrosche(auto = false) {
       if (!('serial' in navigator)) {
-        alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge verwenden.');
+        if (!auto) {
+          alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge verwenden.');
+        }
         return;
       }
       if (isSending) return;
@@ -762,9 +773,19 @@
 
       try {
         isSending = true;
-        setStatus('Seriellen Port auswählen...');
 
-        port = await navigator.serial.requestPort();
+        if (auto) {
+          setStatus('Suche autorisierte Brosche...');
+          const ports = await navigator.serial.getPorts();
+          if (!ports || ports.length === 0) {
+            setStatus('Keine autorisierte Brosche gefunden');
+            return;
+          }
+          port = ports[0];
+        } else {
+          setStatus('Seriellen Port auswählen...');
+          port = await navigator.serial.requestPort();
+        }
 
         // Port reset cycle (monitor trick)
         setStatus('Verbindung wird vorbereitet...');
@@ -936,7 +957,9 @@
         console.error(error);
         const msg = error?.message || error?.toString() || 'Unbekannter Fehler';
         setStatus('Fehler: ' + msg);
-        alert('Laden von Brosche fehlgeschlagen: ' + msg);
+        if (!auto) {
+          alert('Laden von Brosche fehlgeschlagen: ' + msg);
+        }
 
         try {
           if (writer) {
@@ -956,14 +979,6 @@
     }
 
     // Event Listeners
-    cfgUpload.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        await loadCfgFile(file);
-        cfgUpload.value = ''; // Reset input
-      }
-    });
-
     textInput.addEventListener('input', updateUI);
     modeSelect.addEventListener('change', updateUI);
     alignSelect.addEventListener('change', updateUI);
@@ -971,28 +986,8 @@
       speedValue.textContent = speedInput.value + ' ms';
       updateUI();
     });
-    colorInput.addEventListener('input', () => {
-      updateColorPreview();
-      updateUI();
-    });
-    colorHex.addEventListener('change', () => {
-      if (/^#[0-9A-Fa-f]{6}$/.test(colorHex.value)) {
-        colorInput.value = colorHex.value;
-        updateColorPreview();
-        updateUI();
-      }
-    });
-    bgcolorInput.addEventListener('input', () => {
-      updateColorPreview();
-      updateUI();
-    });
-    bgcolorHex.addEventListener('change', () => {
-      if (/^#[0-9A-Fa-f]{6}$/.test(bgcolorHex.value)) {
-        bgcolorInput.value = bgcolorHex.value;
-        updateColorPreview();
-        updateUI();
-      }
-    });
+    colorInput.addEventListener('input', updateUI);
+    bgcolorInput.addEventListener('input', updateUI);
     fontSelect.addEventListener('change', updateUI);
 
     expertToggle.addEventListener('click', () => {
@@ -1005,15 +1000,23 @@
       }
     });
 
-    loadFromBroscheBtn.addEventListener('click', loadFromBrosche);
+    loadFromBroscheBtn.addEventListener('click', () => loadFromBrosche(false));
     downloadBtn.addEventListener('click', downloadCfg);
     usbBtn.addEventListener('click', sendViaUsb);
     bleBtn.addEventListener('click', sendViaBle);
 
     // Initialize
-    updateColorPreview();
     updateUI();
     animate();
+    autoLoadFromBrosche();
+
+    async function autoLoadFromBrosche() {
+      try {
+        await loadFromBrosche(true);
+      } catch (err) {
+        console.warn('Automatisches Laden übersprungen:', err);
+      }
+    }
   </script>
 </body>
 </html>
