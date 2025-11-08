@@ -268,7 +268,7 @@
     }
 
     function getConfig() {
-      const text = textInput.value.replace(/\n/g, '|');
+      const text = textInput.value.replace(/\n/g, '|br|');
       const mode = modeSelect.value;
       const align = alignSelect.value;
       const speed = parseInt(speedInput.value, 10);
@@ -310,7 +310,7 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const text = cfg.text.replace(/\|/g, '\n');
+      const text = cfg.text.replace(/\|br\|/g, '\n');
 
       if (cfg.mode === 'text') {
         // TextBlock mode
@@ -333,7 +333,7 @@
         });
       } else if (cfg.mode === 'big_words') {
         // BigWords mode
-        const words = text.split(/[\s\n|]+/).filter(w => w.trim());
+        const words = text.split(/[\s\n]+/).filter(w => w.trim());
         if (words.length === 0) return;
 
         const word = words[currentWordIndex % words.length];
@@ -343,7 +343,7 @@
         ctx.fillText(word, 120, 120);
       } else if (cfg.mode === 'big_letters') {
         // BigLetters mode
-        const chars = text.replace(/[\n|]/g, '').split('').filter(c => c.trim());
+        const chars = text.replace(/\n/g, '').split('').filter(c => c.trim());
         if (chars.length === 0) return;
 
         const char = chars[currentLetterIndex % chars.length];
@@ -359,14 +359,16 @@
       const now = Date.now();
 
       if (cfg.mode === 'big_words' && now - lastAnimTime > cfg.speed) {
-        const words = cfg.text.split(/[\s\n|]+/).filter(w => w.trim());
+        const text = cfg.text.replace(/\|br\|/g, '\n');
+        const words = text.split(/[\s\n]+/).filter(w => w.trim());
         if (words.length > 0) {
           currentWordIndex = (currentWordIndex + 1) % words.length;
           lastAnimTime = now;
           updatePreview();
         }
       } else if (cfg.mode === 'big_letters' && now - lastAnimTime > cfg.speed) {
-        const chars = cfg.text.replace(/[\n|]/g, '').split('').filter(c => c.trim());
+        const text = cfg.text.replace(/\|br\|/g, '\n');
+        const chars = text.replace(/\n/g, '').split('').filter(c => c.trim());
         if (chars.length > 0) {
           currentLetterIndex = (currentLetterIndex + 1) % chars.length;
           lastAnimTime = now;
@@ -417,7 +419,7 @@
     function applyCfgToUI(config) {
       // Text
       if (config.TEXT) {
-        textInput.value = config.TEXT.replace(/\|/g, '\n');
+        textInput.value = config.TEXT.replace(/\|br\|/g, '\n');
       }
 
       // Mode

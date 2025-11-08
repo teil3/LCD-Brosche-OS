@@ -176,7 +176,7 @@ void TextApp::parseConfigLine_(const String& line) {
     mode_ = stringToMode_(value);
   } else if (key.equalsIgnoreCase("TEXT")) {
     text_ = value;
-    text_.replace("|", "\n");
+    text_.replace("|br|", "\n");
     wordsDirty_ = true;
   } else if (key.equalsIgnoreCase("COLOR")) {
     color_ = parseColor_(value);
