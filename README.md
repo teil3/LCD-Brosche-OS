@@ -1,12 +1,12 @@
 # ESP32 LCD-Brosche Board OS
 
-<img src="docs/titelbild_brosche.png" alt="Board overview" width="50%">
+<img src="docs/titelbild_brosche.png" alt="Board overview" width="70%">
 
 Kompaktes Firmware-Projekt für eine tragbare LCD-Brosche: Ein schmuckartiges ESP32-Devboard mit rundem GC9A01-TFT (240x240) und SD-Karte. Die Firmware stellt einen einfachen App-Manager bereit, der mehrere eigenständige Apps kapselt (z. B. eine Slideshow) und über zwei Hardware-Tasten gesteürt wird.
 
 ## Tools
 
-- [Bildauferbeiter](https://teil3.github.io/LCD-Brosche-OS/tools/bildaufbereiter/)
+- [Bildaufbereiter](https://teil3.github.io/LCD-Brosche-OS/tools/bildaufbereiter/)
 - [Text App Konfigurator](https://teil3.github.io/LCD-Brosche-OS/tools/textapp-konfigurator/)
 - [Filesystem Browser](https://teil3.github.io/LCD-Brosche-OS/tools/filesystem-browser/)
 
