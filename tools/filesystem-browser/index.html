@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LittleFS Browser</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0 auto; padding: 1.5rem; max-width: 1100px; background: #f4f6fb; color: #182026; }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    h1 { margin: 0; font-size: clamp(1.5rem, 2.5vw, 2.2rem); }
+    .muted { color: #5f6b7c; }
+    .card { background: #fff; border-radius: 0.9rem; padding: 1.25rem; box-shadow: 0 8px 20px rgba(18,32,68,0.08); margin-bottom: 1rem; }
+    button, input, select { font: inherit; border-radius: 0.55rem; border: 1px solid #c5ced9; padding: 0.5rem 0.9rem; }
+    button { cursor: pointer; background: #edf2ff; border-color: #a4b4ff; color: #1f3a8a; font-weight: 600; }
+    button.primary { background: #4a90e2; color: #fff; border-color: #4a90e2; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .controls { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .status { min-height: 1.2rem; font-size: 0.93rem; }
+    .fs-info { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .fs-info div { flex: 1 1 120px; background: #f0f4ff; border-radius: 0.6rem; padding: 0.6rem 0.8rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #e5e9f2; text-align: left; }
+    th { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6b778c; }
+    .path-cell { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.92rem; }
+    .tag { font-size: 0.72rem; padding: 0.1rem 0.4rem; border-radius: 999px; background: #e7f1ff; color: #1d4ed8; margin-left: 0.4rem; }
+    .tag.lock { background: #ffe8cc; color: #b45309; }
+    .tag.dir { background: #f1f5f9; color: #0f172a; }
+    .actions { display: flex; gap: 0.4rem; }
+    .upload-grid { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; }
+    .upload-grid label { font-weight: 600; }
+    .upload-grid input[type="text"] { min-width: 200px; }
+    .notice { font-size: 0.85rem; color: #5f6b7c; margin-top: 0.4rem; }
+    .hidden { display: none; }
+    @media (max-width: 760px) {
+      body { padding: 1rem; }
+      header { flex-direction: column; align-items: flex-start; }
+      .fs-info { flex-direction: column; }
+      .controls { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>LittleFS Browser</h1>
+      <p class="muted">Dateien inspizieren, hochladen und (wo erlaubt) entfernen &ndash; direkt über WebSerial.</p>
+    </div>
+    <div>
+      <button id="connect-btn" class="primary">Verbinden</button>
+      <button id="disconnect-btn" class="hidden">Trennen</button>
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="controls">
+      <button id="refresh-btn" disabled>Aktualisieren</button>
+    </div>
+    <p id="status" class="status muted">Bereit.</p>
+  </section>
+
+  <section class="card">
+    <h2>Speicherübersicht</h2>
+    <div class="fs-info">
+      <div>
+        <div class="muted">Gesamt</div>
+        <div id="fs-total">&mdash;</div>
+      </div>
+      <div>
+        <div class="muted">Belegt</div>
+        <div id="fs-used">&mdash;</div>
+      </div>
+      <div>
+        <div class="muted">Frei</div>
+        <div id="fs-free">&mdash;</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>LittleFS Inhalte</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Pfad</th>
+          <th>Typ</th>
+          <th>Größe</th>
+          <th>Aktionen</th>
+        </tr>
+      </thead>
+      <tbody id="fs-table">
+        <tr><td colspan="4" class="muted">Noch keine Daten geladen.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Datei hochladen</h2>
+    <form id="upload-form">
+      <div class="upload-grid">
+        <label for="upload-file">Datei auswählen</label>
+        <input type="file" id="upload-file" required />
+        <label for="upload-dir">Zielverzeichnis</label>
+        <input type="text" id="upload-dir" value="/slides" required />
+        <button type="submit" id="upload-btn" class="primary" disabled>Upload starten</button>
+      </div>
+      <p class="notice">Ziel muss bereits existieren (z.&nbsp;B. <code>/slides</code> oder <code>/system</code>). Fonts und <code>textapp.cfg</code> bleiben schreibgeschützt.</p>
+    </form>
+  </section>
+
+  <script type="module">
+    const connectBtn = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const statusEl = document.getElementById('status');
+    const fsTable = document.getElementById('fs-table');
+    const fsTotalEl = document.getElementById('fs-total');
+    const fsUsedEl = document.getElementById('fs-used');
+    const fsFreeEl = document.getElementById('fs-free');
+    const uploadForm = document.getElementById('upload-form');
+    const uploadFileInput = document.getElementById('upload-file');
+    const uploadDirInput = document.getElementById('upload-dir');
+    const uploadBtn = document.getElementById('upload-btn');
+
+    const textEncoder = new TextEncoder();
+    let port = null;
+    let reader = null;
+    let writer = null;
+    let readableClosed = null;
+    let lineReader = null;
+    let busy = false;
+
+    const hiddenPaths = new Set(['/system/bootlogo.jpg']);
+
+    function isProtected(path) {
+      const lower = path.toLowerCase();
+      return lower === '/textapp.cfg' || lower.startsWith('/system/fonts/');
+    }
+
+    function isHidden(path) {
+      return hiddenPaths.has(path.toLowerCase());
+    }
+
+    function setStatus(msg) {
+      if (statusEl) statusEl.textContent = msg;
+    }
+
+    function formatBytes(bytes) {
+      if (bytes == null || isNaN(bytes)) return '—';
+      if (bytes < 1024) return bytes + ' B';
+      const units = ['KB', 'MB', 'GB'];
+      let value = bytes;
+      let unit = 'KB';
+      let idx = 0;
+      while (value >= 1024 && idx < units.length) {
+        value /= 1024;
+        unit = units[idx++];
+      }
+      return value.toFixed(value >= 10 ? 1 : 2) + ' ' + unit;
+    }
+
+    function normalizePath(input) {
+      if (!input) return '/';
+      let path = input.trim();
+      if (!path.startsWith('/')) path = '/' + path;
+      path = path.replace(/\\/g, '/');
+      path = path.replace(/\/+/g, '/');
+      while (path.length > 1 && path.endsWith('/')) {
+        path = path.slice(0, -1);
+      }
+      return path || '/';
+    }
+
+    function createLineReader(sourceReader) {
+      let buffer = '';
+      return {
+        async readLine(timeoutMs = 4000) {
+          const deadline = timeoutMs ? performance.now() + timeoutMs : null;
+          while (true) {
+            const newlineIdx = buffer.indexOf('\n');
+            if (newlineIdx >= 0) {
+              const line = buffer.slice(0, newlineIdx);
+              buffer = buffer.slice(newlineIdx + 1);
+              return line.replace(/\r$/, '');
+            }
+            const readPromise = sourceReader.read();
+            let result;
+            if (deadline !== null) {
+              const remaining = deadline - performance.now();
+              if (remaining <= 0) {
+                throw new Error('Timeout beim Lesen von Gerätedaten');
+              }
+              result = await Promise.race([
+                readPromise,
+                new Promise(resolve => setTimeout(() => resolve({ timeout: true }), remaining))
+              ]);
+              if (result?.timeout) {
+                throw new Error('Timeout beim Lesen von Gerätedaten');
+              }
+            } else {
+              result = await readPromise;
+            }
+            if (result.done) {
+              if (buffer.length > 0) {
+                const remaining = buffer;
+                buffer = '';
+                return remaining;
+              }
+              throw new Error('Serielle Verbindung geschlossen');
+            }
+            if (result.value) {
+              buffer += result.value;
+            }
+          }
+        }
+      };
+    }
+
+    async function readUsbPayload(timeoutMs = 4000) {
+      while (true) {
+        const line = await lineReader.readLine(timeoutMs);
+        if (!line) continue;
+        if (!line.startsWith('USB')) continue;
+        const payload = line.slice(3).trimStart();
+        return payload;
+      }
+    }
+
+    async function waitForOk(prefix, timeoutMs = 4000) {
+      while (true) {
+        const payload = await readUsbPayload(timeoutMs);
+        if (payload.startsWith('ERR')) {
+          throw new Error(payload);
+        }
+        if (payload.startsWith(prefix)) {
+          return payload;
+        }
+      }
+    }
+
+    async function connectDevice() {
+      if (!('serial' in navigator)) {
+        alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge verwenden.');
+        return;
+      }
+      try {
+        setStatus('Seriellen Port auswählen...');
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+
+        const decoder = new TextDecoderStream();
+        readableClosed = port.readable.pipeTo(decoder.writable);
+        reader = decoder.readable.getReader();
+        lineReader = createLineReader(reader);
+        writer = port.writable.getWriter();
+
+        await sendPing();
+        setStatus('Verbunden. Lade Dateiliste...');
+        connectBtn.classList.add('hidden');
+        disconnectBtn.classList.remove('hidden');
+        refreshBtn.disabled = false;
+        uploadBtn.disabled = false;
+        await refreshFilesystem();
+      } catch (err) {
+        console.error(err);
+        setStatus('Fehler: ' + (err?.message || err));
+        await disconnectDevice();
+      }
+    }
+
+    async function disconnectDevice() {
+      refreshBtn.disabled = true;
+      uploadBtn.disabled = true;
+      if (writer) {
+        try { await writer.releaseLock(); } catch (_) {}
+        writer = null;
+      }
+      if (reader) {
+        try { await reader.cancel(); } catch (_) {}
+        reader = null;
+      }
+      if (readableClosed) {
+        try { await readableClosed.catch(() => {}); } catch (_) {}
+        readableClosed = null;
+      }
+      if (port) {
+        try { await port.close(); } catch (_) {}
+        port = null;
+      }
+      lineReader = null;
+      connectBtn.classList.remove('hidden');
+      disconnectBtn.classList.add('hidden');
+      setStatus('Verbindung getrennt.');
+    }
+
+    async function sendPing() {
+      await writer.write(textEncoder.encode('PING\n'));
+      await waitForOk('OK PONG');
+    }
+
+    async function fetchFsInfo() {
+      await writer.write(textEncoder.encode('FSINFO\n'));
+      const payload = await waitForOk('OK FSINFO');
+      const parts = payload.split(/\s+/);
+      if (parts.length < 5) throw new Error('Ungültige FSINFO-Antwort');
+      const total = Number(parts[2]);
+      const used = Number(parts[3]);
+      const free = Number(parts[4]);
+      fsTotalEl.textContent = formatBytes(total);
+      fsUsedEl.textContent = formatBytes(used);
+      fsFreeEl.textContent = formatBytes(free);
+    }
+
+    function joinPath(dir, name) {
+      if (!dir || dir === '/') return '/' + name;
+      return (dir + '/' + name).replace(/\/+/g, '/');
+    }
+
+    async function listDirectory(dir) {
+      const command = dir === '/' ? 'LIST\n' : `LIST ${dir}\n`;
+      await writer.write(textEncoder.encode(command));
+      const entries = [];
+      while (true) {
+        const payload = await readUsbPayload();
+        if (payload.startsWith('ERR')) {
+          throw new Error(payload);
+        }
+        if (payload.startsWith('OK LISTDONE')) {
+          break;
+        }
+        if (payload.startsWith('OK LIST')) {
+          const parts = payload.split(/\s+/);
+          if (parts.length < 5) continue;
+          const entryType = parts[2];
+          const name = parts[3];
+          const size = Number(parts[4]) || 0;
+          entries.push({ name, isDir: entryType === 'D', size });
+        }
+      }
+      return entries;
+    }
+
+    async function fetchAllEntries() {
+      const results = [];
+      const queue = ['/'];
+      while (queue.length > 0) {
+        const dir = queue.shift();
+        const entries = await listDirectory(dir);
+        for (const entry of entries) {
+          const fullPath = joinPath(dir, entry.name);
+          const normalized = normalizePath(fullPath);
+          if (entry.isDir) {
+            results.push({ path: normalized, isDir: true, size: 0 });
+            queue.push(normalized);
+          } else {
+            results.push({ path: normalized, isDir: false, size: entry.size });
+          }
+        }
+      }
+      return results;
+    }
+
+    function renderTable(entries) {
+      if (!fsTable) return;
+      fsTable.innerHTML = '';
+      if (!entries.length) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.textContent = 'Keine Dateien gefunden.';
+        td.colSpan = 4;
+        td.classList.add('muted');
+        tr.appendChild(td);
+        fsTable.appendChild(tr);
+        return;
+      }
+      entries.sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.path.localeCompare(b.path);
+      });
+      for (const entry of entries) {
+        if (isHidden(entry.path)) continue;
+        const tr = document.createElement('tr');
+        const pathTd = document.createElement('td');
+        pathTd.className = 'path-cell';
+        pathTd.textContent = entry.path;
+        if (entry.isDir) {
+          const tag = document.createElement('span');
+          tag.textContent = 'DIR';
+          tag.className = 'tag dir';
+          pathTd.appendChild(tag);
+        } else if (isProtected(entry.path)) {
+          const tag = document.createElement('span');
+          tag.textContent = 'LOCK';
+          tag.className = 'tag lock';
+          pathTd.appendChild(tag);
+        }
+        tr.appendChild(pathTd);
+
+        const typeTd = document.createElement('td');
+        typeTd.textContent = entry.isDir ? 'Ordner' : 'Datei';
+        tr.appendChild(typeTd);
+
+        const sizeTd = document.createElement('td');
+        sizeTd.textContent = entry.isDir ? '–' : formatBytes(entry.size);
+        tr.appendChild(sizeTd);
+
+        const actionsTd = document.createElement('td');
+        const actionsWrap = document.createElement('div');
+        actionsWrap.className = 'actions';
+        if (!entry.isDir) {
+          const delBtn = document.createElement('button');
+          delBtn.textContent = 'Löschen';
+          delBtn.type = 'button';
+          delBtn.disabled = isProtected(entry.path);
+          delBtn.addEventListener('click', () => confirmDelete(entry.path));
+          actionsWrap.appendChild(delBtn);
+        } else {
+          const span = document.createElement('span');
+          span.className = 'muted';
+          span.textContent = '–';
+          actionsWrap.appendChild(span);
+        }
+        actionsTd.appendChild(actionsWrap);
+        tr.appendChild(actionsTd);
+
+        fsTable.appendChild(tr);
+      }
+    }
+
+    async function confirmDelete(path) {
+      if (!confirm(`Datei ${path} löschen?`)) return;
+      try {
+        await deletePath(path);
+        setStatus(`Gelöscht: ${path}`);
+        await refreshFilesystem();
+      } catch (err) {
+        console.error(err);
+        alert('Löschen fehlgeschlagen: ' + (err?.message || err));
+        setStatus('Fehler: ' + (err?.message || err));
+      }
+    }
+
+    async function deletePath(path) {
+      if (!writer || !lineReader) throw new Error('Nicht verbunden');
+      await writer.write(textEncoder.encode(`DELETE ${path}\n`));
+      await waitForOk('OK DELETE');
+    }
+
+    async function refreshFilesystem() {
+      if (!writer) return;
+      try {
+        busy = true;
+        refreshBtn.disabled = true;
+        setStatus('Hole FSINFO...');
+        await fetchFsInfo();
+        setStatus('Liste Dateien auf...');
+        const entries = await fetchAllEntries();
+        renderTable(entries);
+        setStatus(`Gefundene Einträge: ${entries.length}`);
+      } catch (err) {
+        console.error(err);
+        setStatus('Fehler: ' + (err?.message || err));
+      } finally {
+        busy = false;
+        refreshBtn.disabled = !writer;
+      }
+    }
+
+    uploadForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!writer) {
+        alert('Bitte zuerst verbinden.');
+        return;
+      }
+      const file = uploadFileInput.files?.[0];
+      if (!file) {
+        alert('Keine Datei ausgewählt.');
+        return;
+      }
+      const dir = normalizePath(uploadDirInput.value || '/');
+      try {
+        setStatus('Starte Upload...');
+        await uploadFile(file, dir);
+        setStatus(`Upload abgeschlossen: ${dir}/${file.name}`);
+        uploadFileInput.value = '';
+        await refreshFilesystem();
+      } catch (err) {
+        console.error(err);
+        alert('Upload fehlgeschlagen: ' + (err?.message || err));
+        setStatus('Fehler: ' + (err?.message || err));
+      }
+    });
+
+    async function uploadFile(file, targetDir) {
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      await writer.write(textEncoder.encode(`START ${bytes.length} ${file.name} ${targetDir}\n`));
+      await waitForOk('OK START');
+      const chunkSize = 1024;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        const slice = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
+        await writer.write(slice);
+      }
+      await writer.write(textEncoder.encode('END\n'));
+      await waitForOk('OK END', 10000);
+    }
+
+    refreshBtn.addEventListener('click', () => refreshFilesystem());
+    connectBtn.addEventListener('click', () => connectDevice());
+    disconnectBtn.addEventListener('click', () => disconnectDevice());
+    window.addEventListener('beforeunload', () => {
+      if (port) {
+        disconnectDevice();
+      }
+    });
+  </script>
+</body>
+</html>

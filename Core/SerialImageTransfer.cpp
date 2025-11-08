@@ -47,6 +47,100 @@ bool gTransfersEnabled = false;
 char gLineBuffer[kLineBufferSize];
 size_t gLineLength = 0;
 
+void sendOk(const char* code, const char* fmt, ...);
+void sendErr(const char* code, const char* fmt, ...);
+
+bool isProtectedPath(const String& path) {
+  if (path.isEmpty()) return true;
+  String lower = path;
+  lower.toLowerCase();
+
+  if (lower == "/textapp.cfg") {
+    return true;
+  }
+
+  if (lower == "/system/fonts" || lower.startsWith("/system/fonts/")) {
+    return true;
+  }
+
+  if (lower == "/system/bootlogo.jpg") {
+    return true;
+  }
+
+  return false;
+}
+
+String normalizePath(const char* raw) {
+  if (!raw) return String();
+  String path = String(raw);
+  path.trim();
+  if (path.isEmpty()) return path;
+  if (!path.startsWith("/")) {
+    path = "/" + path;
+  }
+
+  // Collapse duplicate slashes (simple pass)
+  String normalized;
+  normalized.reserve(path.length());
+  bool lastWasSlash = false;
+  for (size_t i = 0; i < path.length(); ++i) {
+    char ch = path[i];
+    if (ch == '/') {
+      if (!lastWasSlash || normalized.length() == 0) {
+        normalized += ch;
+      }
+      lastWasSlash = true;
+    } else {
+      normalized += ch;
+      lastWasSlash = false;
+    }
+  }
+  // Remove trailing slash except root
+  while (normalized.length() > 1 && normalized.endsWith("/")) {
+    normalized.remove(normalized.length() - 1);
+  }
+  return normalized;
+}
+
+void deleteFileAtPath(const char* rawPath) {
+  String path = normalizePath(rawPath);
+  if (path.isEmpty()) {
+    sendErr("DELPATH", "Pfad fehlt");
+    return;
+  }
+
+  if (!LittleFS.exists(path)) {
+    sendErr("DELNOENT", "%s", path.c_str());
+    return;
+  }
+
+  File entry = LittleFS.open(path, FILE_READ);
+  if (!entry) {
+    sendErr("DELOPEN", "Pfad unlesbar");
+    return;
+  }
+
+  bool isDir = entry.isDirectory();
+  entry.close();
+
+  if (isDir) {
+    sendErr("DELDIR", "Nur Dateien löschbar");
+    return;
+  }
+
+  if (isProtectedPath(path)) {
+    sendErr("DELPROT", "Datei geschützt");
+    return;
+  }
+
+  if (!LittleFS.remove(path)) {
+    sendErr("DELFAIL", "%s", path.c_str());
+    return;
+  }
+
+  sendOk("DELETE", "%s", path.c_str());
+}
+
 void ensureQueue() {
   if (!gEventQueue) {
     gEventQueue = xQueueCreate(8, sizeof(SerialImageTransfer::Event));
@@ -691,6 +785,17 @@ void processLine(const char* line) {
       return;
     }
     sendFile(ptr);
+    return;
+  }
+
+  if (std::strncmp(line, "DELETE", 6) == 0) {
+    const char* ptr = line + 6;
+    while (*ptr == ' ') ++ptr;
+    if (!*ptr) {
+      sendErr("DELFMT", "DELETE <filepath>");
+      return;
+    }
+    deleteFileAtPath(ptr);
     return;
   }
 
