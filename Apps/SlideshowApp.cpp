@@ -1602,15 +1602,10 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
     case BtnEvent::Single:
       if (controlMode_ == ControlMode::StorageMenu) {
         toggleSource_();
-      } else if (controlMode_ == ControlMode::BleReceive) {
-        String msg = (bleState_ == BleState::Receiving)
-                     ? String("Übertragung läuft")
-                     : String("Bereit für Browser");
-        showToast_(msg, kToastShortMs);
       } else if (controlMode_ == ControlMode::DeleteMenu) {
         deleteMenuSelection_ ^= 1;
         markDeleteMenuDirty_();
-      } else {
+      } else if (controlMode_ != ControlMode::BleReceive) {
         advance_(+1);
       }
       break;
@@ -1618,16 +1613,13 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
     case BtnEvent::Double:
       if (controlMode_ == ControlMode::StorageMenu) {
         requestCopy_();
-      } else if (controlMode_ == ControlMode::BleReceive) {
-        bleOverlayDirty_ = true;
-        showToast_(bleLastMessage_.isEmpty() ? String("Warte auf Senden") : bleLastMessage_, kToastShortMs);
       } else if (controlMode_ == ControlMode::DeleteMenu) {
         if (deleteMenuSelection_ == 0) {
           requestDeleteAll_();
         } else {
           startDeleteSingle_();
         }
-      } else {
+      } else if (controlMode_ != ControlMode::BleReceive) {
         dwellIdx_ = (dwellIdx_ + 1) % kDwellSteps.size();
         applyDwell_();
         timeSinceSwitch_ = 0;
@@ -1641,12 +1633,9 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
     case BtnEvent::Triple:
       if (controlMode_ == ControlMode::StorageMenu) {
         showToast_("Lang: Modus verlassen", kToastShortMs);
-      } else if (controlMode_ == ControlMode::BleReceive) {
-        bleOverlayDirty_ = true;
-        showToast_("Lang: Löschmodus", kToastShortMs);
       } else if (controlMode_ == ControlMode::DeleteMenu) {
         showToast_("Lang: Auto", kToastShortMs);
-      } else {
+      } else if (controlMode_ != ControlMode::BleReceive) {
         show_filename = !show_filename;
         showCurrent_();
       }
