@@ -6,9 +6,9 @@ Kompaktes Firmware-Projekt für eine tragbare LCD-Brosche: Ein schmuckartiges ES
 
 ## Tools
 
-[Bildauferbeiter](https://teil3.github.io/LCD-Brosche-OS/tools/bildaufbereiter/)
-[Text App Konfigurator](https://teil3.github.io/LCD-Brosche-OS/tools/textapp-konfigurator/)
-[Filesystem Browser](https://teil3.github.io/LCD-Brosche-OS/tools/filesystem-browser/)
+- [Bildauferbeiter](https://teil3.github.io/LCD-Brosche-OS/tools/bildaufbereiter/)
+- [Text App Konfigurator](https://teil3.github.io/LCD-Brosche-OS/tools/textapp-konfigurator/)
+- [Filesystem Browser](https://teil3.github.io/LCD-Brosche-OS/tools/filesystem-browser/)
 
 ### Buttonbelegung
 - BTN1: Single -> nächste App, Double -> vorherige App, Long -> Backlight Toggle

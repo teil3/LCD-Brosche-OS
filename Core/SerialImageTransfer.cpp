@@ -59,6 +59,10 @@ bool isProtectedPath(const String& path) {
     return true;
   }
 
+  if (lower == "/system/font.vlw") {
+    return true;
+  }
+
   if (lower == "/system/fonts" || lower.startsWith("/system/fonts/")) {
     return true;
   }
