@@ -2,7 +2,7 @@
 
 <img src="docs/titelbild_brosche.png" alt="Board overview" width="70%">
 
-Kompaktes Firmware-Projekt für eine tragbare LCD-Brosche: Ein schmuckartiges ESP32-Devboard mit rundem GC9A01-TFT (240x240) und SD-Karte. Die Firmware stellt einen einfachen App-Manager bereit, der mehrere eigenständige Apps kapselt (z. B. eine Slideshow) und über zwei Hardware-Tasten gesteürt wird.
+Kompaktes Firmware-Projekt für eine tragbare LCD-Brosche: Ein ESP32-Devboard mit rundem GC9A01-TFT (240x240) und SD-Karte. Die Firmware stellt einen einfachen App-Manager bereit, der mehrere eigenständige Apps kapselt (z. B. eine Slideshow) und über zwei Hardware-Tasten gesteürt wird.
 
 ## Tools
 
@@ -11,7 +11,7 @@ Kompaktes Firmware-Projekt für eine tragbare LCD-Brosche: Ein schmuckartiges ES
 - [Filesystem Browser](https://teil3.github.io/LCD-Brosche-OS/tools/filesystem-browser/)
 
 ### Buttonbelegung
-- BTN1: Single -> nächste App, Double -> vorherige App, Long -> Backlight Toggle
+- BTN1: Single -> nächste App, Double -> vorherige App
 - BTN2: (Moduswechsel mit Long-Press): Auto -> Manuell -> Setup -> Auto
   - Auto/Manuell: Single -> nächster Slide, Double -> Verweildauer zyklisch, Triple -> Dateiname an/aus
   - Setup-Modus (Flash/SD):
