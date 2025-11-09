@@ -18,6 +18,7 @@ constexpr uint32_t kCopyTickBudgetMs = 25;   // max Arbeit je loop
 constexpr uint32_t kCopyAbortToastMs = 1200;
 constexpr uint32_t kCopyDoneToastMs = 1800;
 constexpr uint32_t kCopyErrorToastMs = 1800;
+constexpr uint32_t kManualFilenameDurationMs = 2000;
 }
 
 bool SlideshowApp::isJpeg_(const String& n) {
@@ -224,6 +225,11 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
   }
 
   controlMode_ = mode;
+  if (controlMode_ != ControlMode::Manual) {
+    manualFilenameActive_ = false;
+    manualFilenameLabel_.clear();
+    manualFilenameUntil_ = 0;
+  }
   if (controlMode_ == ControlMode::StorageMenu) {
     markStorageMenuDirty_();
   }
@@ -842,7 +848,7 @@ void SlideshowApp::markDeleteConfirmDirty_() {
   deleteConfirmDirty_ = true;
 }
 
-void SlideshowApp::showCurrent_() {
+void SlideshowApp::showCurrent_(bool allowManualOverlay, bool clearScreen) {
   if (files_.empty()) return;
 
   const String& path = files_[idx_];
@@ -870,7 +876,9 @@ void SlideshowApp::showCurrent_() {
     return;
   }
 
-  tft.fillScreen(TFT_BLACK);
+  if (clearScreen) {
+    tft.fillScreen(TFT_BLACK);
+  }
 
   JRESULT rc = JDR_OK;
   if (source_ == SlideSource::SDCard) {
@@ -886,13 +894,46 @@ void SlideshowApp::showCurrent_() {
     return;
   }
 
-  if (show_filename) {
-    String base = path;
-    int sidx = base.lastIndexOf('/');
-    if (sidx >= 0) base = base.substring(sidx + 1);
-    int16_t y = TFT_H - TextRenderer::lineHeight() - 4;
-    if (y < 0) y = 0;
-    TextRenderer::drawCentered(y, base, TFT_WHITE, TFT_BLACK);
+  String base = path;
+  int sidx = base.lastIndexOf('/');
+  if (sidx >= 0) base = base.substring(sidx + 1);
+  String displayName = base;
+  String lower = base;
+  lower.toLowerCase();
+  if (lower.endsWith(".jpg")) {
+    displayName = base.substring(0, base.length() - 4);
+  } else if (lower.endsWith(".jpeg")) {
+    displayName = base.substring(0, base.length() - 5);
+  }
+
+  if (controlMode_ == ControlMode::Manual) {
+    if (allowManualOverlay) {
+      manualFilenameLabel_ = displayName;
+      manualFilenameActive_ = true;
+      manualFilenameDirty_ = true;
+      if (show_filename) {
+        manualFilenameUntil_ = 0;
+      } else {
+        manualFilenameUntil_ = millis() + kManualFilenameDurationMs;
+      }
+    } else if (!show_filename) {
+      manualFilenameActive_ = false;
+      manualFilenameLabel_.clear();
+      manualFilenameUntil_ = 0;
+      manualFilenameDirty_ = true;
+    }
+  } else {
+    if (manualFilenameActive_ || !manualFilenameLabel_.isEmpty()) {
+      manualFilenameDirty_ = true;
+    }
+    manualFilenameActive_ = false;
+    manualFilenameLabel_.clear();
+    manualFilenameUntil_ = 0;
+    if (show_filename) {
+      int16_t y = TFT_H - TextRenderer::lineHeight() - 4;
+      if (y < 0) y = 0;
+      TextRenderer::drawCentered(y, displayName, TFT_WHITE, TFT_BLACK);
+    }
   }
 
   if (toastUntil_) {
@@ -970,6 +1011,43 @@ void SlideshowApp::showToast_(const String& txt, uint32_t duration_ms) {
   } else {
     drawToastOverlay_();
   }
+}
+
+void SlideshowApp::drawManualFilenameOverlay_() {
+  const bool inManualMode = (controlMode_ == ControlMode::Manual);
+  if (!inManualMode || manualFilenameLabel_.isEmpty() || !manualFilenameActive_) {
+    manualFilenameDirty_ = false;
+    return;
+  }
+
+  if (!show_filename) {
+    if (!manualFilenameUntil_) {
+      manualFilenameActive_ = false;
+      manualFilenameLabel_.clear();
+      manualFilenameDirty_ = false;
+      return;
+    }
+    const uint32_t now = millis();
+    if (now >= manualFilenameUntil_) {
+      manualFilenameActive_ = false;
+      manualFilenameLabel_.clear();
+      manualFilenameUntil_ = 0;
+      manualFilenameDirty_ = false;
+      showCurrent_(false, false);
+      return;
+    }
+  }
+
+  if (!manualFilenameDirty_) {
+    return;
+  }
+  manualFilenameDirty_ = false;
+
+  const int16_t lineHeight = TextRenderer::lineHeight();
+  int16_t yTop = (TFT_H - lineHeight) / 2;
+  if (yTop < 0) yTop = 0;
+
+  TextRenderer::drawCentered(yTop, manualFilenameLabel_, TFT_WHITE, TFT_BLACK);
 }
 
 void SlideshowApp::drawToastOverlay_() {
@@ -1720,7 +1798,18 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
         showToast_("Lang: Auto", kToastShortMs);
       } else if (controlMode_ != ControlMode::BleReceive) {
         show_filename = !show_filename;
-        showCurrent_();
+        if (controlMode_ == ControlMode::Manual) {
+          if (show_filename) {
+            showCurrent_();
+          } else {
+            manualFilenameActive_ = false;
+            manualFilenameLabel_.clear();
+            manualFilenameUntil_ = 0;
+            showCurrent_(false, false);
+          }
+        } else {
+          showCurrent_();
+        }
       }
       break;
 
@@ -1777,6 +1866,7 @@ void SlideshowApp::draw() {
     drawBleReceiveOverlay_();
     return;
   }
+  drawManualFilenameOverlay_();
   drawToastOverlay_();
 }
 

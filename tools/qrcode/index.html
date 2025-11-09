@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Bilderaufbereiter für die LCD-Brosche</title>
+  <title>QR-Code Generator für die LCD-Brosche</title>
   <style>
     :root { color-scheme: light; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; background: #f8f9fb; color: #1f252d; }
@@ -19,26 +19,22 @@
     h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem; }
     .muted { opacity: .75; }
     .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin: .75rem 0; }
+    .input-group { display: flex; flex-direction: column; gap: .4rem; flex: 1 1 200px; }
+    .input-group label { font-size: .9rem; font-weight: 500; }
+    .input-group textarea { padding: .55rem .8rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: #ffffff; color: inherit; font-family: inherit; font-size: 1rem; resize: vertical; min-height: 80px; }
+    .color-picker { display: flex; align-items: center; gap: .4rem; }
+    .color-picker input[type="color"] { width: 50px; height: 40px; border-radius: .6rem; border: 1px solid #c9c9c9; cursor: pointer; }
     .preview { position: relative; display: block; width: 270px; height: 262.5px; margin: 2.5rem auto 0; }
     .preview__viewport { position: absolute; top: 32.8px; left: 41.3px; width: 180px; height: 180px; border-radius: 50%; overflow: hidden; border: 1px solid #c9c9c9; box-shadow: 0 1px 8px rgba(0,0,0,.08); background: #fff; }
     .preview__viewport::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
-    canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: default; }
-    .preview__mask { position: absolute; top: 1px; left: 1px; right: 0; bottom: 0; width: 100%; height: 100%; pointer-events: none; object-fit: cover; }
-    .preview__control { position: absolute; bottom: 8px; left: 228px; font-size: .85rem; cursor: pointer; display: flex; align-items: center; gap: .4rem; white-space: nowrap; }
-    .preview__control input[type="checkbox"] { cursor: pointer; margin: 0; }
-    button, select, input[type="number"], input[type="file"] { padding: .55rem .8rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: #ffffff; color: inherit; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+    canvas.dragging { cursor: grabbing; }
+    .preview__mask { position: absolute; top: 1px; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; pointer-events: none; object-fit: cover; }
+    button, select, input[type="number"], input[type="text"] { padding: .55rem .8rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: #ffffff; color: inherit; }
     button[disabled] { opacity: .5; }
     .actions { margin: 1.5rem 0 0; }
     footer { margin-top: 2rem; font-size: .9rem; }
     code { background: rgba(127,127,127,.15); padding: .1rem .3rem; border-radius: .3rem; }
-    .drop-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 2rem; color: #1f4d8f; font-weight: 600; font-size: clamp(1.1rem, 2.5vw, 1.6rem); background: rgba(74,144,226,.14); border: 2px dashed rgba(74,144,226,.6); pointer-events: none; opacity: 0; transform: scale(1.02); transition: opacity .2s ease, transform .2s ease; z-index: 999; }
-    body.drop-active .drop-overlay { opacity: 1; transform: scale(1); }
-    body.drop-active .preview__viewport { border-color: #4a90e2; box-shadow: 0 0 0 4px rgba(74,144,226,.25); }
-    .drop-hint { margin: -.25rem 0 0; font-size: .9rem; }
-    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-    .file-picker { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-    .file-picker__button { display: inline-flex; align-items: center; justify-content: center; padding: .55rem .9rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: canvas; cursor: pointer; font-weight: 400; }
-    .file-picker__button:focus-visible { outline: 2px solid #4a90e2; outline-offset: 2px; }
     .version-tag { font-weight: 400; font-size: .72rem; opacity: .6; margin-left: .5rem; }
     .error-modal { position: fixed; inset: 0; background: rgba(15,23,42,.55); display: none; align-items: center; justify-content: center; padding: 1.5rem; z-index: 1500; }
     .error-modal.open { display: flex; }
@@ -50,11 +46,10 @@
   </style>
 </head>
 <body>
-  <div class="drop-overlay" aria-hidden="true">Bilddatei hier ablegen, um sie zu laden</div>
   <header>
     <div class="header__text">
-      <h1>Bilderaufbereiter für die LCD-Brosche <span class="muted version-tag" id="tool-version"></span></h1>
-      <p class="muted">Mit dieser Anwendung kannst du deine Bilder so vorbereiten, dass sie perfekt auf der Brosche angezeigt werden. Du kannst sie anschliessend per Bluetooth, USB oder über eine SD-Karte auf die Brosche übertragen.</p>
+      <h1>QR-Code Generator für die LCD-Brosche <span class="muted version-tag" id="tool-version"></span></h1>
+      <p class="muted">Mit dieser Anwendung kannst du QR-Codes erstellen und sie auf die Brosche übertragen. Du kannst sie per Bluetooth, USB oder über eine SD-Karte auf die Brosche übertragen.</p>
       <p class="muted" style="margin-top: .5rem; font-size: .85rem;">
         <a href="../../" style="color: #4a90e2; text-decoration: none;">← Zurück zur Dokumentation</a>
       </p>
@@ -65,40 +60,34 @@
   </header>
 
   <div class="row">
-    <div class="file-picker">
-      <label class="file-picker__button" for="file">Bild auswählen…</label>
-      <input id="file" type="file" accept="image/*" class="visually-hidden" />
+    <div class="input-group">
+      <label for="qr-text">QR-Code Inhalt:</label>
+      <textarea id="qr-text" placeholder="Text, URL oder beliebiger Inhalt für den QR-Code eingeben..." maxlength="387"></textarea>
     </div>
-    <label>Zuschnitt:
-      <select id="mode">
-        <option value="cover">Zentriert zuschneiden (füllend)</option>
-        <option value="contain">Einpassen (farbig auffüllen)</option>
-      </select>
-    </label>
-    <label>Hintergrundfarbe:
-      <input id="bgcolor" type="color" value="#ffffff" title="Hintergrundfarbe für 'Einpassen' Modus">
-    </label>
-    <label>Qualität:
-      <input id="quality" type="number" min="10" max="100" value="92" style="width:5rem"> %
-    </label>
   </div>
-  <p class="muted drop-hint">Tipp: Ziehe eine Bilddatei irgendwo auf diese Seite – sie wird automatisch geladen.</p>
+
+  <div class="row">
+    <div class="color-picker">
+      <label for="code-color">Codefarbe:</label>
+      <input id="code-color" type="color" value="#000000" title="Farbe der QR-Code-Module">
+    </div>
+    <div class="color-picker">
+      <label for="bg-color">Hintergrundfarbe:</label>
+      <input id="bg-color" type="color" value="#ffffff" title="Hintergrundfarbe des QR-Codes">
+      <button type="button" id="invert-colors" title="Code- und Hintergrundfarbe vertauschen">Farben umkehren</button>
+    </div>
+  </div>
 
   <div class="preview">
     <div class="preview__viewport">
       <canvas id="cv" width="240" height="240"></canvas>
     </div>
     <img class="preview__mask" src="./LCD-Brosche-maske.png" alt="Maske der LCD-Brosche" />
-    <label class="preview__control">
-      <input id="pixelperfect" type="checkbox" checked title="Bildglättung bei starker Vergrößerung">
-      Vergrösserung weichzeichnen
-    </label>
   </div>
 
   <div class="actions">
     <button id="save" disabled>Als JPEG speichern</button>
     <button id="send-usb" disabled>Über USB senden</button>
-    <!-- <button id="send-usb-log" disabled>USB-Log abrufen</button> -->
     <button id="send-ble" disabled>Per Bluetooth senden</button>
     <p id="usb-status" class="muted" aria-live="polite"></p>
     <p id="ble-status" class="muted" aria-live="polite"></p>
@@ -109,19 +98,19 @@
     <p class="muted" style="font-size: .85rem;">MozJPEG Encoder: <span id="mozjpeg-source">wird geladen...</span></p>
   </footer>
 
+  <script src="./vendor-qrcode-generator.min.js"></script>
   <script type="module">
     // --- Import der MozJPEG-WASM-Codec-Factory (jSquash) ---
-    // Dokumentation/Quelle: https://github.com/jamsinclair/jSquash (encode API)
-    // Strategie:
-    // - Bei http/https: Primär lokale Dateien aus ./mozjpeg/ (offline-fähig), Fallback CDN
-    // - Bei file://: Nur CDN (ES6 Module können nicht lokal via file:// geladen werden)
     let moduleFactory = null;
     let mozModuleSource = 'unknown';
     const mozModuleErrors = [];
     const isFileProtocol = location.protocol === 'file:';
 
+    const QR_EC_LEVELS = new Set(['L', 'M', 'Q', 'H']);
+    const QR_TEXT_MAX_LENGTH = 387;
+    let qrCdnScriptPromise = null;
+
     if (isFileProtocol) {
-      // file:// - nur CDN möglich (CORS-Einschränkung für ES6 Module)
       console.info('[MozJPEG] file:// erkannt - verwende CDN (lokale ES6 Module via file:// nicht möglich).');
       try {
         moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
@@ -132,11 +121,10 @@
         console.error('[MozJPEG] CDN-Import fehlgeschlagen.', cdnError);
       }
     } else {
-      // http/https - lokale Dateien bevorzugt, CDN als Fallback
       try {
-        moduleFactory = (await import('./mozjpeg/mozjpeg_enc.js?module')).default;
+        moduleFactory = (await import('../bildaufbereiter/mozjpeg/mozjpeg_enc.js?module')).default;
         mozModuleSource = 'local';
-        console.info('[MozJPEG] Encoder aus ./mozjpeg/ geladen (lokal).');
+        console.info('[MozJPEG] Encoder aus ../bildaufbereiter/mozjpeg/ geladen (lokal).');
       } catch (localError) {
         mozModuleErrors.push(localError);
         console.warn('[MozJPEG] Lokaler Import fehlgeschlagen, versuche CDN-Fallback …', localError);
@@ -161,23 +149,127 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.9';
 
-    const fileInput = document.getElementById('file');
-    const modeSel   = document.getElementById('mode');
-    const bgColorInput = document.getElementById('bgcolor');
-    const pixelPerfectInput = document.getElementById('pixelperfect');
-    const qInput    = document.getElementById('quality');
-    const btnSave   = document.getElementById('save');
-    const btnUsb    = document.getElementById('send-usb');
-    // const btnUsbLog = document.getElementById('send-usb-log');
-    const btnBle    = document.getElementById('send-ble');
+    function createLocalQrCodeAdapter() {
+      const factory = window?.qrcode;
+      if (!factory) {
+        throw new Error('Lokale qrcode-generator Bibliothek nicht gefunden.');
+      }
+      const adapter = {
+        toCanvas(canvas, text, options = {}) {
+          return new Promise((resolve, reject) => {
+            try {
+              resolve(renderQrCodeWithGenerator(factory, canvas, text, options));
+            } catch (renderErr) {
+              reject(renderErr);
+            }
+          });
+        }
+      };
+      console.info('[QRCode] Library geladen (lokal qrcode-generator 1.4.4).');
+      adapter.__source = 'local';
+      return adapter;
+    }
+
+    function renderQrCodeWithGenerator(factory, canvas, text, options) {
+      if (!canvas) throw new Error('Canvas-Element fehlt.');
+      if (!text) throw new Error('Kein Inhalt für den QR-Code.');
+      const requestedLevel = String(options?.errorCorrectionLevel || 'M').toUpperCase();
+      const level = QR_EC_LEVELS.has(requestedLevel) ? requestedLevel : 'M';
+      const qr = factory(0, level);
+      qr.addData(text);
+      qr.make();
+
+      const moduleCount = qr.getModuleCount();
+      const marginModules = Number.isFinite(options?.margin) ? Math.max(0, options.margin) : 4;
+      const matrixSize = moduleCount + marginModules * 2;
+
+      const offscreen = document.createElement('canvas');
+      offscreen.width = matrixSize;
+      offscreen.height = matrixSize;
+      const offCtx = offscreen.getContext('2d', { willReadFrequently: true });
+      const light = options?.color?.light || '#ffffff';
+      const dark = options?.color?.dark || '#000000';
+      offCtx.fillStyle = light;
+      offCtx.fillRect(0, 0, matrixSize, matrixSize);
+      offCtx.fillStyle = dark;
+      for (let row = 0; row < moduleCount; row++) {
+        for (let col = 0; col < moduleCount; col++) {
+          if (qr.isDark(row, col)) {
+            offCtx.fillRect(marginModules + col, marginModules + row, 1, 1);
+          }
+        }
+      }
+
+      const targetSize = Math.max(1, Math.round(options?.width || canvas.width || 240));
+      canvas.width = canvas.height = targetSize;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, targetSize, targetSize);
+      ctx.drawImage(offscreen, 0, 0, targetSize, targetSize);
+      return canvas;
+    }
+
+    function loadQrCodeGeneratorFromCdn() {
+      if (!qrCdnScriptPromise) {
+        qrCdnScriptPromise = new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => {
+            qrCdnScriptPromise = null;
+            reject(new Error('CDN konnte qrcode-generator nicht laden.'));
+          };
+          document.head.appendChild(script);
+        });
+      }
+      return qrCdnScriptPromise;
+    }
+
+    // --- Import der QR-Code-Library ---
+    let QRCode = null;
+    const qrModuleErrors = [];
+    try {
+      QRCode = createLocalQrCodeAdapter();
+    } catch (localError) {
+      qrModuleErrors.push(localError);
+      console.warn('[QRCode] Lokaler Import fehlgeschlagen, versuche CDN-Fallback …', localError);
+      try {
+        await loadQrCodeGeneratorFromCdn();
+        QRCode = createLocalQrCodeAdapter();
+        if (QRCode) {
+          QRCode.__source = 'cdn';
+        }
+        console.info('[QRCode] Library geladen (cdn.jsdelivr.net).');
+      } catch (cdnError) {
+        qrModuleErrors.push(cdnError);
+        console.error('[QRCode] Import fehlgeschlagen.', { qrModuleErrors });
+        alert('QR-Code-Library konnte nicht geladen werden. Bitte vendor-qrcode-generator.min.js bereitstellen oder Internetverbindung prüfen.');
+        throw cdnError;
+      }
+    }
+    window.__qrcodeSource = QRCode?.__source || 'unknown';
+
+    const TOOL_VERSION = 'V0.1';
+
+    const qrTextInput = document.getElementById('qr-text');
+    const codeColorInput = document.getElementById('code-color');
+    const bgColorInput = document.getElementById('bg-color');
+    const invertColorsBtn = document.getElementById('invert-colors');
+    const btnSave = document.getElementById('save');
+    const btnUsb = document.getElementById('send-usb');
+    const btnBle = document.getElementById('send-ble');
     const versionLabel = document.getElementById('tool-version');
     const mozjpegSourceLabel = document.getElementById('mozjpeg-source');
     const usbStatus = document.getElementById('usb-status');
     const bleStatus = document.getElementById('ble-status');
-    const cv        = document.getElementById('cv');
-    const ctx       = cv.getContext('2d', { willReadFrequently: true });
+    const cv = document.getElementById('cv');
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    const QR_BASE_WIDTH = 240;
+    const DEFAULT_QR_DRAW_SIZE = 170;
+    const DEFAULT_ZOOM_SCALE = DEFAULT_QR_DRAW_SIZE / QR_BASE_WIDTH;
+
     const BLE_UUIDS = {
       service: '12345678-1234-1234-1234-1234567890ab',
       chunk:   'abcd0001-1234-1234-1234-1234567890ab',
@@ -185,19 +277,17 @@
     };
     const textEncoder = new TextEncoder();
     const textDecoder = new TextDecoder();
-
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    let currentBitmap = null;
     let moz = null;
     let mozReady = false;
-    let coverPan = { x: 0, y: 0 };
-    let zoomScale = 1.0;
+    let qrCodeReady = false;
+    let zoomScale = DEFAULT_ZOOM_SCALE;
+    let panOffset = { x: 0, y: 0 };
     let isDragging = false;
     let dragStart = { x: 0, y: 0 };
     let panStart = { x: 0, y: 0 };
-    let dropDepth = 0;
-    let currentDownloadName = 'image.jpg';
+    let currentDownloadName = 'qrcode-qr.jpg';
     let bleSending = false;
     let usbSending = false;
     const usbDebugLog = [];
@@ -207,11 +297,15 @@
     let usbErrorModalCloseBtn = null;
     let usbErrorModalKeyHandlerAttached = false;
 
+    if (qrTextInput) {
+      qrTextInput.maxLength = QR_TEXT_MAX_LENGTH;
+    }
+
     if (versionLabel) {
       versionLabel.textContent = TOOL_VERSION;
     }
     if (mozjpegSourceLabel) {
-      const sourceText = mozModuleSource === 'local' ? 'Lokal (./mozjpeg/)' :
+      const sourceText = mozModuleSource === 'local' ? 'Lokal (../bildaufbereiter/mozjpeg/)' :
                          mozModuleSource === 'cdn' ? 'CDN (unpkg.com)' :
                          'unbekannt';
       mozjpegSourceLabel.textContent = sourceText;
@@ -355,16 +449,17 @@
     }
 
     function updateActionButtons() {
-      const ready = !!currentBitmap && mozReady;
+      const ready = qrCodeReady && mozReady;
       const busy = bleSending || usbSending;
       if (btnSave) btnSave.disabled = !ready || busy;
       if (btnUsb) btnUsb.disabled = !ready || !usbSupported || busy;
-      // if (btnUsbLog) btnUsbLog.disabled = !usbSupported || busy;
       if (btnBle) btnBle.disabled = !ready || !bleSupported || busy;
     }
 
+    const FILENAME_ALLOWED_CHARS = /[A-Za-z0-9]/;
+
     function sanitizeFilenameForTransfer(name) {
-      const fallback = 'ble_image.jpg';
+      const fallback = 'qrcode-qr.jpg';
       if (!name) return fallback;
       let base = name.split(/[\\/]/).pop() || fallback;
       base = base.toLowerCase();
@@ -391,6 +486,25 @@
       return out;
     }
 
+    function deriveDownloadNameFromText(text) {
+      const trimmed = (text || '').trim();
+      if (!trimmed) {
+        return 'qrcode-qr.jpg';
+      }
+      let filtered = '';
+      for (const ch of trimmed) {
+        if (FILENAME_ALLOWED_CHARS.test(ch)) {
+          filtered += ch;
+        }
+      }
+      if (!filtered) {
+        return 'qrcode-qr.jpg';
+      }
+      const suffix = filtered.slice(-10);
+      const candidate = `${suffix}-qr.jpg`;
+      return sanitizeFilenameForTransfer(candidate);
+    }
+
     function humanReadableSize(bytes) {
       if (!Number.isFinite(bytes)) return '0 B';
       if (bytes < 1024) return `${bytes} B`;
@@ -399,17 +513,91 @@
       return `${rounded.toFixed(rounded % 1 === 0 ? 0 : 1)} KB`;
     }
 
+    async function generateQRCode() {
+      const text = qrTextInput.value.trim();
+      if (!text) {
+        ctx.fillStyle = bgColorInput.value;
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        qrCodeReady = false;
+        currentDownloadName = 'qrcode-qr.jpg';
+        updateActionButtons();
+        return;
+      }
+      currentDownloadName = deriveDownloadNameFromText(text);
+
+      try {
+        // Generate QR code to temporary canvas
+        const tempCanvas = document.createElement('canvas');
+        const options = {
+          errorCorrectionLevel: 'M',
+          type: 'image/png',
+          quality: 1,
+          margin: 1,
+          color: {
+            dark: codeColorInput.value,
+            light: bgColorInput.value
+          },
+          width: QR_BASE_WIDTH
+        };
+
+        await QRCode.toCanvas(tempCanvas, text, options);
+
+        // Draw to main canvas with current transform
+        drawQRToCanvas(tempCanvas);
+
+        qrCodeReady = true;
+        updateActionButtons();
+      } catch (err) {
+        console.error('[QRCode] Generation failed:', err);
+        alert('Fehler beim Generieren des QR-Codes: ' + (err?.message || err));
+        qrCodeReady = false;
+        updateActionButtons();
+      }
+    }
+
+    function drawQRToCanvas(qrCanvas) {
+      // Clear canvas with background color
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = bgColorInput.value;
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.restore();
+
+      if (!qrCanvas) return;
+
+      // Calculate scaled dimensions
+      const scale = zoomScale;
+      const qrWidth = qrCanvas.width * scale;
+      const qrHeight = qrCanvas.height * scale;
+
+      // Clamp pan values
+      const maxPanX = Math.max(0, (qrWidth - cv.width) / 2);
+      const maxPanY = Math.max(0, (qrHeight - cv.height) / 2);
+      panOffset.x = Math.max(-maxPanX, Math.min(maxPanX, panOffset.x));
+      panOffset.y = Math.max(-maxPanY, Math.min(maxPanY, panOffset.y));
+
+      // Calculate position (centered + pan offset)
+      const dx = (cv.width - qrWidth) / 2 + panOffset.x;
+      const dy = (cv.height - qrHeight) / 2 + panOffset.y;
+
+      // Disable smoothing for sharp QR code
+      ctx.imageSmoothingEnabled = false;
+
+      // Draw QR code
+      ctx.drawImage(qrCanvas, dx, dy, qrWidth, qrHeight);
+    }
+
     async function encodeCurrentImage() {
-      if (!currentBitmap) {
-        alert('Bitte zuerst ein Bild auswählen.');
-        throw new Error('Kein Bild geladen');
+      if (!qrCodeReady) {
+        alert('Bitte zuerst einen QR-Code generieren.');
+        throw new Error('Kein QR-Code vorhanden');
       }
       const ready = await initMozIfNeeded();
       if (!ready || !moz) {
         throw new Error('JPEG-Codec nicht verfügbar');
       }
       const { data } = ctx.getImageData(0, 0, cv.width, cv.height);
-      const quality = Math.min(100, Math.max(10, parseInt(qInput.value, 10) || 92));
+      const quality = 92; // Fixed quality
       const opts = {
         quality,
         baseline: true,
@@ -431,12 +619,9 @@
 
       try {
         const jpegU8 = moz.encode(data, 240, 240, opts);
-        if (isProgressiveJPEG(jpegU8)) {
-          alert('Warnung: Der erzeugte JPEG scheint progressiv zu sein.');
-        }
         return {
           bytes: jpegU8,
-          filename: currentDownloadName || 'image.jpg'
+          filename: currentDownloadName
         };
       } catch (error) {
         console.error(error);
@@ -615,8 +800,8 @@
         return;
       }
       if (usbSending || bleSending) return;
-      if (!currentBitmap) {
-        alert('Bitte zuerst ein Bild auswählen.');
+      if (!qrCodeReady) {
+        alert('Bitte zuerst einen QR-Code generieren.');
         return;
       }
 
@@ -628,24 +813,23 @@
       let readableClosed = null;
       let lineReader = null;
       let transferCompleted = false;
+      let sent = 0;
+      let totalSize = 0;
 
       try {
         usbSending = true;
         updateActionButtons();
-        setUsbStatus('Bild wird vorbereitet …');
+        setUsbStatus('QR-Code wird vorbereitet …');
         usbLog('<>', 'Beginne USB-Transfer');
 
         const { bytes, filename } = await encodeCurrentImage();
         const sanitizedName = sanitizeFilenameForTransfer(filename);
-        const totalSize = bytes.length;
+        totalSize = bytes.length;
         const totalLabel = humanReadableSize(totalSize);
 
         setUsbStatus('Seriellen Port auswählen …');
         port = await navigator.serial.requestPort();
 
-        // CRITICAL FIX: Simulate "monitor trick" by opening, closing, and reopening the port
-        // This resets the OS-level serial driver state, which is necessary for reliable communication
-        // Without this, the Web Serial API often fails to establish proper communication
         usbLog('<>', 'Performing port reset cycle (simulating monitor trick)...');
         try {
           await port.open({ baudRate: 115200 });
@@ -657,7 +841,6 @@
           usbLog('!!', `Port reset cycle failed (non-critical): ${err?.message || err}`);
         }
 
-        // Now open the port for real
         try {
           await port.open({ baudRate: 115200 });
         } catch (err) {
@@ -666,8 +849,6 @@
         }
 
         usbLog('<>', 'Port opened after reset cycle');
-
-        // Short delay to let the connection settle
         await delay(300);
 
         if (!port.writable) {
@@ -687,8 +868,6 @@
 
         writer = port.writable.getWriter();
 
-        // Vorab Verbindung prüfen (PING). Mit Retry-Mechanismus für den Fall,
-        // dass der Benutzer zu schnell nach Aktivierung des Transfer-Modus klickt.
         usbLog('<>', 'Prüfe Verbindung mit PING…');
         await delay(100);
 
@@ -783,28 +962,24 @@
           setUsbStatus(`Gerätefehler: ${startAck}`);
           throw new Error(startAck);
         } else {
-          const noAckMsg = 'Keine START-Bestätigung vom Gerät empfangen. Bitte sicherstellen, dass der Transfer-Modus aktiv ist (BTN2 lang halten, bis \"Transfer\" erscheint).';
+          const noAckMsg = 'Keine START-Bestätigung vom Gerät empfangen. Bitte sicherstellen, dass der Transfer-Modus aktiv ist (BTN2 lang halten, bis "Transfer" erscheint).';
           usbLog('!!', noAckMsg);
           setUsbStatus(noAckMsg);
           throw new Error(noAckMsg);
         }
 
-        // With RAM buffering (ESP32 commit 549e054), there are NO PROG messages during transfer
-        // The ESP32 buffers all data in RAM and only sends PROG after receiving END command
-        // This matches the Python test script behavior (usb_transfer_test.py)
+        // With RAM buffering (ESP32 commit 549e054), es kommen keine PROG-Meldungen während der Übertragung
+        // Der ESP32 puffert alle Daten und sendet PROG erst nach END.
 
-        let sent = 0;
+        sent = 0;
         setUsbStatus(`Sende Daten (${totalLabel})...`);
         usbLog('->', `DATA all ${totalSize} bytes`);
         await writer.write(bytes);
         sent = totalSize;
         usbLog('<>', 'Host finished writing to port');
 
-        // Wait for ESP32 to finish receiving the data
-        // Calculate expected transfer time: (bytes * 10 bits/byte) / baudrate + margin
-        // This matches the Python test script logic (usb_transfer_test.py lines 99-101)
-        const expectedTransferTime = ((totalSize * 10) / 115200) * 1000; // in milliseconds
-        const waitTime = Math.max(1000, expectedTransferTime + 1000); // minimum 1s, or expected time + 1s margin
+        const expectedTransferTime = ((totalSize * 10) / 115200) * 1000;
+        const waitTime = Math.max(1000, expectedTransferTime + 1000);
         setUsbStatus(`Warte auf ESP32-Empfang (~${Math.round(waitTime/1000)}s)...`);
         usbLog('<>', `Waiting ${Math.round(waitTime/1000)}s for ESP32 to receive data (transfer time: ${Math.round(expectedTransferTime/1000)}s + 1s margin)`);
         await delay(waitTime);
@@ -813,10 +988,8 @@
         usbLog('->', 'END');
         await writer.write(textEncoder.encode('END\n'));
 
-        // After receiving END, ESP32 writes RAM buffer to Flash (can take time for large files)
-        // Calculate flash write time: ~2ms per 512 byte chunk + overhead
-        const flashWriteTime = Math.ceil((totalSize / 512) * 2) + 2000; // ms
-        const endTimeout = Math.max(20000, flashWriteTime); // minimum 20s
+        const flashWriteTime = Math.ceil((totalSize / 512) * 2) + 2000;
+        const endTimeout = Math.max(20000, flashWriteTime);
         usbLog('<>', `Waiting for END response (timeout: ${Math.round(endTimeout/1000)}s, flash write estimate: ${Math.round(flashWriteTime/1000)}s)`);
 
         const endPredicate = (payload) => {
@@ -848,50 +1021,50 @@
           }
         }
         transferCompleted = true;
-        } catch (error) {
-          console.error(error);
-          const name = error?.name;
-          let userMessage = '';
-          let fetchLog = false;
-          usbLog('<>', `HOST SENT ${sent}/${totalSize}`);
+      } catch (error) {
+        console.error(error);
+        const name = error?.name;
+        let userMessage = '';
+        let fetchLog = false;
+        usbLog('<>', `HOST SENT ${sent}/${totalSize}`);
 
-          if (name === 'NotFoundError') {
-            setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
-            userMessage = 'USB-Senden abgebrochen – kein Port ausgewählt.';
-          } else if (name === 'AbortError') {
-            setUsbStatus('USB-Senden abgebrochen.');
-            userMessage = 'USB-Senden abgebrochen.';
-          } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
-            if (transferCompleted) {
-              setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat den Port getrennt).');
-              userMessage = '';
-            } else {
-              setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und Transfer-Modus erneut aktivieren.');
-              userMessage = 'USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.';
-              fetchLog = true;
-            }
-          } else if (/timeout beim warten/i.test(error?.message || '')) {
-            setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv (BTN2 lang in der Diashow)?');
-            userMessage = 'Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.';
-            fetchLog = true;
+        if (name === 'NotFoundError') {
+          setUsbStatus('USB-Senden abgebrochen – kein Port ausgewählt.');
+          userMessage = 'USB-Senden abgebrochen – kein Port ausgewählt.';
+        } else if (name === 'AbortError') {
+          setUsbStatus('USB-Senden abgebrochen.');
+          userMessage = 'USB-Senden abgebrochen.';
+        } else if (name === 'NetworkError' || /device has been lost/i.test(error?.message || '')) {
+          if (transferCompleted) {
+            setUsbStatus('Übertragung abgeschlossen ✅ (Gerät hat den Port getrennt).');
+            userMessage = '';
           } else {
-            const message = error?.message || error?.toString() || 'Unbekannter Fehler';
-            setUsbStatus(`Fehler: ${message}`);
-            userMessage = 'Fehler beim USB-Senden: ' + message;
+            setUsbStatus('USB-Verbindung verloren – bitte Brosche neu verbinden und Transfer-Modus erneut aktivieren.');
+            userMessage = 'USB-Verbindung verloren. Bitte den ESP32 neu verbinden, Transfer-Modus (BTN2 lang) aktivieren und erneut senden.';
             fetchLog = true;
           }
+        } else if (/timeout beim warten/i.test(error?.message || '')) {
+          setUsbStatus('Timeout – keine Antwort vom Gerät. Ist der Transfer-Modus aktiv (BTN2 lang in der Diashow)?');
+          userMessage = 'Keine Antwort vom Gerät erhalten. Bitte sicherstellen, dass die Brosche im Transfer-Modus ist (BTN2 lang halten, bis "Transfer" angezeigt wird) und erneut versuchen.';
+          fetchLog = true;
+        } else {
+          const message = error?.message || error?.toString() || 'Unbekannter Fehler';
+          setUsbStatus(`Fehler: ${message}`);
+          userMessage = 'Fehler beim USB-Senden: ' + message;
+          fetchLog = true;
+        }
 
-          if (fetchLog && writer && lineReader) {
-            try {
-              await dumpDeviceLog(lineReader, writer, 20);
-            } catch (logErr) {
-              console.warn('Dump device log failed', logErr);
-            }
+        if (fetchLog && writer && lineReader) {
+          try {
+            await dumpDeviceLog(lineReader, writer, 20);
+          } catch (logErr) {
+            console.warn('Dump device log failed', logErr);
           }
+        }
 
-          if (userMessage) {
-            await alertUsbError(userMessage);
-          }
+        if (userMessage) {
+          await alertUsbError(userMessage);
+        }
       } finally {
         try {
           if (writer) {
@@ -928,8 +1101,8 @@
         return;
       }
       if (bleSending || usbSending) return;
-      if (!currentBitmap) {
-        alert('Bitte zuerst ein Bild auswählen.');
+      if (!qrCodeReady) {
+        alert('Bitte zuerst einen QR-Code generieren.');
         return;
       }
 
@@ -945,7 +1118,7 @@
       try {
         bleSending = true;
         updateActionButtons();
-        setBleStatus('Bild wird vorbereitet …');
+        setBleStatus('QR-Code wird vorbereitet …');
 
         const { bytes, filename } = await encodeCurrentImage();
         const sanitizedName = sanitizeFilenameForTransfer(filename);
@@ -966,9 +1139,6 @@
         const service = await server.getPrimaryService(BLE_UUIDS.service);
         control = await service.getCharacteristic(BLE_UUIDS.control);
         chunk = await service.getCharacteristic(BLE_UUIDS.chunk);
-
-        console.debug('BLE control props', control.properties);
-        console.debug('BLE chunk props', chunk.properties);
 
         setBleStatus('Aktiviere Statusmeldungen …');
         try {
@@ -1015,7 +1185,7 @@
           throw new Error('Keine Rückmeldung vom Gerät (BLE-Modus aktiv?).');
         }
 
-        setBleStatus('Sende Bilddaten …');
+        setBleStatus('Sende QR-Code-Daten …');
         const chunkSize = 20;
         for (let offset = 0; offset < bytes.length; offset += chunkSize) {
           const slice = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
@@ -1044,7 +1214,7 @@
         await waitFor(() => remoteDone || remoteError, 3000);
         if (remoteError) throw new Error(remoteError);
         if (!remoteDone) {
-          setBleStatus('Bild übertragen – Brosche sollte das Bild anzeigen.');
+          setBleStatus('QR-Code übertragen – Brosche sollte den QR-Code anzeigen.');
         }
       } catch (error) {
         console.error(error);
@@ -1068,127 +1238,13 @@
       }
     }
 
-    async function fetchUsbLogManually() {
-      if (!usbSupported) {
-        alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge auf dem Desktop verwenden.');
-        return;
-      }
-      if (usbSending || bleSending) return;
-
-      let port = null;
-      let writer = null;
-      let reader = null;
-      let readableClosed = null;
-      let lineReader = null;
-
-      try {
-        usbSending = true;
-        updateActionButtons();
-        setUsbStatus('USB-Log wird angefordert …');
-
-        port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200 });
-
-        // Do NOT call setSignals - leave ESP32 state unchanged
-        usbLog('<>', 'Port opened for log fetch (no signal changes)');
-
-        await delay(200);
-
-        if (!port.writable || !port.readable) {
-          throw new Error('Port bietet keine Lese-/Schreibstreams.');
-        }
-
-        const decoder = new TextDecoderStream();
-        readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
-        reader = decoder.readable.getReader();
-        lineReader = createLineReader(reader);
-        writer = port.writable.getWriter();
-
-        const entries = await dumpDeviceLog(lineReader, writer, 24);
-        const text = entries.map((line, idx) => `${idx + 1}. ${line || '(leer)'}`).join('\n');
-        if (text) {
-          console.log('[USB LOG FETCH]\n' + text);
-          setUsbStatus(`USB-Log erhalten (${entries.length} Einträge).`);
-          showUsbErrorDialog(`USB-Log (${entries.length} Einträge):\n\n${text}`);
-        } else {
-          setUsbStatus('USB-Log: Keine Einträge verfügbar.');
-          showUsbErrorDialog('USB-Log: Keine Einträge verfügbar.');
-        }
-      } catch (error) {
-        console.error(error);
-        const message = error?.message || error?.toString() || 'Unbekannter Fehler';
-        setUsbStatus(`USB-Log abrufen fehlgeschlagen: ${message}`);
-        await alertUsbError('USB-Log abrufen fehlgeschlagen: ' + message);
-      } finally {
-        try {
-          if (writer) {
-            await writer.releaseLock();
-          }
-        } catch (_) { /* noop */ }
-        try {
-          if (reader) {
-            await reader.cancel();
-          }
-        } catch (_) { /* noop */ }
-        try {
-          if (readableClosed) {
-            await readableClosed.catch(() => {});
-          }
-        } catch (_) { /* noop */ }
-        try {
-          if (port) {
-            await port.close();
-          }
-        } catch (_) { /* noop */ }
-        usbSending = false;
-        updateActionButtons();
-      }
-    }
-
-    function hasFilePayload(evt) {
-      const dt = evt?.dataTransfer;
-      if (!dt) return false;
-      if (dt.types) {
-        if (typeof dt.types.includes === 'function' && dt.types.includes('Files')) return true;
-        if (typeof dt.types.contains === 'function' && dt.types.contains('Files')) return true;
-      }
-      return !!(dt.files && dt.files.length);
-    }
-
-    function extractFileFromDataTransfer(dt) {
-      if (!dt) return null;
-      if (dt.files && dt.files.length) return dt.files[0];
-      if (dt.items) {
-        for (const item of dt.items) {
-          if (item.kind === 'file') {
-            const file = item.getAsFile();
-            if (file) return file;
-          }
-        }
-      }
-      return null;
-    }
-
-    function buildDownloadName(originalName) {
-      const raw = typeof originalName === 'string' ? originalName : '';
-      const normalized = raw.split(/[\\/]/).pop() || '';
-      const idx = normalized.lastIndexOf('.');
-      const base = idx > 0 ? normalized.slice(0, idx) : (normalized || 'image');
-      const trimmed = base.trim() || 'image';
-      return `${trimmed}.jpg`;
-    }
-
-    function setDropActive(active) {
-      document.body.classList.toggle('drop-active', active);
-    }
-
     async function initMozIfNeeded() {
       if (moz) {
         mozReady = true;
         return true;
       }
       try {
-        moz = await moduleFactory(); // lädt automatisch mozjpeg_enc.wasm
+        moz = await moduleFactory();
         console.log('MozJPEG (WASM) bereit.');
         mozReady = true;
         updateActionButtons();
@@ -1200,274 +1256,72 @@
       }
     }
 
-    async function setBitmapFromFile(file) {
-      if (!file) return;
-      if (file.type && !file.type.startsWith('image/')) {
-        alert('Bitte eine Bilddatei auswählen oder ablegen.');
-        return;
-      }
-      try {
-        currentBitmap = await loadImageBitmap(file);
-      } catch (err) {
-        console.error(err);
-        alert('Konnte die Bilddatei nicht laden. Versuche es bitte mit einer anderen Datei.');
-        return;
-      }
-      const displayName = file.name ? file.name.split(/[\\/]/).pop() : '';
-      currentDownloadName = buildDownloadName(displayName);
-      resetCoverPan();
-      resetZoom();
-      drawScaled(currentBitmap);
-      updateCanvasCursor();
-      fileInput.value = '';
-      await initMozIfNeeded();
-      updateActionButtons();
-      if (!bleSending) {
-        setBleStatus('');
-      }
-      if (!usbSending) {
-        setUsbStatus('');
-      }
-    }
-
-    // JPEG header scan to verify non-progressive:
-    // Baseline SOF0 marker = 0xFFC0, Progressive SOF2 = 0xFFC2
-    function isProgressiveJPEG(u8) {
-      for (let i = 0; i < u8.length - 1; i++) {
-        if (u8[i] === 0xFF) {
-          const code = u8[i + 1];
-          if (code === 0xC2) return true;   // SOF2
-          if (code === 0xDA) break;         // SOS reached -> stop scanning
-        }
-      }
-      return false;
-    }
-
-    function clearCanvas() {
-      ctx.save();
-      ctx.setTransform(1,0,0,1,0,0);
-      ctx.clearRect(0, 0, cv.width, cv.height);
-      ctx.fillStyle = bgColorInput.value || '#ffffff';
-      ctx.fillRect(0, 0, cv.width, cv.height);
-      ctx.restore();
-    }
-
-    function resetCoverPan() {
-      coverPan.x = 0;
-      coverPan.y = 0;
-    }
-
-    function resetZoom() {
-      zoomScale = 1.0;
-    }
-
-    async function loadImageBitmap(file) {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.src = url;
-      await img.decode();
-      const bmp = await createImageBitmap(img);
-      URL.revokeObjectURL(url);
-      return bmp;
-    }
-
-    function clampCoverPanValues(bmp, x, y) {
-      if (!bmp) return { x: 0, y: 0 };
-      const T = 240;
-      const baseScale = Math.max(T / bmp.width, T / bmp.height);
-      const s = baseScale * zoomScale;
-      const w = bmp.width * s;
-      const h = bmp.height * s;
-
-      // Wenn Bild größer als Canvas: Einschränken damit Canvas immer ausgefüllt ist
-      // Wenn Bild kleiner als Canvas: Keine Einschränkung (freies Verschieben)
-      if (w > T || h > T) {
-        const maxPanX = Math.max(0, (w - T) / 2);
-        const maxPanY = Math.max(0, (h - T) / 2);
-        return {
-          x: Math.max(-maxPanX, Math.min(maxPanX, x)),
-          y: Math.max(-maxPanY, Math.min(maxPanY, y))
-        };
-      } else {
-        // Bild ist kleiner - erlaube freies Verschieben innerhalb des Canvas
-        const maxPanX = T / 2;
-        const maxPanY = T / 2;
-        return {
-          x: Math.max(-maxPanX, Math.min(maxPanX, x)),
-          y: Math.max(-maxPanY, Math.min(maxPanY, y))
-        };
-      }
-    }
-
-    function updateCanvasCursor() {
-      if (currentBitmap && modeSel.value === 'cover') {
-        cv.style.cursor = isDragging ? 'grabbing' : 'grab';
-      } else {
-        cv.style.cursor = 'default';
-      }
-    }
-
-    function drawScaled(bmp) {
-      clearCanvas();
-
-      // Weichzeichnen aktiviert ODER Zoom <= 3x: Glättung AN
-      // Weichzeichnen deaktiviert UND Zoom > 3x: Glättung AUS (scharfe Pixel)
-      if (pixelPerfectInput.checked || zoomScale <= 3.0) {
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-      } else {
-        ctx.imageSmoothingEnabled = false;
-      }
-
-      const T = 240, sw = bmp.width, sh = bmp.height;
-      if (modeSel.value === 'cover') {
-        const baseScale = Math.max(T / sw, T / sh);
-        const s = baseScale * zoomScale;
-        const w = sw * s, h = sh * s;
-        const clamped = clampCoverPanValues(bmp, coverPan.x, coverPan.y);
-        coverPan.x = clamped.x;
-        coverPan.y = clamped.y;
-        const dx = (T - w) / 2 + coverPan.x;
-        const dy = (T - h) / 2 + coverPan.y;
-        ctx.drawImage(bmp, dx, dy, w, h);
-      } else {
-        const s = Math.min(T / sw, T / sh);
-        const w = sw * s, h = sh * s;
-        const dx = (T - w) / 2, dy = (T - h) / 2;
-        ctx.drawImage(bmp, dx, dy, w, h);
-      }
-    }
-
-    document.documentElement.addEventListener('dragenter', (e) => {
-      if (!hasFilePayload(e)) return;
-      e.preventDefault();
-      if (dropDepth++ === 0) {
-        setDropActive(true);
-      }
+    // Event listeners
+    qrTextInput.addEventListener('input', async () => {
+      await generateQRCode();
     });
 
-    document.documentElement.addEventListener('dragover', (e) => {
-      if (!hasFilePayload(e)) return;
-      e.preventDefault();
-      if (e.dataTransfer) {
-        e.dataTransfer.dropEffect = 'copy';
-      }
+    codeColorInput.addEventListener('input', async () => {
+      await generateQRCode();
     });
 
-    document.documentElement.addEventListener('dragleave', () => {
-      if (dropDepth > 0) dropDepth--;
-      if (dropDepth === 0) {
-        setDropActive(false);
-      }
+    bgColorInput.addEventListener('input', async () => {
+      await generateQRCode();
     });
 
-    document.documentElement.addEventListener('drop', async (e) => {
-      if (!hasFilePayload(e)) return;
-      e.preventDefault();
-      dropDepth = 0;
-      setDropActive(false);
-      const file = extractFileFromDataTransfer(e.dataTransfer);
-      await setBitmapFromFile(file);
-    });
+    if (invertColorsBtn) {
+      invertColorsBtn.addEventListener('click', async () => {
+        const currentCodeColor = codeColorInput.value;
+        codeColorInput.value = bgColorInput.value;
+        bgColorInput.value = currentCodeColor;
+        await generateQRCode();
+      });
+    }
 
-    window.addEventListener('blur', () => {
-      dropDepth = 0;
-      setDropActive(false);
-    });
-
-    fileInput.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      await setBitmapFromFile(file);
-    });
-
-    modeSel.addEventListener('change', () => {
-      if (isDragging) {
-        isDragging = false;
-      }
-      resetCoverPan();
-      resetZoom();
-      updateCanvasCursor();
-      if (currentBitmap) drawScaled(currentBitmap);
-    });
-
-    bgColorInput.addEventListener('input', () => {
-      if (currentBitmap) drawScaled(currentBitmap);
-    });
-
-    pixelPerfectInput.addEventListener('change', () => {
-      if (currentBitmap) drawScaled(currentBitmap);
-    });
-
-    cv.addEventListener('wheel', (e) => {
-      if (!currentBitmap || modeSel.value !== 'cover') return;
+    // Zoom with mouse wheel
+    cv.addEventListener('wheel', async (e) => {
+      if (!qrCodeReady) return;
       e.preventDefault();
 
-      const T = 240;
-      const centerX = 120, centerY = 120;
-
-      // Aktueller Zoom-Zustand
-      const oldBaseScale = Math.max(T / currentBitmap.width, T / currentBitmap.height);
-      const oldS = oldBaseScale * zoomScale;
-      const oldW = currentBitmap.width * oldS, oldH = currentBitmap.height * oldS;
-      const oldDx = (T - oldW) / 2 + coverPan.x;
-      const oldDy = (T - oldH) / 2 + coverPan.y;
-
-      // Punkt im Bitmap, der momentan im Zentrum des Viewports ist
-      const bitmapX = (centerX - oldDx) / oldS;
-      const bitmapY = (centerY - oldDy) / oldS;
-
-      // Neuer Zoom berechnen (multiplikativ für gleichmäßige Schritte)
-      const zoomFactor = 1.15; // 15% pro Schritt
+      const zoomFactor = 1.15;
       const delta = -Math.sign(e.deltaY);
       const newZoom = delta > 0 ? zoomScale * zoomFactor : zoomScale / zoomFactor;
-      zoomScale = Math.max(0.1, Math.min(150.0, newZoom));
+      zoomScale = Math.max(0.1, Math.min(10.0, newZoom));
 
-      // Nach Zoom: Pan-Position anpassen, damit derselbe Bitmap-Punkt im Zentrum bleibt
-      const newS = oldBaseScale * zoomScale;
-      const newW = currentBitmap.width * newS, newH = currentBitmap.height * newS;
-      const newDx = centerX - bitmapX * newS;
-      const newDy = centerY - bitmapY * newS;
-      coverPan.x = newDx - (T - newW) / 2;
-      coverPan.y = newDy - (T - newH) / 2;
-
-      drawScaled(currentBitmap);
+      await generateQRCode();
     }, { passive: false });
 
+    // Pan with drag
     cv.addEventListener('pointerdown', (e) => {
-      if (!currentBitmap || modeSel.value !== 'cover') return;
+      if (!qrCodeReady) return;
       e.preventDefault();
       isDragging = true;
       dragStart = { x: e.clientX, y: e.clientY };
-      panStart = { x: coverPan.x, y: coverPan.y };
+      panStart = { x: panOffset.x, y: panOffset.y };
+      cv.classList.add('dragging');
       try {
         cv.setPointerCapture(e.pointerId);
-      } catch (_) {
-        /* ignore */
-      }
-      updateCanvasCursor();
+      } catch (_) { /* ignore */ }
     });
 
-    cv.addEventListener('pointermove', (e) => {
+    cv.addEventListener('pointermove', async (e) => {
       if (!isDragging) return;
       e.preventDefault();
       const dx = e.clientX - dragStart.x;
       const dy = e.clientY - dragStart.y;
-      const nextPan = clampCoverPanValues(currentBitmap, panStart.x + dx, panStart.y + dy);
-      coverPan.x = nextPan.x;
-      coverPan.y = nextPan.y;
-      drawScaled(currentBitmap);
+      panOffset.x = panStart.x + dx;
+      panOffset.y = panStart.y + dy;
+      await generateQRCode();
     });
 
     function endDrag(e) {
       if (!isDragging) return;
       e.preventDefault();
       isDragging = false;
+      cv.classList.remove('dragging');
       try {
         cv.releasePointerCapture(e.pointerId);
-      } catch (_) {
-        /* ignore */
-      }
-      updateCanvasCursor();
+      } catch (_) { /* ignore */ }
     }
 
     cv.addEventListener('pointerup', endDrag);
@@ -1482,7 +1336,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = filename || 'image.jpg';
+        a.download = filename || 'qrcode-qr.jpg';
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -1501,38 +1355,30 @@
       });
       if (!secureContext) {
         btnUsb.title = 'WebSerial benötigt HTTPS oder localhost.';
-        setUsbStatus('WebSerial benötigt eine sichere Herkunft. Bitte die Seite über https:// oder http://localhost ausliefern (z. B. \"python -m http.server\" nutzen) und dann erneut versuchen.');
+        setUsbStatus('WebSerial benötigt eine sichere Herkunft. Bitte die Seite über https:// oder http://localhost ausliefern.');
       } else if (!serialAvailable) {
         btnUsb.title = 'WebSerial wird von diesem Browser nicht freigegeben.';
         setUsbStatus('WebSerial wird von diesem Browser/Profil nicht unterstützt. Verwende eine aktuelle Chromium-Variante wie Chrome oder Edge auf dem Desktop.');
       }
     }
 
-    /*
-    if (btnUsbLog) {
-      btnUsbLog.addEventListener('click', (e) => {
-        console.log('[DEBUG] USB-Log-Button geklickt', e);
-        fetchUsbLogManually();
-      });
-      if (!secureContext) {
-        btnUsbLog.title = 'WebSerial benötigt HTTPS oder localhost.';
-      } else if (!serialAvailable) {
-        btnUsbLog.title = 'WebSerial wird von diesem Browser nicht freigegeben.';
-      }
-    }
-    */
-
     btnBle.addEventListener('click', sendViaBle);
 
     if (!secureContext) {
       btnBle.title = 'WebBluetooth benötigt HTTPS oder localhost.';
-      setBleStatus('WebBluetooth benötigt eine sichere Herkunft. Bitte die Seite über https:// oder http://localhost ausliefern (z. B. "python -m http.server" nutzen) und dann erneut versuchen.');
+      setBleStatus('WebBluetooth benötigt eine sichere Herkunft. Bitte die Seite über https:// oder http://localhost ausliefern.');
     } else if (!bleAvailable) {
       btnBle.title = 'WebBluetooth wird von diesem Browser nicht freigegeben.';
       setBleStatus('WebBluetooth wird von diesem Browser/Profil nicht unterstützt. Verwende eine aktuelle Chromium-Variante wie Chrome oder Edge.');
     }
 
+    // Initialize
+    await initMozIfNeeded();
     updateActionButtons();
+
+    // Generate initial blank QR code
+    ctx.fillStyle = bgColorInput.value;
+    ctx.fillRect(0, 0, cv.width, cv.height);
   </script>
 </body>
 </html>

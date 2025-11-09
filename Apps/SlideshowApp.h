@@ -94,6 +94,10 @@ private:
   String bleLastPrimary_;
   String bleLastSecondary_;
   String bleLastFooter_;
+  bool manualFilenameActive_ = false;
+  uint32_t manualFilenameUntil_ = 0;
+  String manualFilenameLabel_;
+  bool manualFilenameDirty_ = false;
   DeleteState deleteState_ = DeleteState::Idle;
   uint8_t deleteMenuSelection_ = 0; // 0=Alle löschen, 1=Einzeln
   uint8_t deleteConfirmSelection_ = 0; // 0=Nein, 1=Ja
@@ -115,7 +119,7 @@ private:
   void closeCopyFiles_();
   void finalizeCopy_(CopyState state, const String& message);
 
-  void showCurrent_();
+  void showCurrent_(bool allowManualOverlay = true, bool clearScreen = true);
   bool isJpeg_(const String& n);
   void advance_(int step);
   void applyDwell_();
@@ -129,6 +133,7 @@ private:
   void drawCopyConfirmOverlay_();
   void drawStorageMenuOverlay_();
   void drawBleReceiveOverlay_();
+  void drawManualFilenameOverlay_();
   bool rebuildFileList_();
   bool rebuildFileListFrom_(SlideSource src);
   bool readDirectoryEntries_(fs::FS* fs, const String& basePath, std::vector<String>& out);
