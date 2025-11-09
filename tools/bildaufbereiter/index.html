@@ -19,11 +19,13 @@
     h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem; }
     .muted { opacity: .75; }
     .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin: .75rem 0; }
-    .preview { position: relative; display: block; width: 358.2857142857px; height: 350.0571428571px; margin: 2.5rem auto 0; }
-    .preview__viewport { position: absolute; top: 43.7142857143px; left: 55.0285714286px; width: 240px; height: 240px; border-radius: 50%; overflow: hidden; border: 1px solid #c9c9c9; box-shadow: 0 1px 8px rgba(0,0,0,.08); background: #fff; }
+    .preview { position: relative; display: block; width: 270px; height: 262.5px; margin: 2.5rem auto 0; }
+    .preview__viewport { position: absolute; top: 32.8px; left: 41.3px; width: 180px; height: 180px; border-radius: 50%; overflow: hidden; border: 1px solid #c9c9c9; box-shadow: 0 1px 8px rgba(0,0,0,.08); background: #fff; }
     .preview__viewport::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
     canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: default; }
-    .preview__mask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; object-fit: cover; }
+    .preview__mask { position: absolute; top: 1px; left: 1px; right: 0; bottom: 0; width: 100%; height: 100%; pointer-events: none; object-fit: cover; }
+    .preview__control { position: absolute; bottom: 8px; left: 228px; font-size: .85rem; cursor: pointer; display: flex; align-items: center; gap: .4rem; white-space: nowrap; }
+    .preview__control input[type="checkbox"] { cursor: pointer; margin: 0; }
     button, select, input[type="number"], input[type="file"] { padding: .55rem .8rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: #ffffff; color: inherit; }
     button[disabled] { opacity: .5; }
     .actions { margin: 1.5rem 0 0; }
@@ -37,7 +39,7 @@
     .file-picker { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
     .file-picker__button { display: inline-flex; align-items: center; justify-content: center; padding: .55rem .9rem; border-radius: .6rem; border: 1px solid #c9c9c9; background: canvas; cursor: pointer; font-weight: 400; }
     .file-picker__button:focus-visible { outline: 2px solid #4a90e2; outline-offset: 2px; }
-    .version-tag { font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; margin-top: .4rem; color: #4a90e2; }
+    .version-tag { font-weight: 400; font-size: .72rem; opacity: .6; margin-left: .5rem; }
     .error-modal { position: fixed; inset: 0; background: rgba(15,23,42,.55); display: none; align-items: center; justify-content: center; padding: 1.5rem; z-index: 1500; }
     .error-modal.open { display: flex; }
     .error-modal__box { background: #fff; color: inherit; border-radius: .9rem; box-shadow: 0 20px 45px rgba(15,23,42,.25); max-width: min(720px, 95vw); width: 100%; padding: 1.4rem; display: flex; flex-direction: column; gap: 1rem; }
@@ -51,9 +53,8 @@
   <div class="drop-overlay" aria-hidden="true">Bilddatei hier ablegen, um sie zu laden</div>
   <header>
     <div class="header__text">
-      <h1>Bilderaufbereiter für die LCD-Brosche</h1>
+      <h1>Bilderaufbereiter für die LCD-Brosche <span class="muted version-tag" id="tool-version"></span></h1>
       <p class="muted">Mit dieser Anwendung kannst du deine Bilder so vorbereiten, dass sie perfekt auf der Brosche angezeigt werden. Du kannst sie anschliessend per Bluetooth, USB oder über eine SD-Karte auf die Brosche übertragen.</p>
-      <p class="muted version-tag" id="tool-version"></p>
       <p class="muted" style="margin-top: .5rem; font-size: .85rem;">
         <a href="../../" style="color: #4a90e2; text-decoration: none;">← Zurück zur Dokumentation</a>
       </p>
@@ -71,8 +72,11 @@
     <label>Zuschnitt:
       <select id="mode">
         <option value="cover">Zentriert zuschneiden (füllend)</option>
-        <option value="contain">Einpassen (weiß auffüllen)</option>
+        <option value="contain">Einpassen (farbig auffüllen)</option>
       </select>
+    </label>
+    <label>Hintergrundfarbe:
+      <input id="bgcolor" type="color" value="#ffffff" title="Hintergrundfarbe für 'Einpassen' Modus">
     </label>
     <label>Qualität:
       <input id="quality" type="number" min="10" max="100" value="92" style="width:5rem"> %
@@ -85,17 +89,25 @@
       <canvas id="cv" width="240" height="240"></canvas>
     </div>
     <img class="preview__mask" src="./LCD-Brosche-maske.png" alt="Maske der LCD-Brosche" />
+    <label class="preview__control">
+      <input id="pixelperfect" type="checkbox" checked title="Bildglättung bei starker Vergrößerung">
+      Vergrösserung weichzeichnen
+    </label>
   </div>
 
   <div class="actions">
     <button id="save" disabled>Als JPEG speichern</button>
     <button id="send-usb" disabled>Über USB senden</button>
-    <button id="send-usb-log" disabled>USB-Log abrufen</button>
+    <!-- <button id="send-usb-log" disabled>USB-Log abrufen</button> -->
     <button id="send-ble" disabled>Per Bluetooth senden</button>
     <p id="usb-status" class="muted" aria-live="polite"></p>
     <p id="ble-status" class="muted" aria-live="polite"></p>
     <p class="muted" id="ble-hint">Hinweis: Auf der Brosche den BLE-Empfangsmodus aktivieren (BTN2 in der Diashow App mehrmals lang drücken, bis "Bluetooth Modus" angezeigt wird).</p>
   </div>
+
+  <footer>
+    <p class="muted" style="font-size: .85rem;">MozJPEG Encoder: <span id="mozjpeg-source">wird geladen...</span></p>
+  </footer>
 
   <script type="module">
     // --- Import der MozJPEG-WASM-Codec-Factory (jSquash) ---
@@ -149,16 +161,19 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.8';
+    const TOOL_VERSION = 'V0.9';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
+    const bgColorInput = document.getElementById('bgcolor');
+    const pixelPerfectInput = document.getElementById('pixelperfect');
     const qInput    = document.getElementById('quality');
     const btnSave   = document.getElementById('save');
     const btnUsb    = document.getElementById('send-usb');
-    const btnUsbLog = document.getElementById('send-usb-log');
+    // const btnUsbLog = document.getElementById('send-usb-log');
     const btnBle    = document.getElementById('send-ble');
     const versionLabel = document.getElementById('tool-version');
+    const mozjpegSourceLabel = document.getElementById('mozjpeg-source');
     const usbStatus = document.getElementById('usb-status');
     const bleStatus = document.getElementById('ble-status');
     const cv        = document.getElementById('cv');
@@ -177,6 +192,7 @@
     let moz = null;
     let mozReady = false;
     let coverPan = { x: 0, y: 0 };
+    let zoomScale = 1.0;
     let isDragging = false;
     let dragStart = { x: 0, y: 0 };
     let panStart = { x: 0, y: 0 };
@@ -192,7 +208,13 @@
     let usbErrorModalKeyHandlerAttached = false;
 
     if (versionLabel) {
-      versionLabel.textContent = `${TOOL_VERSION} · mozjpeg: ${mozModuleSource}`;
+      versionLabel.textContent = TOOL_VERSION;
+    }
+    if (mozjpegSourceLabel) {
+      const sourceText = mozModuleSource === 'local' ? 'Lokal (./mozjpeg/)' :
+                         mozModuleSource === 'cdn' ? 'CDN (unpkg.com)' :
+                         'unbekannt';
+      mozjpegSourceLabel.textContent = sourceText;
     }
 
     const secureContextHosts = new Set(['localhost', '127.0.0.1', '::1']);
@@ -337,7 +359,7 @@
       const busy = bleSending || usbSending;
       if (btnSave) btnSave.disabled = !ready || busy;
       if (btnUsb) btnUsb.disabled = !ready || !usbSupported || busy;
-      if (btnUsbLog) btnUsbLog.disabled = !usbSupported || busy;
+      // if (btnUsbLog) btnUsbLog.disabled = !usbSupported || busy;
       if (btnBle) btnBle.disabled = !ready || !bleSupported || busy;
     }
 
@@ -1193,6 +1215,7 @@
       const displayName = file.name ? file.name.split(/[\\/]/).pop() : '';
       currentDownloadName = buildDownloadName(displayName);
       resetCoverPan();
+      resetZoom();
       drawScaled(currentBitmap);
       updateCanvasCursor();
       fileInput.value = '';
@@ -1223,7 +1246,7 @@
       ctx.save();
       ctx.setTransform(1,0,0,1,0,0);
       ctx.clearRect(0, 0, cv.width, cv.height);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = bgColorInput.value || '#ffffff';
       ctx.fillRect(0, 0, cv.width, cv.height);
       ctx.restore();
     }
@@ -1231,6 +1254,10 @@
     function resetCoverPan() {
       coverPan.x = 0;
       coverPan.y = 0;
+    }
+
+    function resetZoom() {
+      zoomScale = 1.0;
     }
 
     async function loadImageBitmap(file) {
@@ -1246,15 +1273,29 @@
     function clampCoverPanValues(bmp, x, y) {
       if (!bmp) return { x: 0, y: 0 };
       const T = 240;
-      const s = Math.max(T / bmp.width, T / bmp.height);
+      const baseScale = Math.max(T / bmp.width, T / bmp.height);
+      const s = baseScale * zoomScale;
       const w = bmp.width * s;
       const h = bmp.height * s;
-      const maxPanX = Math.max(0, (w - T) / 2);
-      const maxPanY = Math.max(0, (h - T) / 2);
-      return {
-        x: Math.max(-maxPanX, Math.min(maxPanX, x)),
-        y: Math.max(-maxPanY, Math.min(maxPanY, y))
-      };
+
+      // Wenn Bild größer als Canvas: Einschränken damit Canvas immer ausgefüllt ist
+      // Wenn Bild kleiner als Canvas: Keine Einschränkung (freies Verschieben)
+      if (w > T || h > T) {
+        const maxPanX = Math.max(0, (w - T) / 2);
+        const maxPanY = Math.max(0, (h - T) / 2);
+        return {
+          x: Math.max(-maxPanX, Math.min(maxPanX, x)),
+          y: Math.max(-maxPanY, Math.min(maxPanY, y))
+        };
+      } else {
+        // Bild ist kleiner - erlaube freies Verschieben innerhalb des Canvas
+        const maxPanX = T / 2;
+        const maxPanY = T / 2;
+        return {
+          x: Math.max(-maxPanX, Math.min(maxPanX, x)),
+          y: Math.max(-maxPanY, Math.min(maxPanY, y))
+        };
+      }
     }
 
     function updateCanvasCursor() {
@@ -1267,12 +1308,20 @@
 
     function drawScaled(bmp) {
       clearCanvas();
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
+
+      // Weichzeichnen aktiviert ODER Zoom <= 3x: Glättung AN
+      // Weichzeichnen deaktiviert UND Zoom > 3x: Glättung AUS (scharfe Pixel)
+      if (pixelPerfectInput.checked || zoomScale <= 3.0) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+      } else {
+        ctx.imageSmoothingEnabled = false;
+      }
 
       const T = 240, sw = bmp.width, sh = bmp.height;
       if (modeSel.value === 'cover') {
-        const s = Math.max(T / sw, T / sh);
+        const baseScale = Math.max(T / sw, T / sh);
+        const s = baseScale * zoomScale;
         const w = sw * s, h = sh * s;
         const clamped = clampCoverPanValues(bmp, coverPan.x, coverPan.y);
         coverPan.x = clamped.x;
@@ -1334,9 +1383,54 @@
       if (isDragging) {
         isDragging = false;
       }
+      resetCoverPan();
+      resetZoom();
       updateCanvasCursor();
       if (currentBitmap) drawScaled(currentBitmap);
     });
+
+    bgColorInput.addEventListener('input', () => {
+      if (currentBitmap) drawScaled(currentBitmap);
+    });
+
+    pixelPerfectInput.addEventListener('change', () => {
+      if (currentBitmap) drawScaled(currentBitmap);
+    });
+
+    cv.addEventListener('wheel', (e) => {
+      if (!currentBitmap || modeSel.value !== 'cover') return;
+      e.preventDefault();
+
+      const T = 240;
+      const centerX = 120, centerY = 120;
+
+      // Aktueller Zoom-Zustand
+      const oldBaseScale = Math.max(T / currentBitmap.width, T / currentBitmap.height);
+      const oldS = oldBaseScale * zoomScale;
+      const oldW = currentBitmap.width * oldS, oldH = currentBitmap.height * oldS;
+      const oldDx = (T - oldW) / 2 + coverPan.x;
+      const oldDy = (T - oldH) / 2 + coverPan.y;
+
+      // Punkt im Bitmap, der momentan im Zentrum des Viewports ist
+      const bitmapX = (centerX - oldDx) / oldS;
+      const bitmapY = (centerY - oldDy) / oldS;
+
+      // Neuer Zoom berechnen (multiplikativ für gleichmäßige Schritte)
+      const zoomFactor = 1.15; // 15% pro Schritt
+      const delta = -Math.sign(e.deltaY);
+      const newZoom = delta > 0 ? zoomScale * zoomFactor : zoomScale / zoomFactor;
+      zoomScale = Math.max(0.1, Math.min(150.0, newZoom));
+
+      // Nach Zoom: Pan-Position anpassen, damit derselbe Bitmap-Punkt im Zentrum bleibt
+      const newS = oldBaseScale * zoomScale;
+      const newW = currentBitmap.width * newS, newH = currentBitmap.height * newS;
+      const newDx = centerX - bitmapX * newS;
+      const newDy = centerY - bitmapY * newS;
+      coverPan.x = newDx - (T - newW) / 2;
+      coverPan.y = newDy - (T - newH) / 2;
+
+      drawScaled(currentBitmap);
+    }, { passive: false });
 
     cv.addEventListener('pointerdown', (e) => {
       if (!currentBitmap || modeSel.value !== 'cover') return;
@@ -1400,7 +1494,10 @@
     });
 
     if (btnUsb) {
-      btnUsb.addEventListener('click', sendViaUsb);
+      btnUsb.addEventListener('click', (e) => {
+        console.log('[DEBUG] USB-Button geklickt', e);
+        sendViaUsb();
+      });
       if (!secureContext) {
         btnUsb.title = 'WebSerial benötigt HTTPS oder localhost.';
         setUsbStatus('WebSerial benötigt eine sichere Herkunft. Bitte die Seite über https:// oder http://localhost ausliefern (z. B. \"python -m http.server\" nutzen) und dann erneut versuchen.');
@@ -1410,14 +1507,19 @@
       }
     }
 
+    /*
     if (btnUsbLog) {
-      btnUsbLog.addEventListener('click', fetchUsbLogManually);
+      btnUsbLog.addEventListener('click', (e) => {
+        console.log('[DEBUG] USB-Log-Button geklickt', e);
+        fetchUsbLogManually();
+      });
       if (!secureContext) {
         btnUsbLog.title = 'WebSerial benötigt HTTPS oder localhost.';
       } else if (!serialAvailable) {
         btnUsbLog.title = 'WebSerial wird von diesem Browser nicht freigegeben.';
       }
     }
+    */
 
     btnBle.addEventListener('click', sendViaBle);
 
