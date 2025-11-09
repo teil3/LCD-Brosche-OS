@@ -117,7 +117,7 @@
         </select>
         <button type="submit" id="upload-btn" class="primary" disabled>Upload starten</button>
       </div>
-      <p class="notice">Wähle ein existierendes Verzeichnis als Ziel. <code>textapp.cfg</code>, <code>/system/font.vlw</code> und <code>/system/fonts/*</code> bleiben schreibgeschützt.</p>
+      <p class="notice">Wähle ein existierendes Verzeichnis als Ziel. <code>textapp.cfg</code>, <code>/system/font.vlw</code> und Standard-Fonts in <code>/system/fonts/</code> sind schreibgeschützt. Eigene Fonts können hinzugefügt und entfernt werden.</p>
     </form>
   </section>
 
@@ -145,11 +145,24 @@
 
     const hiddenPaths = new Set(['/system/bootlogo.jpg']);
 
+    // Protected fonts that cannot be deleted
+    const protectedFonts = new Set([
+      '/system/fonts/freesans12pt.vlw',
+      '/system/fonts/freesans18pt.vlw',
+      '/system/fonts/freesans24pt.vlw',
+      '/system/fonts/freesansbold12pt.vlw',
+      '/system/fonts/freesansbold18pt.vlw',
+      '/system/fonts/freesansbold24pt.vlw',
+      '/system/fonts/freeserif12pt.vlw',
+      '/system/fonts/freeserif18pt.vlw',
+      '/system/fonts/freeserif24pt.vlw'
+    ]);
+
     function isProtected(path) {
       const lower = path.toLowerCase();
       return lower === '/textapp.cfg' ||
              lower === '/system/font.vlw' ||
-             lower.startsWith('/system/fonts/');
+             protectedFonts.has(lower);
     }
 
     function isHidden(path) {

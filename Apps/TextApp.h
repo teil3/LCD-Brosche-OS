@@ -47,6 +47,9 @@ private:
   size_t bigWordIndex_ = 0;
   bool wordsDirty_ = true;
   std::vector<String> words_;
+  std::vector<String> pages_;
+  size_t currentPageIndex_ = 0;
+  bool pagesDirty_ = true;
   uint32_t pauseUntil_ = 0;
   bool needsRedraw_ = true;
   bool needsFullRedraw_ = true;
@@ -75,4 +78,5 @@ private:
   String resolveFontPath_(const String& name) const;
   bool loadSpriteFont_(TFT_eSprite& sprite, const String& name);
   void rebuildWords_();
+  void rebuildPages_();
 };

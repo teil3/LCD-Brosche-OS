@@ -44,6 +44,9 @@ void TextApp::init() {
   bigWordIndex_ = 0;
   wordsDirty_ = true;
   words_.clear();
+  currentPageIndex_ = 0;
+  pagesDirty_ = true;
+  pages_.clear();
   pauseUntil_ = 0;
   needsRedraw_ = true;
   needsFullRedraw_ = true;
@@ -58,6 +61,7 @@ void TextApp::init() {
   chooseFont_();
   applyFont_();
   rebuildWords_();
+  rebuildPages_();
 
   tft.fillScreen(bgColor_);
 }
@@ -72,12 +76,32 @@ void TextApp::tick(uint32_t delta_ms) {
     needsRedraw_ = true;
   }
 
-  if (mode_ == DisplayMode::BigLetters) {
+  if (mode_ == DisplayMode::TextBlock) {
+    if (pagesDirty_) {
+      rebuildPages_();
+    }
+    if (pages_.size() > 1) {
+      timeAccum_ += delta_ms;
+      while (timeAccum_ >= letterSpeed_) {
+        timeAccum_ -= letterSpeed_;
+        currentPageIndex_++;
+        if (currentPageIndex_ >= pages_.size()) {
+          currentPageIndex_ = 0;
+        }
+        needsRedraw_ = true;
+      }
+    }
+  } else if (mode_ == DisplayMode::BigLetters) {
+    // Calculate text length without |pg| markers
+    String textForLetters = text_;
+    textForLetters.replace("|pg|", "");
+    size_t textLen = textForLetters.length();
+
     timeAccum_ += delta_ms;
     while (timeAccum_ >= letterSpeed_) {
       timeAccum_ -= letterSpeed_;
       bigLetterIndex_++;
-      if (bigLetterIndex_ >= text_.length()) {
+      if (bigLetterIndex_ >= textLen) {
         bigLetterIndex_ = 0;
       }
       needsRedraw_ = true;
@@ -178,6 +202,7 @@ void TextApp::parseConfigLine_(const String& line) {
     text_ = value;
     text_.replace("|br|", "\n");
     wordsDirty_ = true;
+    pagesDirty_ = true;
   } else if (key.equalsIgnoreCase("COLOR")) {
     color_ = parseColor_(value);
   } else if (key.equalsIgnoreCase("BG_COLOR") || key.equalsIgnoreCase("BGCOLOR")) {
@@ -255,12 +280,22 @@ void TextApp::drawTextBlock_() {
     return;
   }
 
+  if (pagesDirty_) {
+    rebuildPages_();
+  }
+
+  // Get current page text
+  String pageText = text_;
+  if (!pages_.empty() && currentPageIndex_ < pages_.size()) {
+    pageText = pages_[currentPageIndex_];
+  }
+
   tft.setTextColor(color_, bgColor_);
   tft.setTextWrap(false);
 
   std::vector<String> lines;
   lines.reserve(8);
-  String remaining = text_;
+  String remaining = pageText;
   if (remaining.isEmpty()) {
     lines.push_back("");
   } else {
@@ -607,9 +642,15 @@ void TextApp::drawBigWord_() {
 
 void TextApp::drawBigLetter_() {
   if (text_.isEmpty()) return;
-  if (bigLetterIndex_ >= text_.length()) bigLetterIndex_ = 0;
 
-  char symbol = text_[bigLetterIndex_];
+  // Remove |pg| markers for letter display
+  String textForLetters = text_;
+  textForLetters.replace("|pg|", "");
+
+  if (textForLetters.isEmpty()) return;
+  if (bigLetterIndex_ >= textForLetters.length()) bigLetterIndex_ = 0;
+
+  char symbol = textForLetters[bigLetterIndex_];
   if (symbol == '\n' || symbol == '\r') {
     return;
   }
@@ -740,13 +781,17 @@ void TextApp::nextMode_() {
 
   bigLetterIndex_ = 0;
   bigWordIndex_ = 0;
+  currentPageIndex_ = 0;
   wordsDirty_ = true;
+  pagesDirty_ = true;
   timeAccum_ = 0;
   needsRedraw_ = true;
   needsFullRedraw_ = true;
 
   if (mode_ == DisplayMode::BigWords) {
     rebuildWords_();
+  } else if (mode_ == DisplayMode::TextBlock) {
+    rebuildPages_();
   }
 
   showStatus_(String("Modus: ") + modeName_());
@@ -785,10 +830,13 @@ void TextApp::reloadConfig_() {
   chooseFont_();
   applyFont_();
   wordsDirty_ = true;
+  pagesDirty_ = true;
   rebuildWords_();
+  rebuildPages_();
 
   bigLetterIndex_ = 0;
   bigWordIndex_ = 0;
+  currentPageIndex_ = 0;
   timeAccum_ = 0;
   needsRedraw_ = true;
   needsFullRedraw_ = true;
@@ -981,11 +1029,15 @@ void TextApp::rebuildWords_() {
     return;
   }
 
-  String current;
-  current.reserve(text_.length());
+  // Remove |pg| markers for word extraction (treat like whitespace)
+  String textForWords = text_;
+  textForWords.replace("|pg|", " ");
 
-  for (size_t i = 0; i < static_cast<size_t>(text_.length()); ++i) {
-    char c = text_[i];
+  String current;
+  current.reserve(textForWords.length());
+
+  for (size_t i = 0; i < static_cast<size_t>(textForWords.length()); ++i) {
+    char c = textForWords[i];
     if (isspace(static_cast<unsigned char>(c))) {
       if (current.length()) {
         words_.push_back(current);
@@ -1000,7 +1052,7 @@ void TextApp::rebuildWords_() {
     words_.push_back(current);
   }
 
-  String trimmed = text_;
+  String trimmed = textForWords;
   trimmed.trim();
   if (words_.empty() && !trimmed.isEmpty()) {
     words_.push_back(trimmed);
@@ -1008,4 +1060,38 @@ void TextApp::rebuildWords_() {
 
   bigWordIndex_ = 0;
   wordsDirty_ = false;
+}
+
+void TextApp::rebuildPages_() {
+  pages_.clear();
+
+  if (text_.isEmpty()) {
+    pages_.push_back("");
+    currentPageIndex_ = 0;
+    pagesDirty_ = false;
+    return;
+  }
+
+  String remaining = text_;
+  while (true) {
+    int pgPos = remaining.indexOf("|pg|");
+    if (pgPos < 0) {
+      pages_.push_back(remaining);
+      break;
+    }
+    pages_.push_back(remaining.substring(0, pgPos));
+    remaining = remaining.substring(pgPos + 4); // Skip "|pg|"
+  }
+
+  // If no pages were created (empty text or only |pg| markers), add empty page
+  if (pages_.empty()) {
+    pages_.push_back("");
+  }
+
+  // Reset page index if out of bounds
+  if (currentPageIndex_ >= pages_.size()) {
+    currentPageIndex_ = 0;
+  }
+
+  pagesDirty_ = false;
 }

@@ -61,6 +61,17 @@
     .tiny-note { font-size: .78rem; margin-top: .35rem; }
     .status-line { flex: 1 1 100%; font-size: .85rem; margin-top: .25rem; }
     .text-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+    .tabs { display: flex; gap: .25rem; margin-bottom: 0; flex-wrap: wrap; }
+    .tab { padding: .4rem .75rem; border: 1px solid #c9c9c9; background: #f4f7fc; border-radius: .5rem .5rem 0 0; cursor: pointer; font-size: .9rem; transition: all .15s; }
+    .tab:hover { background: #e8ecf3; }
+    .tab.active { background: #4a90e2; color: white; border-color: #4a90e2; }
+    .tab.add-tab { background: #f0f2f7; font-weight: 600; color: #4a90e2; }
+    .tab.add-tab:hover { background: #e3e7f0; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .tab-content textarea { width: 100%; box-sizing: border-box; }
+    .tab-close { margin-left: .5rem; opacity: .7; font-weight: 700; }
+    .tab-close:hover { opacity: 1; }
     .text-actions__group { display: flex; flex: 1 1 auto; gap: .5rem; flex-wrap: wrap; }
     .load-card { border: 1px dashed #c9c9c9; border-radius: .65rem; padding: .75rem; background: #f4f7fc; }
     .load-card h3 { margin: 0 0 .35rem; font-size: 1rem; }
@@ -79,7 +90,7 @@
     <div class="header__text">
       <div class="header__title-row">
         <h1>TextApp Konfigurator</h1>
-        <span class="version-tag" id="tool-version">V0.4.1</span>
+        <span class="version-tag" id="tool-version">V0.5.0</span>
       </div>
       <p class="muted">Konfiguriere die TextApp für deine LCD-Brosche. Ändere Text, Farben und Modi und lade die Konfiguration per Bluetooth oder USB auf die Brosche hoch.</p>
       <p class="muted" style="margin-top: .5rem; font-size: .85rem;">
@@ -95,9 +106,8 @@
     <div class="layout__config">
       <div class="config-section config-section--text">
         <h2>Textinhalt</h2>
-        <div class="form-group">
-          <textarea id="text-input" rows="4" aria-label="Text">Hallo Welt!</textarea>
-        </div>
+        <div id="tabs-container" class="tabs"></div>
+        <div id="pages-container"></div>
         <div class="text-actions">
           <button id="download-cfg" class="primary">textapp.cfg speichern</button>
           <div class="text-actions__group">
@@ -127,7 +137,7 @@
               <option value="right">Rechts</option>
             </select>
           </div>
-          <div class="form-group" id="speed-group" style="display: none;">
+          <div class="form-group" id="speed-group">
             <label for="speed-input">Geschwindigkeit</label>
             <div class="form-group-inline">
               <input type="range" id="speed-input" min="10" max="10000" value="1000" step="10" />
@@ -153,10 +163,7 @@
           <div class="form-group">
             <label for="font-select">Font</label>
             <select id="font-select">
-              <option value="FreeSans18pt">FreeSans 18pt</option>
-              <option value="FreeSansBold18pt" selected>FreeSansBold 18pt</option>
-              <option value="FreeSansBold24pt">FreeSansBold 24pt</option>
-              <option value="FreeSerif18pt">FreeSerif 18pt</option>
+              <!-- Dynamically populated from /system/fonts/ -->
             </select>
           </div>
         </div>
@@ -197,11 +204,12 @@
   </footer>
 
   <script type="module">
-    const TOOL_VERSION = 'V0.4.1';
+    const TOOL_VERSION = 'V0.5.0';
     const cv = document.getElementById('cv');
     const ctx = cv.getContext('2d');
     const loadFromBroscheBtn = document.getElementById('load-from-brosche');
-    const textInput = document.getElementById('text-input');
+    const tabsContainer = document.getElementById('tabs-container');
+    const pagesContainer = document.getElementById('pages-container');
     const modeSelect = document.getElementById('mode-select');
     const alignSelect = document.getElementById('align-select');
     const speedInput = document.getElementById('speed-input');
@@ -219,6 +227,17 @@
     const alignGroup = document.getElementById('align-group');
     const speedGroup = document.getElementById('speed-group');
 
+    let pages = [{ text: 'Hallo Welt!' }];
+    let currentPageIndex = 0;
+    let isHoveringTextArea = false;
+    const MAX_PAGES = 6;
+    let availableFonts = [
+      'FreeSans18pt',
+      'FreeSansBold18pt',
+      'FreeSansBold24pt',
+      'FreeSerif18pt'
+    ];
+
     const BLE_UUIDS = {
       service: '12345678-1234-1234-1234-1234567890ab',
       chunk: 'abcd0001-1234-1234-1234-1234567890ab',
@@ -228,6 +247,137 @@
     const textDecoder = new TextDecoder();
 
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // Allowed characters in text input
+    const ALLOWED_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZäöüÄÖÜàâéèêëîïùçòì0123456789!?"\'`´^¨~/*-_=+%&@€$£#§|¬¦,.;:<>()[]{} \n\r\t';
+    const allowedCharsSet = new Set(ALLOWED_CHARS.split(''));
+
+    function filterAllowedChars(text) {
+      return text.split('').filter(char => allowedCharsSet.has(char)).join('');
+    }
+
+    function updateFontSelect() {
+      const currentValue = fontSelect.value;
+      fontSelect.innerHTML = '';
+
+      availableFonts.forEach(font => {
+        const option = document.createElement('option');
+        option.value = font;
+        option.textContent = font;
+        fontSelect.appendChild(option);
+      });
+
+      // Restore previous selection if still available
+      if (availableFonts.includes(currentValue)) {
+        fontSelect.value = currentValue;
+      } else if (availableFonts.includes('FreeSansBold18pt')) {
+        // Default to FreeSansBold18pt if available
+        fontSelect.value = 'FreeSansBold18pt';
+      } else if (availableFonts.length > 0) {
+        // Otherwise use first available font
+        fontSelect.value = availableFonts[0];
+      }
+    }
+
+    // Track hover state for tabs and text areas
+    function setupHoverTracking() {
+      const textSection = document.querySelector('.config-section--text');
+      if (textSection) {
+        textSection.addEventListener('mouseenter', () => {
+          isHoveringTextArea = true;
+        });
+        textSection.addEventListener('mouseleave', () => {
+          isHoveringTextArea = false;
+        });
+      }
+    }
+
+    function renderTabs() {
+      tabsContainer.innerHTML = '';
+      pagesContainer.innerHTML = '';
+
+      pages.forEach((page, index) => {
+        // Create tab
+        const tab = document.createElement('div');
+        tab.className = 'tab' + (index === currentPageIndex ? ' active' : '');
+        tab.textContent = `Seite ${index + 1}`;
+
+        // Add close button if more than one page
+        if (pages.length > 1) {
+          const closeBtn = document.createElement('span');
+          closeBtn.className = 'tab-close';
+          closeBtn.textContent = '×';
+          closeBtn.onclick = (e) => {
+            e.stopPropagation();
+            deletePage(index);
+          };
+          tab.appendChild(closeBtn);
+        }
+
+        tab.onclick = () => switchToPage(index);
+        tabsContainer.appendChild(tab);
+
+        // Create textarea
+        const content = document.createElement('div');
+        content.className = 'tab-content' + (index === currentPageIndex ? ' active' : '');
+        const textarea = document.createElement('textarea');
+        textarea.rows = 4;
+        textarea.value = page.text;
+        textarea.setAttribute('aria-label', `Seite ${index + 1}`);
+        textarea.oninput = () => {
+          const cursorPos = textarea.selectionStart;
+          const oldLength = textarea.value.length;
+          const filtered = filterAllowedChars(textarea.value);
+          const removedChars = oldLength - filtered.length;
+
+          if (filtered !== textarea.value) {
+            textarea.value = filtered;
+            // Adjust cursor position after filtering
+            textarea.selectionStart = textarea.selectionEnd = Math.max(0, cursorPos - removedChars);
+          }
+
+          pages[index].text = textarea.value;
+          updateUI();
+        };
+        content.appendChild(textarea);
+        pagesContainer.appendChild(content);
+      });
+
+      // Add "+" tab only if under max pages
+      if (pages.length < MAX_PAGES) {
+        const addTab = document.createElement('div');
+        addTab.className = 'tab add-tab';
+        addTab.textContent = '+';
+        addTab.onclick = addPage;
+        tabsContainer.appendChild(addTab);
+      }
+    }
+
+    function switchToPage(index) {
+      if (index >= 0 && index < pages.length) {
+        currentPageIndex = index;
+        renderTabs();
+        updatePreview();
+      }
+    }
+
+    function addPage() {
+      if (pages.length >= MAX_PAGES) return;
+      pages.push({ text: '' });
+      currentPageIndex = pages.length - 1;
+      renderTabs();
+      updateUI();
+    }
+
+    function deletePage(index) {
+      if (pages.length <= 1) return;
+      pages.splice(index, 1);
+      if (currentPageIndex >= pages.length) {
+        currentPageIndex = pages.length - 1;
+      }
+      renderTabs();
+      updateUI();
+    }
 
     let isSending = false;
     let animationFrame = 0;
@@ -268,7 +418,8 @@
     }
 
     function getConfig() {
-      const text = textInput.value.replace(/\n/g, '|br|');
+      // Join pages with |pg| separator
+      const text = pages.map(p => p.text.replace(/\n/g, '|br|')).join('|pg|');
       const mode = modeSelect.value;
       const align = alignSelect.value;
       const speed = parseInt(speedInput.value, 10);
@@ -310,10 +461,10 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const text = cfg.text.replace(/\|br\|/g, '\n');
-
       if (cfg.mode === 'text') {
-        // TextBlock mode
+        // TextBlock mode - show only current page
+        const pageText = pages[currentPageIndex]?.text || '';
+        const text = pageText.replace(/\n/g, '\n');
         const lines = text.split('\n').filter(l => l.trim());
         const fontSize = cfg.font.includes('24pt') ? 24 : 18;
         ctx.font = `${fontSize}px sans-serif`;
@@ -332,6 +483,8 @@
           y += lineHeight;
         });
       } else if (cfg.mode === 'big_words') {
+        // BigWords mode - use all pages combined
+        const text = cfg.text.replace(/\|br\|/g, '\n').replace(/\|pg\|/g, ' ');
         // BigWords mode
         const words = text.split(/[\s\n]+/).filter(w => w.trim());
         if (words.length === 0) return;
@@ -342,7 +495,8 @@
         ctx.textAlign = 'center';
         ctx.fillText(word, 120, 120);
       } else if (cfg.mode === 'big_letters') {
-        // BigLetters mode
+        // BigLetters mode - use all pages combined
+        const text = cfg.text.replace(/\|br\|/g, '\n').replace(/\|pg\|/g, '');
         const chars = text.replace(/\n/g, '').split('').filter(c => c.trim());
         if (chars.length === 0) return;
 
@@ -358,8 +512,24 @@
       const cfg = getConfig();
       const now = Date.now();
 
-      if (cfg.mode === 'big_words' && now - lastAnimTime > cfg.speed) {
-        const text = cfg.text.replace(/\|br\|/g, '\n');
+      if (cfg.mode === 'text' && pages.length > 1 && now - lastAnimTime > cfg.speed) {
+        // TextBlock mode with multiple pages - cycle through pages
+        // Only auto-switch if focus/hover is not on tabs or textareas
+        const focusedElement = document.activeElement;
+        const isFocusInTextArea = focusedElement && (
+          focusedElement.tagName === 'TEXTAREA' ||
+          tabsContainer.contains(focusedElement) ||
+          pagesContainer.contains(focusedElement)
+        );
+
+        if (!isFocusInTextArea && !isHoveringTextArea) {
+          currentPageIndex = (currentPageIndex + 1) % pages.length;
+          lastAnimTime = now;
+          renderTabs();
+          updatePreview();
+        }
+      } else if (cfg.mode === 'big_words' && now - lastAnimTime > cfg.speed) {
+        const text = cfg.text.replace(/\|br\|/g, '\n').replace(/\|pg\|/g, ' ');
         const words = text.split(/[\s\n]+/).filter(w => w.trim());
         if (words.length > 0) {
           currentWordIndex = (currentWordIndex + 1) % words.length;
@@ -367,7 +537,7 @@
           updatePreview();
         }
       } else if (cfg.mode === 'big_letters' && now - lastAnimTime > cfg.speed) {
-        const text = cfg.text.replace(/\|br\|/g, '\n');
+        const text = cfg.text.replace(/\|br\|/g, '\n').replace(/\|pg\|/g, '');
         const chars = text.replace(/\n/g, '').split('').filter(c => c.trim());
         if (chars.length > 0) {
           currentLetterIndex = (currentLetterIndex + 1) % chars.length;
@@ -382,7 +552,8 @@
     function updateUI() {
       const mode = modeSelect.value;
       alignGroup.style.display = mode === 'text' ? 'flex' : 'none';
-      speedGroup.style.display = (mode === 'big_words' || mode === 'big_letters') ? 'flex' : 'none';
+      // Speed is now always visible (pages, words, or letters)
+      speedGroup.style.display = 'flex';
 
       currentWordIndex = 0;
       currentLetterIndex = 0;
@@ -417,9 +588,18 @@
     }
 
     function applyCfgToUI(config) {
-      // Text
+      // Text - split by |pg| into pages and filter allowed chars
       if (config.TEXT) {
-        textInput.value = config.TEXT.replace(/\|br\|/g, '\n');
+        const pageTexts = config.TEXT.split('|pg|');
+        pages = pageTexts.slice(0, MAX_PAGES).map(text => {
+          const decoded = text.replace(/\|br\|/g, '\n');
+          return { text: filterAllowedChars(decoded) };
+        });
+        if (pages.length === 0) {
+          pages = [{ text: '' }];
+        }
+        currentPageIndex = 0;
+        renderTabs();
       }
 
       // Mode
@@ -983,8 +1163,125 @@
       }
     }
 
+    async function loadFontsFromBrosche() {
+      if (!('serial' in navigator)) {
+        console.warn('WebSerial nicht unterstützt');
+        return;
+      }
+      if (isSending) return;
+
+      let port = null;
+      let writer = null;
+      let reader = null;
+      let lineReader = null;
+
+      try {
+        isSending = true;
+
+        // Try authorized port first
+        const ports = await navigator.serial.getPorts();
+        if (!ports || ports.length === 0) {
+          return;
+        }
+        port = ports[0];
+
+        // Port reset cycle
+        try {
+          await port.open({ baudRate: 115200 });
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await port.close();
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (err) {
+          console.warn('Port reset failed (non-critical):', err);
+        }
+
+        await port.open({ baudRate: 115200 });
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        if (!port.writable || !port.readable) {
+          throw new Error('Port bietet keine Lese-/Schreibstreams.');
+        }
+
+        reader = port.readable.getReader();
+        lineReader = createLineReader(reader);
+        writer = port.writable.getWriter();
+
+        // PING check
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await writer.write(textEncoder.encode('PING\n'));
+
+        const pong = await waitForUsbLine(
+          lineReader,
+          (payload) => payload.startsWith('OK PONG') || payload.startsWith('ERR'),
+          3000
+        );
+
+        if (pong.startsWith('ERR')) {
+          console.warn('PING failed');
+          return;
+        }
+
+        // Send LIST command for /system/fonts/
+        await writer.write(textEncoder.encode('LIST /system/fonts/\n'));
+
+        // Collect font list
+        const fonts = [];
+        while (true) {
+          const response = await waitForUsbLine(
+            lineReader,
+            (payload) => payload.startsWith('OK LIST') || payload.startsWith('ERR') || payload.startsWith('OK LISTDONE'),
+            5000
+          );
+
+          if (response.startsWith('ERR')) {
+            console.warn('LIST failed:', response);
+            break;
+          }
+
+          if (response.startsWith('OK LISTDONE')) {
+            break;
+          }
+
+          if (response.startsWith('OK LIST')) {
+            // Format: OK LIST F filename size or OK LIST D dirname 0
+            const parts = response.split(/\s+/);
+            if (parts.length >= 4 && parts[2] === 'F') {
+              let filename = parts[3];
+              // Remove .vlw extension if present
+              if (filename.endsWith('.vlw')) {
+                filename = filename.slice(0, -4);
+              }
+              fonts.push(filename);
+            }
+          }
+        }
+
+        if (fonts.length > 0) {
+          availableFonts = fonts.sort();
+          updateFontSelect();
+          console.log('Fonts loaded from Brosche:', availableFonts);
+        }
+
+        await writer.releaseLock();
+        await reader.releaseLock();
+        await port.close();
+
+      } catch (error) {
+        console.warn('Font loading failed:', error);
+
+        try {
+          if (writer) await writer.releaseLock();
+          if (reader) {
+            await reader.cancel();
+          }
+          if (port) await port.close();
+        } catch (_) {}
+      } finally {
+        isSending = false;
+      }
+    }
+
     // Event Listeners
-    textInput.addEventListener('input', updateUI);
     modeSelect.addEventListener('change', updateUI);
     alignSelect.addEventListener('change', updateUI);
     speedInput.addEventListener('input', () => {
@@ -1011,12 +1308,18 @@
     bleBtn.addEventListener('click', sendViaBle);
 
     // Initialize
+    setupHoverTracking();
+    updateFontSelect();
+    renderTabs();
     updateUI();
     animate();
     autoLoadFromBrosche();
 
     async function autoLoadFromBrosche() {
       try {
+        // Load fonts first
+        await loadFontsFromBrosche();
+        // Then load config
         await loadFromBrosche(true);
       } catch (err) {
         console.warn('Automatisches Laden übersprungen:', err);
