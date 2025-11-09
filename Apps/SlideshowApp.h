@@ -38,10 +38,14 @@ private:
   enum class TransferSource : uint8_t { None = 0, Ble = 1, Usb = 2 };
   enum class DeleteState : uint8_t { Idle = 0, DeleteAllConfirm = 1, DeleteSingle = 2, DeleteSingleConfirm = 3, Deleting = 4, Done = 5, Error = 6 };
 
+  enum class CopyFileType : uint8_t { Jpg = 0, Bootlogo = 1, Config = 2, Font = 3 };
+
   struct CopyItem {
     String path;
     String name;
     size_t size = 0;
+    CopyFileType type = CopyFileType::Jpg;
+    String destPath; // Ziel-Pfad im LittleFS
   };
 
   std::vector<String> files_;

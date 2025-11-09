@@ -415,48 +415,6 @@ bool SlideshowApp::prepareCopyQueue_() {
   if (!ensureSdReady_()) {
     return false;
   }
-  std::vector<String> sdFiles;
-  if (!readDirectoryEntries_(&SD, dir, sdFiles)) {
-    #ifdef USB_DEBUG
-      Serial.printf("[Slideshow] prepareCopyQueue: readDirectoryEntries failed for '%s'\n", dir.c_str());
-    #endif
-    return false;
-  }
-
-  std::vector<CopyItem> items;
-  items.reserve(sdFiles.size());
-
-  for (String path : sdFiles) {
-    if (!path.startsWith("/")) path = "/" + path;
-    String base = path;
-    int s = base.lastIndexOf('/');
-    if (s >= 0) base = base.substring(s + 1);
-    if (!isJpeg_(base)) continue;
-
-    File f = SD.open(path.c_str(), FILE_READ);
-    if (!f) {
-      #ifdef USB_DEBUG
-        Serial.printf("[Slideshow] copy queue open fail: %s\n", path.c_str());
-      #endif
-      continue;
-    }
-    size_t size = f.size();
-    f.close();
-    if (size == 0) continue;
-
-    CopyItem ci;
-    ci.path = path;
-    ci.name = base;
-    ci.size = size;
-    items.push_back(ci);
-  }
-
-  if (items.empty()) {
-    #ifdef USB_DEBUG
-      Serial.println("[Slideshow] prepareCopyQueue: no JPEG files on SD");
-    #endif
-    return false;
-  }
 
   if (!ensureFlashReady_()) {
     #ifdef USB_DEBUG
@@ -465,15 +423,133 @@ bool SlideshowApp::prepareCopyQueue_() {
     return false;
   }
 
+  // Suche alle relevanten Dateien im SD-Root
+  File root = SD.open("/");
+  if (!root || !root.isDirectory()) {
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] prepareCopyQueue: SD root open failed");
+    #endif
+    return false;
+  }
+
+  std::vector<CopyItem> items;
+
+  for (File f = root.openNextFile(); f; f = root.openNextFile()) {
+    if (f.isDirectory()) continue;
+
+    String filename = f.name();
+    int s = filename.lastIndexOf('/');
+    if (s >= 0) filename = filename.substring(s + 1);
+
+    String lower = filename;
+    lower.toLowerCase();
+
+    // Prüfe Dateityp und Größe
+    size_t size = f.size();
+    if (size == 0) continue;
+
+    CopyItem ci;
+    ci.path = String("/") + filename;
+    ci.name = filename;
+    ci.size = size;
+
+    // Bestimme Dateityp und Ziel
+    if (lower == "bootlogo.jpg") {
+      // bootlogo.jpg -> /system/bootlogo.jpg (überschreiben)
+      ci.type = CopyFileType::Bootlogo;
+      ci.destPath = "/system/bootlogo.jpg";
+      items.push_back(ci);
+      #ifdef USB_DEBUG
+        Serial.printf("[Slideshow] Queue bootlogo: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
+      #endif
+      continue;  // Nicht als normales JPG behandeln
+    } else if (lower == "textapp.cfg") {
+      // textapp.cfg -> /textapp.cfg (nur wenn nicht vorhanden)
+      if (!LittleFS.exists("/textapp.cfg")) {
+        ci.type = CopyFileType::Config;
+        ci.destPath = "/textapp.cfg";
+        items.push_back(ci);
+        #ifdef USB_DEBUG
+          Serial.printf("[Slideshow] Queue config: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
+        #endif
+      } else {
+        #ifdef USB_DEBUG
+          Serial.println("[Slideshow] Skip textapp.cfg: already exists");
+        #endif
+      }
+      continue;  // Nicht weiter verarbeiten
+    } else if (lower == "font.vlw") {
+      // font.vlw -> /system/font.vlw (überschreiben wenn <= 16KB)
+      if (size > 16384) {
+        #ifdef USB_DEBUG
+          Serial.printf("[Slideshow] Skip font.vlw: too large (%u bytes)\n", size);
+        #endif
+        continue;
+      }
+      ci.type = CopyFileType::Font;
+      ci.destPath = "/system/font.vlw";
+      items.push_back(ci);
+      #ifdef USB_DEBUG
+        Serial.printf("[Slideshow] Queue font.vlw: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
+      #endif
+      continue;  // Nicht weiter verarbeiten
+    } else if (lower.endsWith(".vlw")) {
+      // .vlw -> /system/fonts/ (überschreiben wenn <= 30KB)
+      if (size > 30720) {
+        #ifdef USB_DEBUG
+          Serial.printf("[Slideshow] Skip font %s: too large (%u bytes)\n", filename.c_str(), size);
+        #endif
+        continue;
+      }
+      ci.type = CopyFileType::Font;
+      ci.destPath = String("/system/fonts/") + lower;  // Kleinbuchstaben
+      items.push_back(ci);
+      #ifdef USB_DEBUG
+        Serial.printf("[Slideshow] Queue font: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
+      #endif
+      continue;  // Nicht weiter verarbeiten
+    } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+      // .jpg -> /slides/ (mit Auto-Umbenennung)
+      ci.type = CopyFileType::Jpg;
+
+      // Erzeuge eindeutigen Dateinamen
+      String destName = filename;
+      String baseName = destName;
+      String ext = ".jpg";
+      int dotIdx = destName.lastIndexOf('.');
+      if (dotIdx >= 0) {
+        ext = destName.substring(dotIdx);
+        baseName = destName.substring(0, dotIdx);
+      }
+
+      ci.destPath = String(kFlashSlidesDir) + "/" + destName;
+      int counter = 1;
+      while (LittleFS.exists(ci.destPath) && counter < 1000) {
+        destName = baseName + "-" + String(counter) + ext;
+        ci.destPath = String(kFlashSlidesDir) + "/" + destName;
+        ++counter;
+      }
+
+      items.push_back(ci);
+      #ifdef USB_DEBUG
+        Serial.printf("[Slideshow] Queue image: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
+      #endif
+    }
+  }
+  root.close();
+
+  if (items.empty()) {
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] prepareCopyQueue: no files to copy");
+    #endif
+    return false;
+  }
+
   std::sort(items.begin(), items.end(), [](const CopyItem& a, const CopyItem& b) {
+    // Bootlogo und Config zuerst, dann Fonts, dann JPGs
+    if (a.type != b.type) return static_cast<int>(a.type) < static_cast<int>(b.type);
     return a.name < b.name;
   });
-
-  if (!clearFlashSlidesDir()) {
-    #ifdef USB_DEBUG
-      Serial.println("[Slideshow] WARN: Flash clear failed (continue)");
-    #endif
-  }
 
   copyQueue_ = std::move(items);
   for (const auto& item : copyQueue_) {
@@ -489,8 +565,16 @@ bool SlideshowApp::prepareCopyQueue_() {
 
 void SlideshowApp::beginCopy_() {
   if (!prepareCopyQueue_()) {
-    finalizeCopy_(CopyState::Error, "Keine Bilder gefunden");
+    finalizeCopy_(CopyState::Error, "Keine Dateien gefunden");
     return;
+  }
+
+  // Stelle sicher, dass /system und /system/fonts existieren
+  if (!LittleFS.exists("/system")) {
+    LittleFS.mkdir("/system");
+  }
+  if (!LittleFS.exists("/system/fonts")) {
+    LittleFS.mkdir("/system/fonts");
   }
 
   copyState_ = CopyState::Running;
@@ -554,10 +638,9 @@ void SlideshowApp::handleCopyTick_(uint32_t budget_ms) {
       }
 
       const CopyItem& item = copyQueue_[copyQueueIndex_];
-      String flashPath = String(kFlashSlidesDir) + "/" + item.name;
 
       copySrc_ = SD.open(item.path.c_str(), FILE_READ);
-      copyDst_ = LittleFS.open(flashPath.c_str(), FILE_WRITE);
+      copyDst_ = LittleFS.open(item.destPath.c_str(), FILE_WRITE);
       copyFileBytesDone_ = 0;
 
       if (!copySrc_ || !copyDst_) {
