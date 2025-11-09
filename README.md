@@ -10,6 +10,21 @@ Kompaktes Firmware-Projekt für eine tragbare LCD-Brosche: Ein ESP32-Devboard mi
 - [Text App Konfigurator](https://teil3.github.io/LCD-Brosche-OS/tools/textapp-konfigurator/)
 - [Filesystem Browser](https://teil3.github.io/LCD-Brosche-OS/tools/filesystem-browser/)
 
+### QR-Code Generator (Web-Tool)
+- Pfad: `tools/qrcode/index.html` (in der Doku gehostet oder lokal per `python3 -m http.server` starten).
+- Features: Textfeld (max. 387 Zeichen) mit Farbwählern, invert-Schalter, Zoom/Pan im Canvas und Maske der Brosche zur Vorschau.
+- JPEG-Encoder läuft lokal über die vendorte `@jsquash/jpeg`-WASM-Builds – es ist keine Internetverbindung erforderlich, solange der Ordner `tools/bildaufbereiter/mozjpeg/` vorhanden ist.
+- QR-Code-Generierung nutzt gebündelte `qrcode-generator@1.4.4`-Skripte (ebenfalls offline-tauglich). Sollte der lokale Import fehlschlagen, erfolgt ein CDN-Fallback.
+- Ausgabe: Downloads, USB-WebSerial und BLE-Transfers erhalten ein Dateinamensschema `<letzte10Zeichen>-qr.jpg`. Ungültige Zeichen werden gefiltert, leere Eingaben resultieren in `qrcode-qr.jpg`.
+- USB/BLE: Funktioniert nur über HTTPS oder `localhost`. Chromium-basierte Desktop-Browser sind Pflicht (WebSerial/WebBluetooth). Der Statusbereich zeigt, warum Buttons deaktiviert sind (z. B. kein Secure Context).
+- Workflow zum lokalen Testen:
+  ```bash
+  cd tools/qrcode
+  python3 -m http.server 8080
+  # Im Browser https://localhost:8080 oder http://127.0.0.1:8080 aufrufen
+  ```
+  Beim Einsatz über `file://` werden MozJPEG und QR-Library automatisch via CDN geladen – Upload/Senden funktioniert allerdings nur über sichere Origins.
+
 ### Buttonbelegung
 - BTN1: Single -> nächste App, Double -> vorherige App
 - BTN2: (Moduswechsel mit Long-Press): Auto -> Manuell -> Setup -> Auto
