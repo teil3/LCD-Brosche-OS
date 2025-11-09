@@ -98,36 +98,58 @@
   </div>
 
   <script type="module">
-    // --- Import der MozJPEG-WASM-Codec-Factory (jSquash, auf UNPKG gehostet) ---
-    // Dokumentation/Quelle: https://github.com/jamsinclair/jSquash (encode API) –
-    // und Typdefinitionen der Optionen (mozjpeg_enc.d.ts)
+    // --- Import der MozJPEG-WASM-Codec-Factory (jSquash) ---
+    // Dokumentation/Quelle: https://github.com/jamsinclair/jSquash (encode API)
+    // Strategie:
+    // - Bei http/https: Primär lokale Dateien aus ./mozjpeg/ (offline-fähig), Fallback CDN
+    // - Bei file://: Nur CDN (ES6 Module können nicht lokal via file:// geladen werden)
     let moduleFactory = null;
-    let mozModuleSource = 'cdn';
+    let mozModuleSource = 'unknown';
     const mozModuleErrors = [];
-    try {
-      moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
-      console.info('[MozJPEG] Encoder via CDN geladen.');
-    } catch (cdnError) {
-      mozModuleErrors.push(cdnError);
-      console.warn('[MozJPEG] CDN-Import fehlgeschlagen, versuche lokalen Fallback …', cdnError);
+    const isFileProtocol = location.protocol === 'file:';
+
+    if (isFileProtocol) {
+      // file:// - nur CDN möglich (CORS-Einschränkung für ES6 Module)
+      console.info('[MozJPEG] file:// erkannt - verwende CDN (lokale ES6 Module via file:// nicht möglich).');
+      try {
+        moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
+        mozModuleSource = 'cdn';
+        console.info('[MozJPEG] Encoder via CDN geladen (unpkg.com).');
+      } catch (cdnError) {
+        mozModuleErrors.push(cdnError);
+        console.error('[MozJPEG] CDN-Import fehlgeschlagen.', cdnError);
+      }
+    } else {
+      // http/https - lokale Dateien bevorzugt, CDN als Fallback
       try {
         moduleFactory = (await import('./mozjpeg/mozjpeg_enc.js?module')).default;
         mozModuleSource = 'local';
-        console.info('[MozJPEG] Encoder aus ./mozjpeg/ geladen.');
+        console.info('[MozJPEG] Encoder aus ./mozjpeg/ geladen (lokal).');
       } catch (localError) {
         mozModuleErrors.push(localError);
-        console.error('[MozJPEG] Lokaler Fallback fehlgeschlagen.', localError);
+        console.warn('[MozJPEG] Lokaler Import fehlgeschlagen, versuche CDN-Fallback …', localError);
+        try {
+          moduleFactory = (await import('https://unpkg.com/@jsquash/jpeg@1.6.0/codec/enc/mozjpeg_enc.js?module')).default;
+          mozModuleSource = 'cdn';
+          console.info('[MozJPEG] Encoder via CDN geladen (unpkg.com).');
+        } catch (cdnError) {
+          mozModuleErrors.push(cdnError);
+          console.error('[MozJPEG] CDN-Fallback fehlgeschlagen.', cdnError);
+        }
       }
     }
+
     if (!moduleFactory) {
       const combinedError = mozModuleErrors.pop() || new Error('Unbekannter Importfehler');
-      const message = 'MozJPEG-WASM konnte nicht geladen werden. Bitte Internetverbindung prüfen oder ./mozjpeg/ bereitstellen.';
+      const message = isFileProtocol
+        ? 'MozJPEG-WASM konnte nicht geladen werden. Bei file:// ist eine Internetverbindung erforderlich. Alternativ: Mit lokalem HTTP-Server öffnen (z.B. "python3 -m http.server").'
+        : 'MozJPEG-WASM konnte nicht geladen werden. Bitte ./mozjpeg/ bereitstellen oder Internetverbindung prüfen.';
       console.error(message, { mozModuleErrors });
       alert(message);
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.7';
+    const TOOL_VERSION = 'V0.8';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
