@@ -12,14 +12,15 @@
     * { box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f5f7fb;
+      background: linear-gradient(180deg, #f7f9ff 0%, #ffffff 80%);
       color: #1f252d;
       margin: 0;
-      padding: 1.5rem clamp(1rem, 2vw, 2.5rem);
+      padding: 2rem clamp(1rem, 3vw, 3rem);
+      min-height: 100vh;
     }
     header {
-      max-width: 1100px;
-      margin: 0 auto 1.5rem;
+      max-width: 1200px;
+      margin: 0 auto 2rem;
       display: flex;
       flex-wrap: wrap;
       gap: 1.5rem;
@@ -33,22 +34,75 @@
     .header__logo img { width: 100%; height: auto; display: block; }
     .badge { font-size: .75rem; text-transform: uppercase; letter-spacing: .15em; font-weight: 600; color: #4a90e2; }
     .layout {
-      max-width: 1100px;
-      margin: 0 auto 2rem;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      max-width: 1200px;
+      margin: 0 auto 2.5rem;
+      display: flex;
+      gap: 1.6rem;
+      align-items: flex-start;
+    }
+    .column {
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
       gap: 1.2rem;
+    }
+    .column--secondary {
+      flex: 0 0 320px;
     }
     .panel {
       background: #fff;
-      border-radius: 1rem;
-      padding: 1.2rem;
-      box-shadow: 0 15px 35px rgba(15,23,42,.05);
+      border-radius: 1.3rem;
+      padding: 1.3rem;
+      box-shadow: 0 20px 45px rgba(15,23,42,.08);
       display: flex;
       flex-direction: column;
-      gap: .85rem;
+      gap: 1rem;
       min-height: 0;
     }
+    .panel--editor {
+      padding: 1.6rem;
+      gap: 1.2rem;
+    }
+    .panel--preview {
+      align-items: center;
+      text-align: center;
+      gap: 1.2rem;
+    }
+    .preview-card {
+      background: radial-gradient(circle at 30% 20%, #ffffff 0%, #f8fbff 55%, #eef2fb 100%);
+      border-radius: 1.4rem;
+      padding: 1.5rem 1rem 2rem;
+      width: 100%;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.5);
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      font-size: .8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: .35rem .85rem;
+      border-radius: 999px;
+      background: rgba(74,144,226,.12);
+      color: #1f4d8f;
+    }
+    .status-list {
+      list-style: none;
+      padding: 0;
+      margin: .2rem 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+    }
+    .status-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      font-size: .85rem;
+    }
+    .status-list span:first-child { color: rgba(31,37,45,.65); }
     .panel h2 { margin: 0; font-size: 1.15rem; }
     label { font-weight: 600; font-size: .9rem; }
     input[type="text"], input[type="search"], textarea, button, select {
@@ -86,7 +140,9 @@
       gap: .8rem;
       background: #fafbfe;
     }
-    .repo-card__meta { font-size: .85rem; color: rgba(31,37,45,.7); }
+    .repo-card strong { font-size: .95rem; }
+    .repo-card__meta { font-size: .8rem; color: rgba(31,37,45,.55); }
+    .repo-card__meta { font-size: .8rem; color: rgba(31,37,45,.55); }
     .repo-card__actions { display: flex; gap: .4rem; flex-wrap: wrap; }
     .dropzone {
       border: 1.5px dashed #9fb3d9;
@@ -98,13 +154,48 @@
       color: #1f4d8f;
     }
     .dropzone.drag-active { border-color: #4a90e2; background: rgba(74,144,226,.15); }
-    .editor-wrapper { border: 1px solid #dbe1ef; border-radius: .9rem; overflow: hidden; }
-    .CodeMirror { height: 420px; font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace; font-size: .95rem; }
-    .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; justify-content: space-between; }
-    .editor-stats { font-size: .85rem; color: rgba(31,37,45,.7); }
-    .actions-grid { display: flex; flex-wrap: wrap; gap: .6rem; }
-    .actions-grid button { flex: 1 1 160px; }
-    .status-block { font-size: .88rem; line-height: 1.4; }
+    .editor-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+    .editor-meta { display: flex; flex-direction: column; gap: .2rem; }
+    .editor-appname {
+      font-weight: 600;
+      font-size: .95rem;
+      color: #1f4d8f;
+    }
+    .editor-wrapper {
+      border: 1px solid #1c2536;
+      border-radius: 1rem;
+      overflow: hidden;
+      background: #0f1827;
+    }
+    .CodeMirror {
+      height: 420px;
+      font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: .95rem;
+    }
+    .editor-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: .75rem;
+      justify-content: space-between;
+    }
+    .editor-toolbar .actions-grid {
+      flex: 1 1 220px;
+      gap: .4rem;
+    }
+    .editor-stats {
+      font-size: .85rem;
+      color: rgba(31,37,45,.75);
+    }
+    .actions-grid { display: flex; flex-direction: column; gap: .55rem; }
+    .actions-grid button { width: 100%; }
+    .status-block { font-size: .86rem; line-height: 1.5; background: #f6f8ff; border-radius: .9rem; padding: .8rem 1rem; }
     .status-label { font-weight: 600; }
     .preview {
       position: relative;
@@ -145,12 +236,18 @@
     }
     .preview-log__line { margin: 0 0 .25rem; }
     .preview-log__line--error { color: #b2004d; }
-    footer { max-width: 1100px; margin: 0 auto 2rem; font-size: .88rem; color: rgba(31,37,45,.75); }
+    footer { max-width: 1200px; margin: 0 auto 2rem; font-size: .84rem; color: rgba(31,37,45,.75); text-align: center; }
     .tiny { font-size: .78rem; }
-    @media (max-width: 720px) {
+    @media (max-width: 960px) {
+      .layout { flex-direction: column; }
+      .column--secondary { width: 100%; }
       header { flex-direction: column; align-items: center; text-align: center; }
       .header__logo { margin-left: 0; }
-      .preview { transform: scale(.9); }
+    }
+    @media (max-width: 600px) {
+      .editor-head { flex-direction: column; align-items: stretch; }
+      .editor-toolbar { flex-direction: column; align-items: flex-start; }
+      .actions-grid button { width: 100%; }
     }
   </style>
 </head>
@@ -168,75 +265,89 @@
   </header>
 
   <div class="layout">
-    <section class="panel panel--library">
-      <h2>Bibliothek & Vorlagen</h2>
-      <p class="muted">Skripte aus <code>assets/scripts</code> auswählen oder eigene Dateien hierher ziehen.</p>
-      <div class="form-row">
-        <div class="form-group" style="flex:1 1 auto;">
-          <label for="script-search">Suche im GitHub-Repo</label>
-          <input type="search" id="script-search" placeholder="z. B. main.lua" />
+    <div class="column column--primary">
+      <section class="panel panel--editor">
+        <div class="editor-head">
+          <div>
+            <h2>Editor</h2>
+            <p class="muted" style="margin:0;">Dateien werden als <code>/scripts/&lt;name&gt;</code> gespeichert.</p>
+          </div>
+          <div class="editor-meta">
+            <label for="script-name">Dateiname</label>
+            <input type="text" id="script-name" value="main.lua" />
+          </div>
         </div>
-        <button type="button" id="repo-refresh" class="secondary">Repo neu laden</button>
-      </div>
-      <div class="repo-list" id="repo-list">
-        <div class="muted">Lade GitHub-Liste …</div>
-      </div>
-      <p id="github-warning" class="muted tiny"></p>
-      <div class="dropzone" id="local-dropzone">
-        <strong>Eigene Datei:</strong> Ziehe eine <code>.lua</code>-Datei hierher oder <label style="text-decoration:underline; cursor:pointer;"><input type="file" accept=".lua,.txt" id="local-file" hidden />wähle sie aus</label>.
-      </div>
-    </section>
+        <div class="form-row">
+          <div class="form-group" style="flex:1 1 160px;">
+            <label>APP_NAME</label>
+            <div id="app-name-label" class="editor-appname">–</div>
+          </div>
+          <div class="actions-grid" style="flex:1 1 220px;">
+            <button type="button" class="secondary" id="preview-start">▶ Vorschau starten</button>
+            <button type="button" id="preview-stop">⏹ Stopp</button>
+          </div>
+        </div>
+        <div class="editor-wrapper">
+          <textarea id="lua-editor"></textarea>
+        </div>
+        <div class="editor-toolbar">
+          <div class="chip">Live-Vorschau <span id="preview-status">Bereit</span></div>
+          <div class="editor-stats" id="editor-stats">0 Zeilen · 0 Bytes</div>
+        </div>
+      </section>
 
-    <section class="panel panel--editor">
-      <h2>Editor</h2>
-      <div class="form-row">
-        <div class="form-group" style="flex:2 1 200px;">
-          <label for="script-name">Dateiname (wird auf /scripts abgelegt)</label>
-          <input type="text" id="script-name" value="main.lua" />
+      <section class="panel panel--library">
+        <h2>Bibliothek & Vorlagen</h2>
+        <p class="muted">Skripte aus <code>assets/scripts</code> laden oder eigene Dateien hierher ziehen.</p>
+        <div class="form-row">
+          <div class="form-group" style="flex:1 1 auto;">
+            <label for="script-search">Suche im GitHub-Repo</label>
+            <input type="search" id="script-search" placeholder="z. B. main.lua" />
+          </div>
+          <button type="button" id="repo-refresh" class="secondary">Repo neu laden</button>
         </div>
-        <div class="form-group" style="flex:1 1 160px;">
-          <label>APP_NAME</label>
-          <div id="app-name-label" class="muted">–</div>
+        <div class="repo-list" id="repo-list">
+          <div class="muted">Lade GitHub-Liste …</div>
         </div>
-      </div>
-      <div class="editor-wrapper">
-        <textarea id="lua-editor"></textarea>
-      </div>
-      <div class="editor-toolbar">
-        <div class="actions-grid" style="flex:1 1 auto;">
-          <button type="button" class="secondary" id="preview-start">▶ Vorschau starten</button>
-          <button type="button" id="preview-stop">⏹ Stopp</button>
+        <p id="github-warning" class="muted tiny"></p>
+        <div class="dropzone" id="local-dropzone">
+          <strong>Eigene Datei:</strong> Ziehe eine <code>.lua</code>-Datei hierher oder
+          <label style="text-decoration:underline; cursor:pointer;"><input type="file" accept=".lua,.txt" id="local-file" hidden />wähle sie aus</label>.
         </div>
-        <div class="editor-stats" id="editor-stats">0 Zeilen · 0 Bytes</div>
-      </div>
-    </section>
+      </section>
+    </div>
 
-    <section class="panel panel--actions">
-      <h2>Speichern & Übertragen</h2>
-      <div class="actions-grid">
-        <button type="button" class="secondary" id="download-script">Als .lua speichern</button>
-        <button type="button" class="primary" id="send-usb">Über USB senden</button>
-        <button type="button" class="primary" id="send-ble">Über BLE senden</button>
-      </div>
-      <div class="status-block">
-        <div><span class="status-label">Status:</span> <span id="status">Bereit</span></div>
-        <div><span class="status-label">USB:</span> <span id="usb-status">–</span></div>
-        <div><span class="status-label">BLE:</span> <span id="ble-status">–</span></div>
-      </div>
-      <p class="tiny muted">Upload-Fluss identisch zum Bildaufbereiter: Transfer-Modus (Slideshow → BTN2 lang), dann Senden.</p>
-    </section>
-
-    <section class="panel panel--preview">
-      <h2>Live-Vorschau</h2>
-      <div class="preview">
-        <div class="preview__viewport">
-          <canvas id="preview-canvas" width="240" height="240"></canvas>
+    <aside class="column column--secondary">
+      <section class="panel panel--preview">
+        <div class="preview-card">
+          <h2>Live-Vorschau</h2>
+          <div class="preview">
+            <div class="preview__viewport">
+              <canvas id="preview-canvas" width="240" height="240"></canvas>
+            </div>
+            <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske.png" alt="LCD-Brosche Maske" />
+          </div>
         </div>
-        <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske.png" alt="LCD-Brosche Maske" />
-      </div>
-      <div class="status-block"><span class="status-label">Preview:</span> <span id="preview-status">Bereit</span></div>
-      <div class="preview-log" id="preview-log"></div>
-    </section>
+        <div class="preview-log" id="preview-log"></div>
+      </section>
+
+      <section class="panel panel--actions">
+        <h2>Speichern & Übertragen</h2>
+        <div class="actions-grid">
+          <button type="button" class="secondary" id="download-script">Als .lua speichern</button>
+          <button type="button" class="primary" id="send-usb">Über USB senden</button>
+          <button type="button" class="primary" id="send-ble">Über BLE senden</button>
+        </div>
+        <div class="status-block">
+          <ul class="status-list">
+            <li><span>Status</span><span id="status">Bereit</span></li>
+            <li><span>USB</span><span id="usb-status">–</span></li>
+            <li><span>BLE</span><span id="ble-status">–</span></li>
+          </ul>
+        </div>
+        <p class="tiny muted">Vor dem Senden Transfer-Modus aktivieren (Slideshow → BTN2 lang bis „TRANSFER“).</p>
+      </section>
+    </aside>
   </div>
 
   <footer>

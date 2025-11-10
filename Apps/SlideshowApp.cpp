@@ -429,6 +429,13 @@ bool SlideshowApp::prepareCopyQueue_() {
     return false;
   }
 
+  if (!ensureDirectory("/scripts")) {
+    #ifdef USB_DEBUG
+      Serial.println("[Slideshow] prepareCopyQueue: /scripts mkdir failed");
+    #endif
+    return false;
+  }
+
   // Suche alle relevanten Dateien im SD-Root
   File root = SD.open("/");
   if (!root || !root.isDirectory()) {
@@ -514,6 +521,14 @@ bool SlideshowApp::prepareCopyQueue_() {
         Serial.printf("[Slideshow] Queue font: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
       #endif
       continue;  // Nicht weiter verarbeiten
+    } else if (lower.endsWith(".lua")) {
+      ci.type = CopyFileType::Lua;
+      ci.destPath = String("/scripts/") + filename;
+      items.push_back(ci);
+      #ifdef USB_DEBUG
+        Serial.printf("[Slideshow] Queue lua: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
+      #endif
+      continue;
     } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
       // .jpg -> /slides/ (mit Auto-Umbenennung)
       ci.type = CopyFileType::Jpg;
@@ -552,7 +567,7 @@ bool SlideshowApp::prepareCopyQueue_() {
   }
 
   std::sort(items.begin(), items.end(), [](const CopyItem& a, const CopyItem& b) {
-    // Bootlogo und Config zuerst, dann Fonts, dann JPGs
+    // Bootlogo/Config vor Fonts, danach Lua, zuletzt JPGs
     if (a.type != b.type) return static_cast<int>(a.type) < static_cast<int>(b.type);
     return a.name < b.name;
   });

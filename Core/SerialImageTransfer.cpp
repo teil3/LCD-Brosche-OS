@@ -21,6 +21,7 @@ constexpr size_t   kMaxImageSize      = 320 * 1024;   // 320 KB Sicherheitslimit
 constexpr uint32_t kTransferTimeoutMs = 15000;        // 15s Inaktivität -> Abbruch
 constexpr size_t   kChunkBufferSize   = 1024;         // Puffer für eingehende Blöcke
 constexpr size_t   kFilenameCapacity  = sizeof(SerialImageTransfer::Event::filename);
+constexpr const char* kLuaScriptsDir  = "/scripts";
 constexpr size_t   kLineBufferSize    = 160;
 
 enum class RxState : uint8_t { Idle = 0, Receiving, AwaitEnd };
@@ -379,6 +380,13 @@ bool validateSize(size_t sz) {
   return sz > 0 && sz <= kMaxImageSize;
 }
 
+bool endsWithIgnoreCase(const String& value, const char* suffix) {
+  if (!suffix) return false;
+  size_t suffixLen = std::strlen(suffix);
+  if (value.length() < static_cast<int>(suffixLen)) return false;
+  return value.substring(value.length() - suffixLen).equalsIgnoreCase(suffix);
+}
+
 void sanitizeFilename(const char* requested, char* out, size_t outLen) {
   if (!out || outLen == 0) return;
   const char* kDefault = "usb_image.jpg";
@@ -486,16 +494,6 @@ bool beginTransfer(size_t size, const char* requestedName, const char* targetDir
     return false;
   }
 
-  // Use provided directory or default to /slides
-  const char* dir = (targetDir && targetDir[0]) ? targetDir : kFlashSlidesDir;
-
-  // Ensure target directory exists
-  if (!ensureDirectory(dir)) {
-    sendErr("DIRFAIL", "Verzeichnis konnte nicht erstellt werden");
-    postEvent(SerialImageTransfer::EventType::Error, "", size, "Verzeichnis-Fehler");
-    return false;
-  }
-
   if (!validateSize(size)) {
     sendErr("SIZE", "Ungültige Größe");
     postEvent(SerialImageTransfer::EventType::Error, "", size, "Ungültige Dateigröße");
@@ -510,10 +508,34 @@ bool beginTransfer(size_t size, const char* requestedName, const char* targetDir
   char filename[kFilenameCapacity];
   filename[0] = '\0';
   sanitizeFilename(requestedName, filename, sizeof(filename));
-  if (!filename[0]) {
-    generateUniqueFilename(filename, sizeof(filename), dir);
+  String filenameStr(filename);
+  String resolvedDir = (targetDir && targetDir[0]) ? String(targetDir) : String(kFlashSlidesDir);
+  resolvedDir = normalizePath(resolvedDir.c_str());
+  if (resolvedDir.isEmpty()) {
+    resolvedDir = kFlashSlidesDir;
   }
-  ensureUniqueOnFs(filename, sizeof(filename), dir);
+
+  if (endsWithIgnoreCase(filenameStr, ".cfg") ||
+      endsWithIgnoreCase(filenameStr, ".txt") ||
+      endsWithIgnoreCase(filenameStr, ".json")) {
+    resolvedDir = "/";
+  } else if (endsWithIgnoreCase(filenameStr, ".lua")) {
+    resolvedDir = kLuaScriptsDir;
+  }
+
+  const char* dirC = resolvedDir.c_str();
+
+  if (!ensureDirectory(dirC)) {
+    sendErr("DIRFAIL", "Verzeichnis konnte nicht erstellt werden");
+    postEvent(SerialImageTransfer::EventType::Error, "", size, "Verzeichnis-Fehler");
+    return false;
+  }
+
+  if (!filenameStr.length()) {
+    generateUniqueFilename(filename, sizeof(filename), dirC);
+    filenameStr = String(filename);
+  }
+  ensureUniqueOnFs(filename, sizeof(filename), dirC);
 
   if (size <= kMaxImageSize) {
     uint8_t* buffer = static_cast<uint8_t*>(malloc(size));
@@ -524,7 +546,7 @@ bool beginTransfer(size_t size, const char* requestedName, const char* targetDir
   }
 
   if (!gSession.ramBuffer) {
-    String path = String(dir) + "/" + filename;
+    String path = String(dirC) + "/" + filename;
     gSession.file = LittleFS.open(path.c_str(), FILE_WRITE);
     if (!gSession.file) {
       sendErr("OPEN", "Datei konnte nicht angelegt werden");
@@ -542,7 +564,7 @@ bool beginTransfer(size_t size, const char* requestedName, const char* targetDir
   gSession.endHintSent = false;
   gSession.progressPending = false;
   std::snprintf(gSession.filename, sizeof(gSession.filename), "%s", filename);
-  std::snprintf(gSession.targetDir, sizeof(gSession.targetDir), "%s", dir);
+  std::snprintf(gSession.targetDir, sizeof(gSession.targetDir), "%s", resolvedDir.c_str());
 
   sendOk("START", "%s %lu", gSession.filename, static_cast<unsigned long>(size));
 
