@@ -36,6 +36,8 @@ uint16_t clamp8Lua(int value) {
   if (value > 255) return 255;
   return static_cast<uint16_t>(value);
 }
+
+LuaApp* gActiveLuaApp = nullptr;
 }
 
 void LuaApp::init() {
@@ -94,6 +96,7 @@ void LuaApp::draw() {
 }
 
 void LuaApp::shutdown() {
+  restoreDefaultFont_();
   destroyVm_();
 }
 
@@ -142,6 +145,8 @@ void LuaApp::createVm_() {
   luaL_requiref(L_, LUA_MATHLIBNAME, luaopen_math, 1); lua_pop(L_, 1);
   luaL_requiref(L_, LUA_UTF8LIBNAME, luaopen_utf8, 1); lua_pop(L_, 1);
 
+  gActiveLuaApp = this;
+
   lua_newtable(L_);
   lua_pushcfunction(L_, lua_fill); lua_setfield(L_, -2, "fill");
   lua_pushcfunction(L_, lua_clear); lua_setfield(L_, -2, "clear");
@@ -149,6 +154,8 @@ void LuaApp::createVm_() {
   lua_pushcfunction(L_, lua_text); lua_setfield(L_, -2, "text");
   lua_pushcfunction(L_, lua_rgb); lua_setfield(L_, -2, "rgb");
   lua_pushcfunction(L_, lua_print); lua_setfield(L_, -2, "log");
+  lua_pushcfunction(L_, lua_loadFont); lua_setfield(L_, -2, "loadFont");
+  lua_pushcfunction(L_, lua_unloadFont); lua_setfield(L_, -2, "unloadFont");
   lua_setglobal(L_, "brosche");
 
   vmReady_ = true;
@@ -161,6 +168,10 @@ void LuaApp::destroyVm_() {
   }
   vmReady_ = false;
   scriptLoaded_ = false;
+  if (gActiveLuaApp == this) {
+    gActiveLuaApp = nullptr;
+  }
+  restoreDefaultFont_();
 }
 
 bool LuaApp::loadScript_(const char* path) {
@@ -305,6 +316,84 @@ void LuaApp::handleLuaError_() {
   Serial.printf("[Lua] error: %s\n", lastError_.c_str());
   vmReady_ = false;
   scriptLoaded_ = false;
+}
+
+bool LuaApp::loadTftFont_(const String& path) {
+  if (path.isEmpty()) {
+    lastError_ = "Font-Pfad leer";
+    return false;
+  }
+
+  String canonical = path;
+  if (canonical.endsWith(".vlw")) {
+    canonical.remove(canonical.length() - 4);
+  }
+  while (canonical.startsWith("/")) {
+    canonical.remove(0, 1);
+  }
+
+  String chosen = canonical;
+  String fullPath = "/" + chosen + ".vlw";
+  if (!LittleFS.exists(fullPath)) {
+    String lower = canonical;
+    lower.toLowerCase();
+    String lowerPath = "/" + lower + ".vlw";
+    if (LittleFS.exists(lowerPath)) {
+      chosen = lower;
+      fullPath = lowerPath;
+    } else {
+      lastError_ = String("Font fehlt: ") + fullPath;
+      return false;
+    }
+  }
+
+  File font = LittleFS.open(fullPath, FILE_READ);
+  size_t size = font.size();
+  font.close();
+  if (size == 0) {
+    lastError_ = "Font-Datei leer";
+    return false;
+  }
+
+  bool defaultActive = !customFontActive_;
+  if (defaultActive) {
+    TextRenderer::end();
+  } else {
+    tft.unloadFont();
+  }
+
+  tft.loadFont(chosen.c_str(), LittleFS);
+  customFontActive_ = true;
+  currentFontPath_ = fullPath;
+  return true;
+}
+
+void LuaApp::restoreDefaultFont_() {
+  if (!customFontActive_) {
+    return;
+  }
+  tft.unloadFont();
+  TextRenderer::end();
+  TextRenderer::begin();
+  customFontActive_ = false;
+  currentFontPath_.clear();
+}
+
+String LuaApp::sanitizeFontPath_(const char* raw) const {
+  if (!raw) return String();
+  String path = String(raw);
+  path.trim();
+  if (path.isEmpty()) return String();
+  if (!path.startsWith("/")) {
+    path = String("/system/fonts/") + path;
+  }
+  if (path == "/system/font.vlw") {
+    return path;
+  }
+  if (!path.startsWith("/system/fonts/")) {
+    return String();
+  }
+  return path;
 }
 
 void LuaApp::drawStatus_() {
@@ -464,4 +553,31 @@ int LuaApp::lua_print(lua_State* L) {
   }
   Serial.println();
   return 0;
+}
+
+int LuaApp::lua_loadFont(lua_State* L) {
+  if (!gActiveLuaApp) {
+    lua_pushboolean(L, 0);
+    return 1;
+  }
+  const char* raw = luaL_checkstring(L, 1);
+  String path = gActiveLuaApp->sanitizeFontPath_(raw);
+  if (path.isEmpty()) {
+    gActiveLuaApp->lastError_ = "Font-Pfad ungültig";
+    lua_pushboolean(L, 0);
+    return 1;
+  }
+  bool ok = gActiveLuaApp->loadTftFont_(path);
+  lua_pushboolean(L, ok ? 1 : 0);
+  return 1;
+}
+
+int LuaApp::lua_unloadFont(lua_State* L) {
+  if (!gActiveLuaApp) {
+    lua_pushboolean(L, 0);
+    return 1;
+  }
+  gActiveLuaApp->restoreDefaultFont_();
+  lua_pushboolean(L, 1);
+  return 1;
 }

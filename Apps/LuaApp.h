@@ -24,6 +24,8 @@ public:
   bool handleSystemNextRequest();
 
 private:
+  bool customFontActive_ = false;
+  String currentFontPath_;
   lua_State* L_ = nullptr;
   bool vmReady_ = false;
   bool scriptLoaded_ = false;
@@ -47,6 +49,9 @@ private:
   void nextScript_();
   void prevScript_();
   bool hasNextScript_() const;
+  bool loadTftFont_(const String& path);
+  void restoreDefaultFont_();
+  String sanitizeFontPath_(const char* raw) const;
   void handleLuaError_();
   void drawStatus_();
   void ensureScriptsDir_();
@@ -62,4 +67,6 @@ private:
   static int lua_rgb(lua_State* L);
   static int lua_print(lua_State* L);
   static int lua_clear(lua_State* L);
+  static int lua_loadFont(lua_State* L);
+  static int lua_unloadFont(lua_State* L);
 };

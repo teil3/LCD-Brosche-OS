@@ -13,6 +13,53 @@ bool fontLoaded = false;
 int16_t cachedLineHeight = 19;  // Default fallback (15 ascent + 4 descent)
 int16_t cachedAscent = 15;
 int16_t cachedDescent = 4;
+uint8_t* loadedFontData = nullptr;
+
+bool loadFontFromFile(const char* path) {
+  if (!path || !path[0]) return false;
+  if (!LittleFS.exists(path)) {
+    #ifdef USB_DEBUG
+      Serial.printf("[TextRenderer] Font path missing: %s\n", path);
+    #endif
+    return false;
+  }
+  File fontFile = LittleFS.open(path, "r");
+  if (!fontFile) {
+    #ifdef USB_DEBUG
+      Serial.printf("[TextRenderer] Failed to open %s\n", path);
+    #endif
+    return false;
+  }
+  size_t fontFileSize = fontFile.size();
+  if (fontFileSize == 0) {
+    fontFile.close();
+    return false;
+  }
+  #ifdef USB_DEBUG
+    Serial.printf("[TextRenderer] Loading font %s, size=%lu bytes\n",
+                  path, static_cast<unsigned long>(fontFileSize));
+  #endif
+  uint8_t* fontData = (uint8_t*)malloc(fontFileSize);
+  if (!fontData) {
+    fontFile.close();
+    #ifdef USB_DEBUG
+      Serial.println("[TextRenderer] Font malloc failed");
+    #endif
+    return false;
+  }
+  size_t bytesRead = fontFile.readBytes((char*)fontData, fontFileSize);
+  fontFile.close();
+  if (bytesRead != fontFileSize) {
+    free(fontData);
+    #ifdef USB_DEBUG
+      Serial.println("[TextRenderer] Font read failed");
+    #endif
+    return false;
+  }
+  tft.loadFont(fontData);
+  loadedFontData = fontData;
+  return true;
+}
 
 void ensureFont() {
   if (!fontLoaded) {
@@ -34,58 +81,37 @@ void begin() {
     return;
   }
 
-  // Load font from LittleFS into RAM
-  // Note: TFT_eSPI cannot read directly from LittleFS files,
-  // so we load the entire font into RAM (~15 KB)
-  if (LittleFS.exists("/system/font.vlw")) {
-    File fontFile = LittleFS.open("/system/font.vlw", "r");
-    if (fontFile) {
-      size_t fontFileSize = fontFile.size();
-      #ifdef USB_DEBUG
-        Serial.printf("[TextRenderer] Loading font, size=%lu bytes\n", static_cast<unsigned long>(fontFileSize));
-      #endif
-      uint8_t* fontData = (uint8_t*)malloc(fontFileSize);
-      if (fontData) {
-        size_t bytesRead = fontFile.readBytes((char*)fontData, fontFileSize);
-        if (bytesRead == fontFileSize) {
-          tft.loadFont(fontData);
-          // Note: fontData is intentionally NOT freed - TFT_eSPI uses it
-          #ifdef USB_DEBUG
-            Serial.println("[TextRenderer] Font loaded successfully");
-          #endif
-        } else {
-          free(fontData);
-          #ifdef USB_DEBUG
-            Serial.println("[TextRenderer] Font read failed");
-          #endif
-        }
-      } else {
-        #ifdef USB_DEBUG
-          Serial.println("[TextRenderer] Font malloc failed");
-        #endif
-      }
-      fontFile.close();
-    } else {
-      #ifdef USB_DEBUG
-        Serial.println("[TextRenderer] Failed to open font file");
-      #endif
+  const char* kFallbackFonts[] = {
+    "/system/font.vlw",
+    "/system/fonts/FreeSansBold18pt.vlw",
+    "/system/fonts/freesansbold18pt.vlw",
+    "/system/fonts/FreeSans18pt.vlw",
+    "/system/fonts/freesans18pt.vlw",
+    "/system/fonts/FreeSansBold24pt.vlw",
+    "/system/fonts/freesansbold24pt.vlw"
+  };
+
+  fontLoaded = false;
+  for (const char* candidate : kFallbackFonts) {
+    if (loadFontFromFile(candidate)) {
+      fontLoaded = true;
+      break;
     }
-  } else {
-    #ifdef USB_DEBUG
-      Serial.println("[TextRenderer] Font file not found");
-    #endif
   }
-  // If font loading failed, TFT_eSPI will use its default font
+  if (!fontLoaded) {
+    tft.setTextFont(2);
+    tft.setTextSize(1);
+    tft.setTextWrap(false);
+  }
 
   tft.setTextWrap(false);
 
   // Cache font metrics
   cachedLineHeight = tft.fontHeight();
-  // TFT_eSPI doesn't provide direct ascent/descent, estimate from height
-  cachedAscent = (cachedLineHeight * 15) / 19;  // ~79% of height
+  if (cachedLineHeight <= 0) cachedLineHeight = 19;
+  cachedAscent = (cachedLineHeight * 15) / 19;
   cachedDescent = cachedLineHeight - cachedAscent;
 
-  fontLoaded = true;
   #ifdef USB_DEBUG
     Serial.printf("[TextRenderer] Font metrics: height=%d\n", cachedLineHeight);
   #endif
@@ -104,6 +130,10 @@ void end() {
   }
 
   tft.unloadFont();
+  if (loadedFontData) {
+    free(loadedFontData);
+    loadedFontData = nullptr;
+  }
   fontLoaded = false;
 
   #ifdef USB_DEBUG
