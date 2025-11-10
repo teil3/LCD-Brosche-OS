@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <cmath>
 
 #include "Core/Gfx.h"
 #include "Core/TextRenderer.h"
@@ -35,6 +36,11 @@ uint16_t clamp8Lua(int value) {
   if (value < 0) return 0;
   if (value > 255) return 255;
   return static_cast<uint16_t>(value);
+}
+
+int luaToInt(lua_State* L, int idx) {
+  double val = luaL_checknumber(L, idx);
+  return static_cast<int>(val);
 }
 
 LuaApp* gActiveLuaApp = nullptr;
@@ -525,62 +531,62 @@ int LuaApp::lua_clear(lua_State* L) {
 }
 
 int LuaApp::lua_rect(lua_State* L) {
-  int x = luaL_checkinteger(L, 1);
-  int y = luaL_checkinteger(L, 2);
-  int w = luaL_checkinteger(L, 3);
-  int h = luaL_checkinteger(L, 4);
+  int x = luaToInt(L, 1);
+  int y = luaToInt(L, 2);
+  int w = luaToInt(L, 3);
+  int h = luaToInt(L, 4);
   uint32_t color = luaL_optinteger(L, 5, TFT_WHITE);
   tft.fillRect(x, y, w, h, color);
   return 0;
 }
 
 int LuaApp::lua_line(lua_State* L) {
-  int x0 = luaL_checkinteger(L, 1);
-  int y0 = luaL_checkinteger(L, 2);
-  int x1 = luaL_checkinteger(L, 3);
-  int y1 = luaL_checkinteger(L, 4);
+  int x0 = luaToInt(L, 1);
+  int y0 = luaToInt(L, 2);
+  int x1 = luaToInt(L, 3);
+  int y1 = luaToInt(L, 4);
   uint32_t color = luaL_optinteger(L, 5, TFT_WHITE);
   tft.drawLine(x0, y0, x1, y1, color);
   return 0;
 }
 
 int LuaApp::lua_circle(lua_State* L) {
-  int x = luaL_checkinteger(L, 1);
-  int y = luaL_checkinteger(L, 2);
-  int r = luaL_checkinteger(L, 3);
+  int x = luaToInt(L, 1);
+  int y = luaToInt(L, 2);
+  int r = luaToInt(L, 3);
   uint32_t color = luaL_optinteger(L, 4, TFT_WHITE);
   tft.drawCircle(x, y, r, color);
   return 0;
 }
 
 int LuaApp::lua_fillCircle(lua_State* L) {
-  int x = luaL_checkinteger(L, 1);
-  int y = luaL_checkinteger(L, 2);
-  int r = luaL_checkinteger(L, 3);
+  int x = luaToInt(L, 1);
+  int y = luaToInt(L, 2);
+  int r = luaToInt(L, 3);
   uint32_t color = luaL_optinteger(L, 4, TFT_WHITE);
   tft.fillCircle(x, y, r, color);
   return 0;
 }
 
 int LuaApp::lua_triangle(lua_State* L) {
-  int x0 = luaL_checkinteger(L, 1);
-  int y0 = luaL_checkinteger(L, 2);
-  int x1 = luaL_checkinteger(L, 3);
-  int y1 = luaL_checkinteger(L, 4);
-  int x2 = luaL_checkinteger(L, 5);
-  int y2 = luaL_checkinteger(L, 6);
+  int x0 = luaToInt(L, 1);
+  int y0 = luaToInt(L, 2);
+  int x1 = luaToInt(L, 3);
+  int y1 = luaToInt(L, 4);
+  int x2 = luaToInt(L, 5);
+  int y2 = luaToInt(L, 6);
   uint32_t color = luaL_optinteger(L, 7, TFT_WHITE);
   tft.drawTriangle(x0, y0, x1, y1, x2, y2, color);
   return 0;
 }
 
 int LuaApp::lua_fillTriangle(lua_State* L) {
-  int x0 = luaL_checkinteger(L, 1);
-  int y0 = luaL_checkinteger(L, 2);
-  int x1 = luaL_checkinteger(L, 3);
-  int y1 = luaL_checkinteger(L, 4);
-  int x2 = luaL_checkinteger(L, 5);
-  int y2 = luaL_checkinteger(L, 6);
+  int x0 = luaToInt(L, 1);
+  int y0 = luaToInt(L, 2);
+  int x1 = luaToInt(L, 3);
+  int y1 = luaToInt(L, 4);
+  int x2 = luaToInt(L, 5);
+  int y2 = luaToInt(L, 6);
   uint32_t color = luaL_optinteger(L, 7, TFT_WHITE);
   tft.fillTriangle(x0, y0, x1, y1, x2, y2, color);
   return 0;

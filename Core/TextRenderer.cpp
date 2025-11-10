@@ -10,9 +10,14 @@ constexpr int8_t kOutlineOffsets[][2] = {
     {-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
 
 bool fontLoaded = false;
+bool fontAttempted = false;
 int16_t cachedLineHeight = 19;  // Default fallback (15 ascent + 4 descent)
 int16_t cachedAscent = 15;
 int16_t cachedDescent = 4;
+#ifdef ARDUINO_ARCH_ESP32
+#include <esp32-hal-psram.h>
+#endif
+
 uint8_t* loadedFontData = nullptr;
 
 bool loadFontFromFile(const char* path) {
@@ -39,7 +44,15 @@ bool loadFontFromFile(const char* path) {
     Serial.printf("[TextRenderer] Loading font %s, size=%lu bytes\n",
                   path, static_cast<unsigned long>(fontFileSize));
   #endif
-  uint8_t* fontData = (uint8_t*)malloc(fontFileSize);
+  uint8_t* fontData = nullptr;
+  #ifdef ARDUINO_ARCH_ESP32
+    if (psramFound()) {
+      fontData = (uint8_t*)ps_malloc(fontFileSize);
+    }
+  #endif
+  if (!fontData) {
+    fontData = (uint8_t*)malloc(fontFileSize);
+  }
   if (!fontData) {
     fontFile.close();
     #ifdef USB_DEBUG
@@ -83,14 +96,10 @@ void begin() {
 
   const char* kFallbackFonts[] = {
     "/system/font.vlw",
-    "/system/fonts/FreeSansBold18pt.vlw",
-    "/system/fonts/freesansbold18pt.vlw",
-    "/system/fonts/FreeSans18pt.vlw",
-    "/system/fonts/freesans18pt.vlw",
-    "/system/fonts/FreeSansBold24pt.vlw",
-    "/system/fonts/freesansbold24pt.vlw"
+    "/system/fonts/freesansbold18pt.vlw"
   };
 
+  fontAttempted = true;
   fontLoaded = false;
   for (const char* candidate : kFallbackFonts) {
     if (loadFontFromFile(candidate)) {
@@ -135,6 +144,7 @@ void end() {
     loadedFontData = nullptr;
   }
   fontLoaded = false;
+  fontAttempted = false;
 
   #ifdef USB_DEBUG
     Serial.println("[TextRenderer] Font unloaded");
