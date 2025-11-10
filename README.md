@@ -49,6 +49,7 @@ Kompaktes Firmware-Projekt für eine tragbare LCD-Brosche: Ein ESP32-Devboard mi
 - `Config.h` - Pinout, Timings, globale Konstanten
 - `Core/` - App-Basis, AppManager, Button-Handling, Grafik-Utilities, Bootlogo
 - `Apps/` - App-Implementierungen wie `SlideshowApp`
+- Neue LuaApp ermöglicht Skript-gesteuerte Animationen.
 - `assets/` - Beispielinhalte für die SD-Karte (Bilder, Medien, ...)
 - `docs/` - Hardwarefotos und ein Datenblatt als Referenz
 - `partitions.csv` - Benutzerdefinierte Partitions-Tabelle (16 MB Flash, 8 MB LittleFS)
@@ -158,6 +159,43 @@ Prüfen, ob die Fonts vorhanden sind und wie viel Speicher noch frei ist:
 python3 tools/list_littlefs.py --port /dev/ttyACM0 --root /system/fonts
 ```
 Die Ausgabe enthält neben der Dateiliste auch `LittleFS: total/used/free` in KB (nutzt das neue `FSINFO`-Kommando).
+
+## LuaApp (experimentell)
+- Führt Lua 5.4 Skripte direkt auf der Brosche aus. Die App sucht beim Start `/scripts/main.lua` auf LittleFS – falls kein Skript vorhanden ist, läuft ein eingebautes Demo.
+- Unterstützte Standardbibliotheken: `base`, `table`, `string`, `math`, `utf8`. Zudem gibt es das globale Modul `brosche` mit folgenden Funktionen:
+  - `brosche.fill(color565)` / `brosche.clear([color565])`
+  - `brosche.rect(x, y, w, h, color565)`
+  - `brosche.text(x, y, text [, color565 [, bgColor565]])` – Text wird mittig um `(x, y)` gezeichnet.
+  - `brosche.rgb(r, g, b)` → wandelt 0–255 RGB in 16-Bit Farbe.
+  - `brosche.log(...)` → schreibt Debug-Ausgaben über `Serial`.
+- Das Skript darf optional die Funktionen `setup()`, `loop(dt)` und `onButton(btn, event)` definieren. `loop` erhält das Delta in Millisekunden, `btn` ist 1 oder 2, `event` ist `"single"|"double"|"triple"|"long"`.
+- Beispielskript (`assets/scripts/main.lua`):
+  ```lua
+  local angle = 0
+  function setup()
+    brosche.clear()
+    brosche.log('Lua main.lua gestartet')
+  end
+
+  function loop(dt)
+    angle = (angle + dt / 20) % 360
+    local r = math.floor((math.sin(math.rad(angle)) * 0.5 + 0.5) * 255)
+    local g = math.floor((math.sin(math.rad(angle + 120)) * 0.5 + 0.5) * 255)
+    local b = math.floor((math.sin(math.rad(angle + 240)) * 0.5 + 0.5) * 255)
+    brosche.fill(brosche.rgb(r, g, b))
+    brosche.text(120, 120, string.format('%.0f', angle), brosche.rgb(0, 0, 0))
+  end
+
+  function onButton(btn, event)
+    brosche.log(string.format('BTN%d %s', btn, event))
+  end
+  ```
+- Skripte lassen sich wie gewohnt via `tools/filesystem-browser` oder `tools/upload_system_image.py` nach `/scripts` kopieren. Beispiel:
+  ```bash
+  python3 tools/upload_system_image.py /dev/ttyACM0 assets/scripts/main.lua /scripts
+  ```
+- Die App scannt `/scripts` automatisch. BTN2 Single springt zum nächsten `.lua`, BTN2 Long zum vorherigen. Aktuell wird beim Umschalten kurz der neue Dateiname eingeblendet, das Skript startet jedoch teilweise noch einmal bei `main.lua` – daran arbeiten wir (bekanntes Issue).
+- Achtung: Lua verwendet denselben Heap wie die Firmware. Halte Skripte kompakt (ein Thread, keine großen Tabellen), sonst drohen `Lua: kein Speicher` Fehlermeldungen.
 
 ## Dokumentation
 - [Datenblatt (DE)](<docs/ESP32-1,28-Rund-TFT-Display-Board V1.12.pdf>) - Boarddatenblatt und Anschlussplan

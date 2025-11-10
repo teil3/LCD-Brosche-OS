@@ -12,6 +12,7 @@
 #include "Apps/RandomChaoticLinesApp.h"
 #include "Apps/RandomStripesIntoneApp.h"
 #include "Apps/TextApp.h"
+#include "Apps/LuaApp.h"
 #include "Core/Storage.h"
 #include "Core/BleImageTransfer.h"
 #include "Core/SerialImageTransfer.h"
@@ -41,6 +42,7 @@ RandomSquareIntoneApp app_square_intone;
 RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
 TextApp app_text;
+LuaApp app_lua;
 
 void setup() {
   Serial.setRxBufferSize(8192);
@@ -99,6 +101,7 @@ void setup() {
   appman.add(&app_random_stripes);
   appman.add(&app_random_imager);
   appman.add(&app_square_intone);
+  appman.add(&app_lua);
   appman.begin();
   #ifdef USB_DEBUG
     Serial.println("[BOOT] appman.begin done");
@@ -251,3 +254,5 @@ void loop() {
 #include "Apps/TextApp.cpp"
 #include "Core/BleImageTransfer.cpp"
 #include "Core/SerialImageTransfer.cpp"
+#include "Apps/LuaApp.cpp"
+#include "Core/Lua/lua_runtime.cpp"
