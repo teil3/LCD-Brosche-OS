@@ -21,12 +21,14 @@ public:
   void draw() override;
   void shutdown() override;
   void onButton(uint8_t index, BtnEvent e) override;
+  bool handleSystemNextRequest();
 
 private:
   lua_State* L_ = nullptr;
   bool vmReady_ = false;
   bool scriptLoaded_ = false;
   String scriptPath_;
+  String scriptDisplayName_;
   String lastError_;
   std::vector<String> scripts_;
   size_t scriptIndex_ = 0;
@@ -44,11 +46,14 @@ private:
   bool loadCurrentScript_();
   void nextScript_();
   void prevScript_();
+  bool hasNextScript_() const;
   void handleLuaError_();
   void drawStatus_();
   void ensureScriptsDir_();
   void scanScripts_();
   void showScriptInfo_();
+  String determineScriptDisplayName_(const String& path);
+  String fallbackNameForPath_(const String& path) const;
 
   // Lua bindings
   static int lua_fill(lua_State* L);

@@ -208,7 +208,17 @@ void loop() {
       Serial.printf("[BTN] BTN1 %s\n", btnEventName(e1));
     #endif
     switch (e1) {
-      case BtnEvent::Single: appman.next(); break;
+      case BtnEvent::Single: {
+        App* active = appman.activeApp();
+        if (active == &app_lua) {
+          if (!app_lua.handleSystemNextRequest()) {
+            appman.next();
+          }
+        } else {
+          appman.next();
+        }
+        break;
+      }
       case BtnEvent::Double: /* frei: z.B. App-List OSD */ break;
       case BtnEvent::Triple: /* frei */ break;
       case BtnEvent::Long:   appman.prev(); break;

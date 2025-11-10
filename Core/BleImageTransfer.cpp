@@ -24,6 +24,7 @@ constexpr const char* kControlCharUuid   = "abcd0002-1234-1234-1234-1234567890ab
 constexpr size_t      kMaxImageSize      = 320 * 1024;   // 320 KB safety cap
 constexpr uint32_t    kTransferTimeoutMs = 6000;         // abort after 6s idle
 constexpr size_t      kFilenameCapacity  = sizeof(BleImageTransfer::Event::filename);
+constexpr const char* kLuaScriptsDir     = "/scripts";
 
 struct TransferSession {
   bool active = false;
@@ -81,9 +82,14 @@ void sendStatus(const char* text) {
 
 void cleanupFileOnError() {
   if (!gSession.filename[0]) return;
-  String path = String(kFlashSlidesDir) + "/" + gSession.filename;
-  if (LittleFS.exists(path)) {
-    LittleFS.remove(path);
+  const String flashPath = String(kFlashSlidesDir) + "/" + gSession.filename;
+  const String luaPath = String(kLuaScriptsDir) + "/" + gSession.filename;
+  const String rootPath = String("/") + gSession.filename;
+  const String candidates[] = {flashPath, luaPath, rootPath};
+  for (const auto& path : candidates) {
+    if (LittleFS.exists(path)) {
+      LittleFS.remove(path);
+    }
   }
 }
 
@@ -205,6 +211,13 @@ void ensureUniqueOnFs(char* nameBuf, size_t bufLen) {
   generateUniqueFilename(nameBuf, bufLen);
 }
 
+bool endsWithIgnoreCase(const String& value, const char* suffix) {
+  if (!suffix) return false;
+  size_t suffixLen = std::strlen(suffix);
+  if (value.length() < static_cast<int>(suffixLen)) return false;
+  return value.substring(value.length() - suffixLen).equalsIgnoreCase(suffix);
+}
+
 bool beginTransfer(size_t size, const std::string& requestedName) {
   if (!gTransfersEnabled) {
     sendStatus("ERR:DISABLED");
@@ -241,11 +254,32 @@ bool beginTransfer(size_t size, const std::string& requestedName) {
 
   // Config files (.cfg, .txt, .json) go to root (/), images go to /slides
   String filenameStr(filename);
+  String targetDir(kFlashSlidesDir);
+  if (endsWithIgnoreCase(filenameStr, ".cfg") ||
+      endsWithIgnoreCase(filenameStr, ".txt") ||
+      endsWithIgnoreCase(filenameStr, ".json")) {
+    targetDir = "/";
+  } else if (endsWithIgnoreCase(filenameStr, ".lua")) {
+    targetDir = kLuaScriptsDir;
+  }
+
+  if (targetDir == kLuaScriptsDir) {
+    if (!ensureDirectory(kLuaScriptsDir)) {
+      sendStatus("ERR:DIR");
+      postEvent(BleImageTransfer::EventType::Error, filename, size, "Lua-Verzeichnis fehlt");
+      return false;
+    }
+  }
+
   String path;
-  if (filenameStr.endsWith(".cfg") || filenameStr.endsWith(".txt") || filenameStr.endsWith(".json")) {
-    path = String("/") + filename;  // Root directory for config files
+  if (targetDir == "/") {
+    path = String("/") + filename;
   } else {
-    path = String(kFlashSlidesDir) + "/" + filename;  // /slides for images
+    path = targetDir;
+    if (!path.endsWith("/")) {
+      path += "/";
+    }
+    path += filename;
   }
 
   gSession.file = LittleFS.open(path.c_str(), FILE_WRITE);

@@ -1,4 +1,4 @@
--- Converted from 0tone.py to Brosche Lua API
+APP_NAME = 'One Tone'
 local baseColor = {math.random(0, 255), math.random(0, 255), math.random(0, 255)}
 local elapsed = 0
 local interval = 700 -- ms zwischen neuen Mustern

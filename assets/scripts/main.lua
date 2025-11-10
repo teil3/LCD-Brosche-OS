@@ -1,4 +1,4 @@
--- Sample Lua script for the LCD-Brosche
+APP_NAME = 'Farbverlauf'
 local angle = 0
 
 function setup()

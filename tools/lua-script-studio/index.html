@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lua Script Studio für die LCD-Brosche</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material.css" />
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f7fb;
+      color: #1f252d;
+      margin: 0;
+      padding: 1.5rem clamp(1rem, 2vw, 2.5rem);
+    }
+    header {
+      max-width: 1100px;
+      margin: 0 auto 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      align-items: flex-start;
+    }
+    .header__text { flex: 1 1 360px; min-width: 280px; }
+    h1 { font-size: clamp(1.5rem, 3vw, 2.3rem); margin: 0 0 .35rem; }
+    p { line-height: 1.5; margin-top: .2rem; }
+    .muted { color: rgba(31,37,45,.75); }
+    .header__logo { width: 160px; margin-left: auto; }
+    .header__logo img { width: 100%; height: auto; display: block; }
+    .badge { font-size: .75rem; text-transform: uppercase; letter-spacing: .15em; font-weight: 600; color: #4a90e2; }
+    .layout {
+      max-width: 1100px;
+      margin: 0 auto 2rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.2rem;
+    }
+    .panel {
+      background: #fff;
+      border-radius: 1rem;
+      padding: 1.2rem;
+      box-shadow: 0 15px 35px rgba(15,23,42,.05);
+      display: flex;
+      flex-direction: column;
+      gap: .85rem;
+      min-height: 0;
+    }
+    .panel h2 { margin: 0; font-size: 1.15rem; }
+    label { font-weight: 600; font-size: .9rem; }
+    input[type="text"], input[type="search"], textarea, button, select {
+      font: inherit;
+      border-radius: .6rem;
+      border: 1px solid #ced4e2;
+      padding: .5rem .75rem;
+      background: #fff;
+      color: inherit;
+    }
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      transition: background .15s ease, transform .15s ease;
+    }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    button.primary {
+      background: #4a90e2;
+      color: #fff;
+      border-color: #4a90e2;
+    }
+    button.secondary { background: rgba(74,144,226,.1); border-color: rgba(74,144,226,.35); }
+    button:hover:not(:disabled) { background: rgba(74,144,226,.15); }
+    button.primary:hover:not(:disabled) { background: #3d7bc4; }
+    .form-group { display: flex; flex-direction: column; gap: .35rem; }
+    .form-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-end; }
+    .repo-list { display: grid; gap: .55rem; max-height: 420px; overflow: auto; padding-right: .25rem; }
+    .repo-card {
+      border: 1px solid #e1e5ef;
+      border-radius: .8rem;
+      padding: .55rem .75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .8rem;
+      background: #fafbfe;
+    }
+    .repo-card__meta { font-size: .85rem; color: rgba(31,37,45,.7); }
+    .repo-card__actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+    .dropzone {
+      border: 1.5px dashed #9fb3d9;
+      border-radius: .9rem;
+      padding: .9rem;
+      text-align: center;
+      font-size: .9rem;
+      background: rgba(74,144,226,.08);
+      color: #1f4d8f;
+    }
+    .dropzone.drag-active { border-color: #4a90e2; background: rgba(74,144,226,.15); }
+    .editor-wrapper { border: 1px solid #dbe1ef; border-radius: .9rem; overflow: hidden; }
+    .CodeMirror { height: 420px; font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace; font-size: .95rem; }
+    .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; justify-content: space-between; }
+    .editor-stats { font-size: .85rem; color: rgba(31,37,45,.7); }
+    .actions-grid { display: flex; flex-wrap: wrap; gap: .6rem; }
+    .actions-grid button { flex: 1 1 160px; }
+    .status-block { font-size: .88rem; line-height: 1.4; }
+    .status-label { font-weight: 600; }
+    .preview {
+      position: relative;
+      width: 260px;
+      height: 253px;
+      margin: 0 auto;
+    }
+    .preview__viewport {
+      position: absolute;
+      top: 32px;
+      left: 40px;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,.12);
+      box-shadow: 0 1px 10px rgba(15,23,42,.12);
+      background: #000;
+    }
+    canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+    .preview__mask {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      width: 100%;
+      height: 100%;
+    }
+    .preview-log {
+      min-height: 110px;
+      border-radius: .8rem;
+      border: 1px solid #ecedf4;
+      background: #fdfdff;
+      font-family: ui-monospace, SFMono-Regular, SFMono, Consolas, "Liberation Mono", monospace;
+      font-size: .82rem;
+      padding: .75rem;
+      overflow: auto;
+      max-height: 180px;
+    }
+    .preview-log__line { margin: 0 0 .25rem; }
+    .preview-log__line--error { color: #b2004d; }
+    footer { max-width: 1100px; margin: 0 auto 2rem; font-size: .88rem; color: rgba(31,37,45,.75); }
+    .tiny { font-size: .78rem; }
+    @media (max-width: 720px) {
+      header { flex-direction: column; align-items: center; text-align: center; }
+      .header__logo { margin-left: 0; }
+      .preview { transform: scale(.9); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header__text">
+      <div class="badge">Lua Toolkit · Preview</div>
+      <h1>Lua Script Studio für die LCD-Brosche</h1>
+      <p>Verwalte alle <code>.lua</code>-Apps der Brosche direkt im Browser: Vorlagen aus dem GitHub-Repo laden, editieren mit Syntax-Highlighting, in der Vorschau ausführen und per USB oder BLE auf die Brosche übertragen.</p>
+      <p class="muted">Vor jeder Übertragung bitte wie gewohnt in der Slideshow BTN2 lang halten, bis „TRANSFER“ angezeigt wird.</p>
+    </div>
+    <a class="header__logo" href="https://teil3.de" target="_blank" rel="noreferrer">
+      <img src="../bildaufbereiter/teil3_logo.svg" alt="teil3 Logo" />
+    </a>
+  </header>
+
+  <div class="layout">
+    <section class="panel panel--library">
+      <h2>Bibliothek & Vorlagen</h2>
+      <p class="muted">Skripte aus <code>assets/scripts</code> auswählen oder eigene Dateien hierher ziehen.</p>
+      <div class="form-row">
+        <div class="form-group" style="flex:1 1 auto;">
+          <label for="script-search">Suche im GitHub-Repo</label>
+          <input type="search" id="script-search" placeholder="z. B. main.lua" />
+        </div>
+        <button type="button" id="repo-refresh" class="secondary">Repo neu laden</button>
+      </div>
+      <div class="repo-list" id="repo-list">
+        <div class="muted">Lade GitHub-Liste …</div>
+      </div>
+      <p id="github-warning" class="muted tiny"></p>
+      <div class="dropzone" id="local-dropzone">
+        <strong>Eigene Datei:</strong> Ziehe eine <code>.lua</code>-Datei hierher oder <label style="text-decoration:underline; cursor:pointer;"><input type="file" accept=".lua,.txt" id="local-file" hidden />wähle sie aus</label>.
+      </div>
+    </section>
+
+    <section class="panel panel--editor">
+      <h2>Editor</h2>
+      <div class="form-row">
+        <div class="form-group" style="flex:2 1 200px;">
+          <label for="script-name">Dateiname (wird auf /scripts abgelegt)</label>
+          <input type="text" id="script-name" value="main.lua" />
+        </div>
+        <div class="form-group" style="flex:1 1 160px;">
+          <label>APP_NAME</label>
+          <div id="app-name-label" class="muted">–</div>
+        </div>
+      </div>
+      <div class="editor-wrapper">
+        <textarea id="lua-editor"></textarea>
+      </div>
+      <div class="editor-toolbar">
+        <div class="actions-grid" style="flex:1 1 auto;">
+          <button type="button" class="secondary" id="preview-start">▶ Vorschau starten</button>
+          <button type="button" id="preview-stop">⏹ Stopp</button>
+        </div>
+        <div class="editor-stats" id="editor-stats">0 Zeilen · 0 Bytes</div>
+      </div>
+    </section>
+
+    <section class="panel panel--actions">
+      <h2>Speichern & Übertragen</h2>
+      <div class="actions-grid">
+        <button type="button" class="secondary" id="download-script">Als .lua speichern</button>
+        <button type="button" class="primary" id="send-usb">Über USB senden</button>
+        <button type="button" class="primary" id="send-ble">Über BLE senden</button>
+      </div>
+      <div class="status-block">
+        <div><span class="status-label">Status:</span> <span id="status">Bereit</span></div>
+        <div><span class="status-label">USB:</span> <span id="usb-status">–</span></div>
+        <div><span class="status-label">BLE:</span> <span id="ble-status">–</span></div>
+      </div>
+      <p class="tiny muted">Upload-Fluss identisch zum Bildaufbereiter: Transfer-Modus (Slideshow → BTN2 lang), dann Senden.</p>
+    </section>
+
+    <section class="panel panel--preview">
+      <h2>Live-Vorschau</h2>
+      <div class="preview">
+        <div class="preview__viewport">
+          <canvas id="preview-canvas" width="240" height="240"></canvas>
+        </div>
+        <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske.png" alt="LCD-Brosche Maske" />
+      </div>
+      <div class="status-block"><span class="status-label">Preview:</span> <span id="preview-status">Bereit</span></div>
+      <div class="preview-log" id="preview-log"></div>
+    </section>
+  </div>
+
+  <footer>
+    <p>Hinweise: <strong>USB</strong> benötigt Chrome/Edge mit WebSerial. <strong>BLE</strong> funktioniert auf Chromium Desktop/Android mit aktiviertem WebBluetooth. Scripts landen automatisch in <code>/scripts</code>; falls das Verzeichnis fehlt, wird es angelegt.</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/lua/lua.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fengari-web@0.1.4/dist/fengari-web.js"></script>
+  <script type="module">
+    const GH_API = 'https://api.github.com/repos/teil3/LCD-Brosche-OS/contents/assets/scripts';
+    const textEncoder = new TextEncoder();
+    const textDecoder = new TextDecoder();
+    const STORAGE_KEY = 'luaStudio:lastScript';
+    const STORAGE_NAME_KEY = 'luaStudio:lastName';
+    const BLE_UUIDS = {
+      service: '12345678-1234-1234-1234-1234567890ab',
+      chunk: 'abcd0001-1234-1234-1234-1234567890ab',
+      control: 'abcd0002-1234-1234-1234-1234567890ab'
+    };
+
+    const els = {
+      repoList: document.getElementById('repo-list'),
+      repoRefresh: document.getElementById('repo-refresh'),
+      scriptSearch: document.getElementById('script-search'),
+      githubWarning: document.getElementById('github-warning'),
+      dropzone: document.getElementById('local-dropzone'),
+      localFile: document.getElementById('local-file'),
+      scriptName: document.getElementById('script-name'),
+      appNameLabel: document.getElementById('app-name-label'),
+      editorStats: document.getElementById('editor-stats'),
+      downloadBtn: document.getElementById('download-script'),
+      sendUsbBtn: document.getElementById('send-usb'),
+      sendBleBtn: document.getElementById('send-ble'),
+      status: document.getElementById('status'),
+      usbStatus: document.getElementById('usb-status'),
+      bleStatus: document.getElementById('ble-status'),
+      previewStatus: document.getElementById('preview-status'),
+      previewLog: document.getElementById('preview-log'),
+      previewStart: document.getElementById('preview-start'),
+      previewStop: document.getElementById('preview-stop'),
+      canvas: document.getElementById('preview-canvas')
+    };
+
+    const defaultScript = `APP_NAME = 'Lua Demo'\nlocal angle = 0\n\nfunction setup()\n  brosche.clear(brosche.rgb(0,0,0))\n  brosche.log('Demo gestartet')\nend\n\nfunction loop(dt)\n  angle = (angle + dt / 20) % 360\n  local r = math.floor((math.sin(math.rad(angle)) * 0.5 + 0.5) * 255)\n  local g = math.floor((math.sin(math.rad(angle + 120)) * 0.5 + 0.5) * 255)\n  local b = math.floor((math.sin(math.rad(angle + 240)) * 0.5 + 0.5) * 255)\n  brosche.fill(brosche.rgb(r, g, b))\n  brosche.text(120, 120, string.format('%.0f', angle), brosche.rgb(0, 0, 0), brosche.rgb(255,255,255))\nend\n`;
+
+    const editor = window.CodeMirror.fromTextArea(document.getElementById('lua-editor'), {
+      mode: 'lua',
+      theme: 'material',
+      lineNumbers: true,
+      indentUnit: 2,
+      tabSize: 2,
+      lineWrapping: true,
+      matchBrackets: true,
+    });
+    editor.setSize('100%', '420px');
+
+    const state = {
+      repoScripts: [],
+      usbBusy: false,
+      bleBusy: false,
+      preview: { L: null, raf: null, last: 0, running: false },
+      lastSource: 'Browser'
+    };
+
+    const previewCtx = els.canvas.getContext('2d');
+    previewCtx.imageSmoothingEnabled = false;
+    resetPreviewSurface();
+
+    function resetPreviewSurface() {
+      previewCtx.fillStyle = '#000';
+      previewCtx.fillRect(0, 0, 240, 240);
+    }
+
+    function setStatus(text) { els.status.textContent = text; }
+    function setUsbStatus(text) { els.usbStatus.textContent = text || '–'; }
+    function setBleStatus(text) { els.bleStatus.textContent = text || '–'; }
+    function setPreviewStatus(text) { els.previewStatus.textContent = text || '–'; }
+
+    function detectAppName(source) {
+      const match = source.match(/APP_NAME\s*=\s*(?:['"]([^'"]+)['"]|([^\r\n]+))/i);
+      if (match) {
+        return (match[1] || match[2] || '').trim();
+      }
+      return '';
+    }
+
+    function updateEditorStats() {
+      const text = editor.getValue();
+      const lines = editor.lineCount();
+      const bytes = textEncoder.encode(text).length;
+      els.editorStats.textContent = `${lines} Zeilen · ${bytes} Bytes`;
+      const appName = detectAppName(text) || '–';
+      els.appNameLabel.textContent = appName;
+      persistScriptDebounced();
+    }
+
+    function sanitizeScriptName(name) {
+      const base = (name || 'script.lua').trim().toLowerCase();
+      let cleaned = base.replace(/[^a-z0-9._-]+/g, '_');
+      if (!cleaned.endsWith('.lua')) cleaned = cleaned.replace(/\.+$/, '') + '.lua';
+      cleaned = cleaned.replace(/^_+/, '');
+      if (!cleaned || cleaned === '.lua') cleaned = 'script.lua';
+      return cleaned;
+    }
+
+    function setEditorContent(text, filename, sourceLabel = 'Browser') {
+      editor.setValue(text);
+      if (filename) {
+        els.scriptName.value = sanitizeScriptName(filename);
+      }
+      state.lastSource = sourceLabel;
+      updateEditorStats();
+      setStatus(`${filename || 'Skript'} geladen (${sourceLabel})`);
+    }
+
+    async function fetchRepoScripts() {
+      els.repoList.innerHTML = '<div class="muted">Lade …</div>';
+      els.repoRefresh.disabled = true;
+      try {
+        const resp = await fetch(GH_API, { headers: { 'Accept': 'application/vnd.github+json' } });
+        if (!resp.ok) {
+          const message = resp.status === 403 ? 'GitHub-API Limit erreicht. Bitte später erneut versuchen.' : `GitHub-Fehler (${resp.status})`;
+          throw new Error(message);
+        }
+        const data = await resp.json();
+        state.repoScripts = Array.isArray(data)
+          ? data.filter((item) => item?.name?.endsWith('.lua'))
+          : [];
+        renderRepoList();
+        setStatus(`GitHub: ${state.repoScripts.length} Skripte bereit`);
+        els.githubWarning.textContent = '';
+      } catch (error) {
+        els.repoList.innerHTML = `<div class="muted">${error.message}</div>`;
+        els.githubWarning.textContent = error.message;
+      } finally {
+        els.repoRefresh.disabled = false;
+      }
+    }
+
+    function renderRepoList() {
+      const filter = (els.scriptSearch.value || '').trim().toLowerCase();
+      const frag = document.createDocumentFragment();
+      const entries = state.repoScripts.filter((entry) => !filter || entry.name.toLowerCase().includes(filter));
+      if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.className = 'muted';
+        empty.textContent = filter ? 'Kein Treffer' : 'Keine Skripte gefunden';
+        frag.appendChild(empty);
+      } else {
+        entries.forEach((entry) => {
+          const card = document.createElement('article');
+          card.className = 'repo-card';
+          const meta = document.createElement('div');
+          meta.innerHTML = `<strong>${entry.name}</strong><br/><span class="repo-card__meta">${humanReadableSize(entry.size || 0)}</span>`;
+          const actions = document.createElement('div');
+          actions.className = 'repo-card__actions';
+          const loadBtn = document.createElement('button');
+          loadBtn.type = 'button';
+          loadBtn.className = 'secondary';
+          loadBtn.textContent = 'Laden';
+          loadBtn.addEventListener('click', () => loadRepoScript(entry));
+          const downloadBtn = document.createElement('button');
+          downloadBtn.type = 'button';
+          downloadBtn.textContent = 'Download';
+          downloadBtn.addEventListener('click', () => downloadFromUrl(entry.download_url, entry.name));
+          actions.append(loadBtn, downloadBtn);
+          card.append(meta, actions);
+          frag.appendChild(card);
+        });
+      }
+      els.repoList.innerHTML = '';
+      els.repoList.appendChild(frag);
+    }
+
+    async function loadRepoScript(entry) {
+      if (!entry?.download_url) return;
+      try {
+        setStatus(`Lade ${entry.name} …`);
+        const resp = await fetch(entry.download_url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const text = await resp.text();
+        setEditorContent(text, entry.name, 'GitHub');
+      } catch (error) {
+        console.error(error);
+        setStatus('Fehler: ' + error.message);
+        alert('GitHub-Download fehlgeschlagen: ' + error.message);
+      }
+    }
+
+    async function downloadFromUrl(url, name) {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const blob = await resp.blob();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = name || 'script.lua';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      } catch (error) {
+        alert('Download fehlgeschlagen: ' + error.message);
+      }
+    }
+
+    function handleFile(file) {
+      if (!file) return;
+      file.text().then((text) => {
+        setEditorContent(text, file.name, 'Datei');
+      }).catch((err) => {
+        alert('Datei konnte nicht gelesen werden: ' + err.message);
+      });
+    }
+
+    function humanReadableSize(bytes) {
+      if (!bytes) return '0 B';
+      const units = ['B', 'KB', 'MB'];
+      let value = bytes;
+      let unit = units.shift();
+      while (value >= 1024 && units.length) {
+        value /= 1024;
+        unit = units.shift();
+      }
+      return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
+    }
+
+    function downloadCurrentScript() {
+      const { name, text } = getCurrentPayload();
+      const blob = new Blob([text], { type: 'text/plain' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 800);
+    }
+
+    function getCurrentPayload() {
+      const sanitized = sanitizeScriptName(els.scriptName.value);
+      els.scriptName.value = sanitized;
+      const text = editor.getValue();
+      const bytes = textEncoder.encode(text);
+      return { name: sanitized, text, bytes };
+    }
+
+    async function sendViaUsb() {
+      if (!('serial' in navigator)) {
+        alert('WebSerial wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge verwenden.');
+        return;
+      }
+      if (state.usbBusy || state.bleBusy) return;
+      const { name, bytes } = getCurrentPayload();
+      if (!bytes.length) {
+        alert('Skript ist leer.');
+        return;
+      }
+      let port = null;
+      let writer = null;
+      state.usbBusy = true;
+      updateActionButtons();
+      try {
+        setUsbStatus('Seriellen Port auswählen …');
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+        await delay(120);
+        await port.close();
+        await delay(200);
+        await port.open({ baudRate: 115200 });
+        await delay(300);
+        writer = port.writable.getWriter();
+        setUsbStatus('Sende START …');
+        await writer.write(textEncoder.encode(`START ${bytes.length} ${name} /scripts\n`));
+        await delay(200);
+        setUsbStatus('Übertrage Skript …');
+        await writer.write(bytes);
+        await delay(Math.min(4000, Math.max(800, bytes.length / 30)));
+        setUsbStatus('Sende END …');
+        await writer.write(textEncoder.encode('END\n'));
+        await delay(500);
+        setUsbStatus(`Upload abgeschlossen (${name}) ✅`);
+      } catch (error) {
+        console.error(error);
+        const msg = error?.message || error;
+        setUsbStatus('Fehler: ' + msg);
+        alert('USB-Übertragung fehlgeschlagen: ' + msg);
+      } finally {
+        try { if (writer) await writer.releaseLock(); } catch (_) {}
+        try { if (port) await port.close(); } catch (_) {}
+        state.usbBusy = false;
+        updateActionButtons();
+      }
+    }
+
+    async function sendViaBle() {
+      if (!('bluetooth' in navigator)) {
+        alert('WebBluetooth wird nicht unterstützt. Bitte Chrome/Edge verwenden.');
+        return;
+      }
+      if (state.bleBusy || state.usbBusy) return;
+      const { name, bytes } = getCurrentPayload();
+      if (!bytes.length) {
+        alert('Skript ist leer.');
+        return;
+      }
+      let device = null;
+      let server = null;
+      let control = null;
+      let chunk = null;
+      let notifyHandler = null;
+      let startConfirmed = false;
+      let remoteError = null;
+      state.bleBusy = true;
+      updateActionButtons();
+      try {
+        setBleStatus('Brosche auswählen …');
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'Brosche' }],
+          optionalServices: [BLE_UUIDS.service]
+        });
+        setBleStatus('Verbinde …');
+        server = await device.gatt.connect();
+        const service = await server.getPrimaryService(BLE_UUIDS.service);
+        control = await service.getCharacteristic(BLE_UUIDS.control);
+        chunk = await service.getCharacteristic(BLE_UUIDS.chunk);
+        await control.startNotifications();
+        notifyHandler = (event) => {
+          const value = event.target.value;
+          const text = textDecoder.decode(value);
+          if (!text) return;
+          if (text.startsWith('OK:START')) {
+            startConfirmed = true;
+            setBleStatus(`Übertragung gestartet (${name})`);
+          } else if (text.startsWith('OK:PROG:')) {
+            const parts = text.split(':');
+            if (parts.length >= 4) {
+              const received = Number(parts[2]) || 0;
+              const total = Number(parts[3]) || 0;
+              const pct = total ? Math.round((received / total) * 100) : 0;
+              setBleStatus(`Brosche empfängt ${pct}%`);
+            }
+          } else if (text.startsWith('OK:END')) {
+            setBleStatus('Übertragung abgeschlossen ✅');
+          } else if (text.startsWith('ERR:')) {
+            remoteError = text.substring(4) || 'Gerätefehler';
+            setBleStatus('Fehler vom Gerät: ' + remoteError);
+          }
+        };
+        control.addEventListener('characteristicvaluechanged', notifyHandler);
+
+        setBleStatus('Sende START …');
+        await control.writeValue(textEncoder.encode(`START:${bytes.length}:${name}`));
+        await waitFor(() => startConfirmed || remoteError, 2000);
+        if (remoteError) throw new Error(remoteError);
+        if (!startConfirmed) throw new Error('Keine Start-Bestätigung');
+
+        setBleStatus('Sende Skript …');
+        const chunkSize = 20;
+        for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+          const slice = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
+          await chunk.writeValue(slice);
+          await delay(4);
+        }
+
+        await control.writeValue(textEncoder.encode('END'));
+        setBleStatus('Warte auf Bestätigung …');
+        await delay(800);
+      } catch (error) {
+        console.error(error);
+        const msg = error?.message || error;
+        setBleStatus('Fehler: ' + msg);
+        alert('BLE-Übertragung fehlgeschlagen: ' + msg);
+      } finally {
+        try {
+          if (control && notifyHandler) {
+            control.removeEventListener('characteristicvaluechanged', notifyHandler);
+            await control.stopNotifications();
+          }
+        } catch (_) {}
+        try { if (server?.connected) server.disconnect(); } catch (_) {}
+        state.bleBusy = false;
+        updateActionButtons();
+      }
+    }
+
+    function updateActionButtons() {
+      const busy = state.usbBusy || state.bleBusy;
+      els.sendUsbBtn.disabled = busy;
+      els.sendBleBtn.disabled = busy;
+      els.downloadBtn.disabled = false;
+    }
+
+    function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+    async function waitFor(predicate, timeoutMs = 1000, interval = 50) {
+      const start = performance.now();
+      while (performance.now() - start < timeoutMs) {
+        if (predicate()) return true;
+        await delay(interval);
+      }
+      return false;
+    }
+
+    function appendPreviewLog(text, type = 'info') {
+      const line = document.createElement('div');
+      line.className = `preview-log__line preview-log__line--${type}`;
+      line.textContent = text;
+      els.previewLog.appendChild(line);
+      els.previewLog.scrollTop = els.previewLog.scrollHeight;
+      const maxLines = 120;
+      while (els.previewLog.children.length > maxLines) {
+        els.previewLog.removeChild(els.previewLog.firstChild);
+      }
+    }
+
+    const fengariRef = window.fengari;
+    let luaRefs = null;
+    if (fengariRef) {
+      const { lua, lauxlib, lualib, to_luastring, to_jsstring } = fengariRef;
+      luaRefs = { lua, lauxlib, lualib, to_luastring, to_jsstring };
+    } else {
+      setPreviewStatus('Fengari konnte nicht geladen werden');
+    }
+
+    function startPreview() {
+      if (!luaRefs) return;
+      stopPreview();
+      const source = editor.getValue();
+      let L = null;
+      try {
+        L = luaRefs.lauxlib.luaL_newstate();
+        if (!L) throw new Error('Lua VM konnte nicht erstellt werden');
+        luaRefs.lualib.luaL_openlibs(L);
+        registerBroscheBindings(L);
+        const chunkName = luaRefs.to_luastring('preview.lua');
+        const loadStatus = luaRefs.lauxlib.luaL_loadbuffer(L, luaRefs.to_luastring(source), null, chunkName);
+        if (loadStatus !== luaRefs.lua.LUA_OK) {
+          const err = luaRefs.to_jsstring(luaRefs.lua.lua_tostring(L, -1));
+          throw new Error(err);
+        }
+        const callStatus = luaRefs.lua.lua_pcall(L, 0, 0, 0);
+        if (callStatus !== luaRefs.lua.LUA_OK) {
+          const err = luaRefs.to_jsstring(luaRefs.lua.lua_tostring(L, -1));
+          throw new Error(err);
+        }
+        state.preview.L = L;
+        state.preview.running = true;
+        state.preview.last = performance.now();
+        setPreviewStatus('Vorschau läuft');
+        appendPreviewLog('— Preview neu gestartet —');
+        invokeLua('setup');
+        state.preview.raf = requestAnimationFrame(stepPreviewLoop);
+      } catch (error) {
+        console.error(error);
+        appendPreviewLog('Fehler: ' + error.message, 'error');
+        setPreviewStatus('Fehler: ' + error.message);
+        if (L && L !== state.preview.L) {
+          luaRefs.lua.lua_close(L);
+        }
+        state.preview.L = null;
+        state.preview.running = false;
+      }
+    }
+
+    function stepPreviewLoop(timestamp) {
+      if (!state.preview.running || !state.preview.L) return;
+      const dt = Math.max(0, Math.min(1000, timestamp - state.preview.last));
+      state.preview.last = timestamp;
+      try {
+        invokeLua('loop', [Math.floor(dt)]);
+        state.preview.raf = requestAnimationFrame(stepPreviewLoop);
+      } catch (error) {
+        appendPreviewLog('Loop-Fehler: ' + error.message, 'error');
+        setPreviewStatus('Loop-Fehler');
+        stopPreview();
+      }
+    }
+
+    function stopPreview() {
+      if (state.preview.raf) {
+        cancelAnimationFrame(state.preview.raf);
+        state.preview.raf = null;
+      }
+      if (state.preview.L && luaRefs) {
+        luaRefs.lua.lua_close(state.preview.L);
+      }
+      state.preview.L = null;
+      state.preview.running = false;
+      setPreviewStatus('Gestoppt');
+    }
+
+    function invokeLua(name, args = []) {
+      if (!state.preview.L) return false;
+      const { lua, to_luastring, to_jsstring } = luaRefs;
+      lua.lua_getglobal(state.preview.L, to_luastring(name));
+      if (!lua.lua_isfunction(state.preview.L, -1)) {
+        lua.lua_pop(state.preview.L, 1);
+        return false;
+      }
+      args.forEach((arg) => {
+        if (typeof arg === 'number') lua.lua_pushnumber(state.preview.L, arg);
+        else if (typeof arg === 'string') lua.lua_pushstring(state.preview.L, to_luastring(arg));
+        else lua.lua_pushnil(state.preview.L);
+      });
+      const status = lua.lua_pcall(state.preview.L, args.length, 0, 0);
+      if (status !== lua.LUA_OK) {
+        const err = to_jsstring(lua.lua_tostring(state.preview.L, -1));
+        lua.lua_pop(state.preview.L, 1);
+        throw new Error(err);
+      }
+      return true;
+    }
+
+    function registerBroscheBindings(L) {
+      const { lua, to_luastring } = luaRefs;
+      lua.lua_newtable(L);
+      pushBinding(L, 'clear', (color) => fillScreen(color ?? color565(0, 0, 0)));
+      pushBinding(L, 'fill', (color) => fillScreen(color ?? color565(0, 0, 0)));
+      pushBinding(L, 'rect', (x, y, w, h, color) => drawRect(x, y, w, h, color));
+      pushBinding(L, 'text', (x, y, text, color, bg) => drawText(x, y, text, color, bg));
+      pushBinding(L, 'rgb', (r, g, b) => color565(clamp255(r), clamp255(g), clamp255(b)), 1);
+      pushBinding(L, 'log', (...parts) => {
+        const msg = parts.map((v) => String(v ?? '')).join(' ');
+        appendPreviewLog(msg);
+      });
+      lua.lua_setglobal(L, to_luastring('brosche'));
+
+      pushBinding(L, 'print', (...args) => {
+        const msg = args.map((v) => String(v ?? '')).join(' ');
+        appendPreviewLog(msg);
+      }, 0, true);
+    }
+
+    function pushBinding(L, name, fn, returns = 0, global = false) {
+      const { lua, to_luastring } = luaRefs;
+      lua.lua_pushcfunction(L, function(state) {
+        const argc = lua.lua_gettop(state);
+        const jsArgs = [];
+        for (let i = 1; i <= argc; i++) {
+          if (lua.lua_isnumber(state, i)) jsArgs.push(lua.lua_tonumber(state, i));
+          else if (lua.lua_isstring(state, i)) jsArgs.push(luaRefs.to_jsstring(lua.lua_tostring(state, i)));
+          else jsArgs.push(null);
+        }
+        const result = fn(...jsArgs);
+        if (returns === 1) {
+          if (typeof result === 'number') lua.lua_pushnumber(state, result);
+          else lua.lua_pushnil(state);
+          return 1;
+        }
+        return 0;
+      });
+      if (global) {
+        lua.lua_setglobal(L, to_luastring(name));
+      } else {
+        lua.lua_setfield(L, -2, to_luastring(name));
+      }
+    }
+
+    function clamp255(value) {
+      value = Number(value) || 0;
+      return Math.min(255, Math.max(0, Math.floor(value)));
+    }
+
+    function color565(r, g, b) {
+      return ((r & 0xf8) << 8) | ((g & 0xfc) << 3) | (b >> 3);
+    }
+
+    function colorToCss(value) {
+      if (typeof value !== 'number') return '#000000';
+      const r = (value >> 11) & 0x1f;
+      const g = (value >> 5) & 0x3f;
+      const b = value & 0x1f;
+      return `rgb(${Math.round((r / 31) * 255)}, ${Math.round((g / 63) * 255)}, ${Math.round((b / 31) * 255)})`;
+    }
+
+    function fillScreen(color) {
+      previewCtx.fillStyle = colorToCss(color ?? color565(0, 0, 0));
+      previewCtx.fillRect(0, 0, 240, 240);
+    }
+
+    function drawRect(x, y, w, h, color) {
+      previewCtx.fillStyle = colorToCss(color ?? color565(255, 255, 255));
+      previewCtx.fillRect(Number(x) || 0, Number(y) || 0, Number(w) || 0, Number(h) || 0);
+    }
+
+    function drawText(x, y, text, color, bg) {
+      const label = typeof text === 'string' ? text : String(text ?? '');
+      const fill = colorToCss(color ?? color565(255, 255, 255));
+      previewCtx.save();
+      previewCtx.font = '16px "JetBrains Mono", monospace';
+      previewCtx.textAlign = 'center';
+      previewCtx.textBaseline = 'middle';
+      if (bg !== undefined) {
+        const metrics = previewCtx.measureText(label);
+        const width = metrics.width + 6;
+        const height = 22;
+        previewCtx.fillStyle = colorToCss(bg ?? color565(0, 0, 0));
+        previewCtx.fillRect((Number(x) || 0) - width / 2, (Number(y) || 0) - height / 2, width, height);
+      }
+      previewCtx.fillStyle = fill;
+      previewCtx.fillText(label, Number(x) || 0, Number(y) || 0);
+      previewCtx.restore();
+    }
+
+    function handleDropEvents() {
+      ['dragenter', 'dragover'].forEach((evt) => {
+        document.addEventListener(evt, (event) => {
+          if (!event.dataTransfer) return;
+          if (hasFilePayload(event.dataTransfer)) {
+            event.preventDefault();
+            els.dropzone.classList.add('drag-active');
+          }
+        });
+      });
+      ['dragleave', 'drop'].forEach((evt) => {
+        document.addEventListener(evt, () => els.dropzone.classList.remove('drag-active'));
+      });
+      document.addEventListener('drop', (event) => {
+        if (hasFilePayload(event.dataTransfer)) {
+          event.preventDefault();
+          const file = extractFile(event.dataTransfer);
+          handleFile(file);
+        }
+      });
+    }
+
+    function hasFilePayload(dt) {
+      return dt?.types?.includes?.('Files') || (dt?.files && dt.files.length > 0);
+    }
+
+    function extractFile(dt) {
+      if (dt?.files?.length) return dt.files[0];
+      if (dt?.items) {
+        for (const item of dt.items) {
+          if (item.kind === 'file') return item.getAsFile();
+        }
+      }
+      return null;
+    }
+
+    function restoreFromStorage() {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        const storedName = localStorage.getItem(STORAGE_NAME_KEY);
+        if (stored) {
+          setEditorContent(stored, storedName || 'main.lua', 'Browser');
+          return;
+        }
+      } catch (_) {}
+      setEditorContent(defaultScript, 'main.lua', 'Demo');
+    }
+
+    const persistScriptDebounced = debounce(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, editor.getValue());
+        localStorage.setItem(STORAGE_NAME_KEY, els.scriptName.value);
+      } catch (_) {}
+    }, 600);
+
+    function debounce(fn, wait) {
+      let t;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), wait);
+      };
+    }
+
+    els.repoRefresh.addEventListener('click', fetchRepoScripts);
+    els.scriptSearch.addEventListener('input', renderRepoList);
+    els.localFile.addEventListener('change', (event) => handleFile(event.target.files?.[0]));
+    els.downloadBtn.addEventListener('click', downloadCurrentScript);
+    els.sendUsbBtn.addEventListener('click', sendViaUsb);
+    els.sendBleBtn.addEventListener('click', sendViaBle);
+    els.previewStart.addEventListener('click', startPreview);
+    els.previewStop.addEventListener('click', stopPreview);
+    els.scriptName.addEventListener('blur', () => {
+      els.scriptName.value = sanitizeScriptName(els.scriptName.value);
+      persistScriptDebounced();
+    });
+
+    editor.on('change', updateEditorStats);
+
+    restoreFromStorage();
+    fetchRepoScripts();
+    handleDropEvents();
+    updateEditorStats();
+
+    window.addEventListener('beforeunload', () => {
+      stopPreview();
+    });
+  </script>
+</body>
+</html>

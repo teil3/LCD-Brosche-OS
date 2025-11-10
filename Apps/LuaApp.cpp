@@ -14,6 +14,7 @@ constexpr const char* kDefaultScript = "/scripts/main.lua";
 
 const char kEmbeddedScript[] = R"LUA(
 -- Default Lua demo
+APP_NAME = "Lua Demo"
 local t = 0
 function setup()
   brosche.clear()
@@ -52,9 +53,15 @@ void LuaApp::init() {
   }
   if (!ok && LittleFS.exists(kDefaultScript)) {
     ok = loadScript_(kDefaultScript) && runSetup_();
+    if (ok) {
+      showScriptInfo_();
+    }
   }
   if (!ok) {
     ok = runDefaultScript_() && runSetup_();
+    if (ok) {
+      showScriptInfo_();
+    }
   }
 
   if (!ok) {
@@ -92,16 +99,6 @@ void LuaApp::shutdown() {
 
 void LuaApp::onButton(uint8_t index, BtnEvent e) {
   if (!vmReady_) return;
-
-  if (index == 2) {
-    if (e == BtnEvent::Single) {
-      nextScript_();
-      return;
-    } else if (e == BtnEvent::Long) {
-      prevScript_();
-      return;
-    }
-  }
 
   if (!scriptLoaded_) return;
 
@@ -205,6 +202,7 @@ bool LuaApp::loadScript_(const char* path) {
   }
   scriptPath_ = path;
   scriptLoaded_ = true;
+  scriptDisplayName_ = determineScriptDisplayName_(String(path));
   return true;
 }
 
@@ -220,6 +218,7 @@ bool LuaApp::runDefaultScript_() {
   }
   scriptPath_ = "<embedded>";
   scriptLoaded_ = true;
+  scriptDisplayName_ = determineScriptDisplayName_(String(scriptPath_));
   return true;
 }
 
@@ -281,6 +280,24 @@ void LuaApp::prevScript_() {
   loadCurrentScript_();
 }
 
+bool LuaApp::hasNextScript_() const {
+  if (scripts_.empty()) {
+    return false;
+  }
+  return (scriptIndex_ + 1) < scripts_.size();
+}
+
+bool LuaApp::handleSystemNextRequest() {
+  if (!vmReady_) {
+    return false;
+  }
+  if (!hasNextScript_()) {
+    return false;
+  }
+  ++scriptIndex_;
+  return loadCurrentScript_();
+}
+
 void LuaApp::handleLuaError_() {
   const char* msg = lua_tostring(L_, -1);
   lastError_ = msg ? msg : String("Lua Fehler");
@@ -308,10 +325,21 @@ void LuaApp::scanScripts_() {
     lastError_ = "scripts-Verz. fehlt";
     return;
   }
+  const String scriptsPrefix = String(kScriptsDir) + "/";
   for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
     if (f.isDirectory()) continue;
     String name = f.name();
     if (!name.endsWith(".lua")) continue;
+
+    if (!name.startsWith("/")) {
+      name = "/" + name;
+    }
+    if (!name.startsWith(scriptsPrefix)) {
+      int slash = name.lastIndexOf('/');
+      String basename = (slash >= 0) ? name.substring(slash + 1) : name;
+      name = scriptsPrefix + basename;
+    }
+
     found.push_back(name);
   }
   dir.close();
@@ -332,12 +360,57 @@ void LuaApp::scanScripts_() {
 }
 
 void LuaApp::showScriptInfo_() {
-  if (scripts_.empty()) return;
-  String display = scripts_[scriptIndex_];
-  int slash = display.lastIndexOf('/');
-  if (slash >= 0) display = display.substring(slash + 1);
-  tft.fillRect(0, 0, TFT_W, TextRenderer::lineHeight() + 6, TFT_BLACK);
-  TextRenderer::drawCentered(2, String("Lua: ") + display, TFT_WHITE, TFT_BLACK);
+  String display = scriptDisplayName_;
+  if (display.isEmpty()) {
+    display = fallbackNameForPath_(scriptPath_);
+  }
+
+  const int lineHeight = TextRenderer::lineHeight();
+  const int totalHeight = lineHeight * 2 + 8;
+  int y = (tft.height() - totalHeight) / 2;
+  if (y < 0) y = 0;
+
+  tft.fillScreen(TFT_BLACK);
+  TextRenderer::drawCentered(y, "Lua:", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(y + lineHeight + 6, display, TFT_WHITE, TFT_BLACK);
+  delay(700);
+}
+
+String LuaApp::determineScriptDisplayName_(const String& path) {
+  static const char* kNameKeys[] = {"APP_NAME", "app_name", "AppName"};
+  for (const char* key : kNameKeys) {
+    lua_getglobal(L_, key);
+    if (lua_isstring(L_, -1)) {
+      String value = lua_tostring(L_, -1);
+      lua_pop(L_, 1);
+      value.trim();
+      if (!value.isEmpty()) {
+        return value;
+      }
+    } else {
+      lua_pop(L_, 1);
+    }
+  }
+  return fallbackNameForPath_(path);
+}
+
+String LuaApp::fallbackNameForPath_(const String& path) const {
+  if (path.isEmpty()) {
+    return String("Unbenannt");
+  }
+  String name = path;
+  int slash = name.lastIndexOf('/');
+  if (slash >= 0) {
+    name = name.substring(slash + 1);
+  }
+  int dot = name.lastIndexOf('.');
+  if (dot > 0) {
+    name = name.substring(0, dot);
+  }
+  if (name.isEmpty()) {
+    name = path;
+  }
+  return name;
 }
 
 int LuaApp::lua_fill(lua_State* L) {

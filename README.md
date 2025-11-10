@@ -10,6 +10,7 @@ Kompaktes Firmware-Projekt für eine tragbare LCD-Brosche: Ein ESP32-Devboard mi
 - [Text App Konfigurator](https://teil3.github.io/LCD-Brosche-OS/tools/textapp-konfigurator/)
 - [Filesystem Browser](https://teil3.github.io/LCD-Brosche-OS/tools/filesystem-browser/)
 - [QR-Code Generator](https://teil3.github.io/LCD-Brosche-OS/tools/qrcode/)
+- [Lua Script Verwaltung](https://teil3.github.io/LCD-Brosche-OS/tools/lua-script-studio/)
 
 ### QR-Code Generator (Web-Tool)
 - Pfad: `tools/qrcode/index.html` (in der Doku gehostet oder lokal per `python3 -m http.server` starten).
