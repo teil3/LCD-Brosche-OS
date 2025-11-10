@@ -63,10 +63,20 @@ private:
   // Lua bindings
   static int lua_fill(lua_State* L);
   static int lua_rect(lua_State* L);
+  static int lua_line(lua_State* L);
+  static int lua_circle(lua_State* L);
+  static int lua_fillCircle(lua_State* L);
+  static int lua_triangle(lua_State* L);
+  static int lua_fillTriangle(lua_State* L);
   static int lua_text(lua_State* L);
   static int lua_rgb(lua_State* L);
   static int lua_print(lua_State* L);
   static int lua_clear(lua_State* L);
   static int lua_loadFont(lua_State* L);
   static int lua_unloadFont(lua_State* L);
+  static int lua_temperature(lua_State* L);
+  static int lua_millis(lua_State* L);
+  static int lua_fs_read(lua_State* L);
+  static int lua_fs_write(lua_State* L);
+  static int lua_fs_list(lua_State* L);
 };

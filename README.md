@@ -163,12 +163,13 @@ Die Ausgabe enthält neben der Dateiliste auch `LittleFS: total/used/free` in KB
 
 ## LuaApp (experimentell)
 - Führt Lua 5.4 Skripte direkt auf der Brosche aus. Die App sucht beim Start `/scripts/main.lua` auf LittleFS – falls kein Skript vorhanden ist, läuft ein eingebautes Demo.
-- Unterstützte Standardbibliotheken: `base`, `table`, `string`, `math`, `utf8`. Zudem gibt es das globale Modul `brosche` mit folgenden Funktionen:
-  - `brosche.fill(color565)` / `brosche.clear([color565])`
-  - `brosche.rect(x, y, w, h, color565)`
-  - `brosche.text(x, y, text [, color565 [, bgColor565]])` – Text wird mittig um `(x, y)` gezeichnet.
-  - `brosche.rgb(r, g, b)` → wandelt 0–255 RGB in 16-Bit Farbe.
-  - `brosche.log(...)` → schreibt Debug-Ausgaben über `Serial`.
+- Unterstützte Standardbibliotheken: `base`, `table`, `string`, `math`, `utf8`. Zudem gibt es das globale Modul `brosche` mit folgenden Funktionen (Stand November 2025):
+  - Zeichenfunktionen: `fill`, `clear`, `rect`, `line`, `circle`, `fillCircle`, `triangle`, `fillTriangle`, `text`, `rgb`
+  - Logging & Zeit: `log(...)`, `time()` (Millis seit Boot)
+  - Fonts: `loadFont(path)`, `unloadFont()` – Pfade innerhalb `/system/font.vlw` oder `/system/fonts/*.vlw`
+  - Sensorik: `temperature()` liefert den ungekalibrierten internen ESP32-Sensor in °C (nur grobe Trends!)
+  - Dateisystem (whitelistet `/scripts`, `/slides`, `/system/fonts`): `readFile(path)`, `writeFile(path, data)`, `listFiles(dir)`
+  - Weitere Hilfen: `rgb(r,g,b)` konvertiert 0–255-Werte in 16 Bit Farben
 - Das Skript darf optional die Funktionen `setup()`, `loop(dt)` und `onButton(btn, event)` definieren. `loop` erhält das Delta in Millisekunden, `btn` ist 1 oder 2, `event` ist `"single"|"double"|"triple"|"long"`.
 - Beispielskript (`assets/scripts/main.lua`):
   ```lua
@@ -195,6 +196,9 @@ Die Ausgabe enthält neben der Dateiliste auch `LittleFS: total/used/free` in KB
   ```bash
   python3 tools/upload_system_image.py /dev/ttyACM0 assets/scripts/main.lua /scripts
   ```
+- Zusätzliche Beispiele:
+  - `assets/scripts/time_shapes.lua` – zeigt neue Zeichenfunktionen, `brosche.time()` und File-I/O (Logdatei).
+  - `assets/scripts/api_showcase.lua` – kompakte Übersicht über Shapes, Dateizugriff, Temperatur und Buttons.
 - Die App scannt `/scripts` automatisch. BTN2 Single springt zum nächsten `.lua`, BTN2 Long zum vorherigen. Aktuell wird beim Umschalten kurz der neue Dateiname eingeblendet, das Skript startet jedoch teilweise noch einmal bei `main.lua` – daran arbeiten wir (bekanntes Issue).
 - Achtung: Lua verwendet denselben Heap wie die Firmware. Halte Skripte kompakt (ein Thread, keine großen Tabellen), sonst drohen `Lua: kein Speicher` Fehlermeldungen.
 

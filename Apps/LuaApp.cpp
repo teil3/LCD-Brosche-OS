@@ -151,11 +151,21 @@ void LuaApp::createVm_() {
   lua_pushcfunction(L_, lua_fill); lua_setfield(L_, -2, "fill");
   lua_pushcfunction(L_, lua_clear); lua_setfield(L_, -2, "clear");
   lua_pushcfunction(L_, lua_rect); lua_setfield(L_, -2, "rect");
+  lua_pushcfunction(L_, lua_line); lua_setfield(L_, -2, "line");
+  lua_pushcfunction(L_, lua_circle); lua_setfield(L_, -2, "circle");
+  lua_pushcfunction(L_, lua_fillCircle); lua_setfield(L_, -2, "fillCircle");
+  lua_pushcfunction(L_, lua_triangle); lua_setfield(L_, -2, "triangle");
+  lua_pushcfunction(L_, lua_fillTriangle); lua_setfield(L_, -2, "fillTriangle");
   lua_pushcfunction(L_, lua_text); lua_setfield(L_, -2, "text");
   lua_pushcfunction(L_, lua_rgb); lua_setfield(L_, -2, "rgb");
   lua_pushcfunction(L_, lua_print); lua_setfield(L_, -2, "log");
   lua_pushcfunction(L_, lua_loadFont); lua_setfield(L_, -2, "loadFont");
   lua_pushcfunction(L_, lua_unloadFont); lua_setfield(L_, -2, "unloadFont");
+  lua_pushcfunction(L_, lua_temperature); lua_setfield(L_, -2, "temperature");
+  lua_pushcfunction(L_, lua_millis); lua_setfield(L_, -2, "time");
+  lua_pushcfunction(L_, lua_fs_read); lua_setfield(L_, -2, "readFile");
+  lua_pushcfunction(L_, lua_fs_write); lua_setfield(L_, -2, "writeFile");
+  lua_pushcfunction(L_, lua_fs_list); lua_setfield(L_, -2, "listFiles");
   lua_setglobal(L_, "brosche");
 
   vmReady_ = true;
@@ -524,6 +534,58 @@ int LuaApp::lua_rect(lua_State* L) {
   return 0;
 }
 
+int LuaApp::lua_line(lua_State* L) {
+  int x0 = luaL_checkinteger(L, 1);
+  int y0 = luaL_checkinteger(L, 2);
+  int x1 = luaL_checkinteger(L, 3);
+  int y1 = luaL_checkinteger(L, 4);
+  uint32_t color = luaL_optinteger(L, 5, TFT_WHITE);
+  tft.drawLine(x0, y0, x1, y1, color);
+  return 0;
+}
+
+int LuaApp::lua_circle(lua_State* L) {
+  int x = luaL_checkinteger(L, 1);
+  int y = luaL_checkinteger(L, 2);
+  int r = luaL_checkinteger(L, 3);
+  uint32_t color = luaL_optinteger(L, 4, TFT_WHITE);
+  tft.drawCircle(x, y, r, color);
+  return 0;
+}
+
+int LuaApp::lua_fillCircle(lua_State* L) {
+  int x = luaL_checkinteger(L, 1);
+  int y = luaL_checkinteger(L, 2);
+  int r = luaL_checkinteger(L, 3);
+  uint32_t color = luaL_optinteger(L, 4, TFT_WHITE);
+  tft.fillCircle(x, y, r, color);
+  return 0;
+}
+
+int LuaApp::lua_triangle(lua_State* L) {
+  int x0 = luaL_checkinteger(L, 1);
+  int y0 = luaL_checkinteger(L, 2);
+  int x1 = luaL_checkinteger(L, 3);
+  int y1 = luaL_checkinteger(L, 4);
+  int x2 = luaL_checkinteger(L, 5);
+  int y2 = luaL_checkinteger(L, 6);
+  uint32_t color = luaL_optinteger(L, 7, TFT_WHITE);
+  tft.drawTriangle(x0, y0, x1, y1, x2, y2, color);
+  return 0;
+}
+
+int LuaApp::lua_fillTriangle(lua_State* L) {
+  int x0 = luaL_checkinteger(L, 1);
+  int y0 = luaL_checkinteger(L, 2);
+  int x1 = luaL_checkinteger(L, 3);
+  int y1 = luaL_checkinteger(L, 4);
+  int x2 = luaL_checkinteger(L, 5);
+  int y2 = luaL_checkinteger(L, 6);
+  uint32_t color = luaL_optinteger(L, 7, TFT_WHITE);
+  tft.fillTriangle(x0, y0, x1, y1, x2, y2, color);
+  return 0;
+}
+
 int LuaApp::lua_text(lua_State* L) {
   int x = luaL_checkinteger(L, 1);
   int y = luaL_checkinteger(L, 2);
@@ -579,5 +641,127 @@ int LuaApp::lua_unloadFont(lua_State* L) {
   }
   gActiveLuaApp->restoreDefaultFont_();
   lua_pushboolean(L, 1);
+  return 1;
+}
+
+int LuaApp::lua_temperature(lua_State* L) {
+  float tempF = temperatureRead();
+  float tempC = (tempF - 32.0f) * 0.5555556f;
+  lua_pushnumber(L, tempC);
+  return 1;
+}
+
+int LuaApp::lua_millis(lua_State* L) {
+  lua_pushinteger(L, static_cast<lua_Integer>(millis()));
+  return 1;
+}
+
+namespace {
+const char* kFsWhitelist[] = {
+  "/scripts",
+  "/slides",
+  "/system/fonts"
+};
+
+bool pathAllowed(const String& path) {
+  if (!path.startsWith("/")) return false;
+  for (const char* allowed : kFsWhitelist) {
+    if (path.startsWith(allowed)) return true;
+  }
+  return false;
+}
+
+String sanitizeFsPath(const char* raw) {
+  if (!raw) return String();
+  String path = String(raw);
+  path.trim();
+  if (path.isEmpty()) return String();
+  if (!path.startsWith("/")) {
+    path = "/" + path;
+  }
+  // Collapse .. segments simple (no symlinks)
+  path.replace("//", "/");
+  return path;
+}
+}
+
+int LuaApp::lua_fs_read(lua_State* L) {
+  const char* raw = luaL_checkstring(L, 1);
+  String path = sanitizeFsPath(raw);
+  if (path.isEmpty() || !pathAllowed(path)) {
+    lua_pushnil(L);
+    lua_pushstring(L, "Pfad verboten");
+    return 2;
+  }
+  File f = LittleFS.open(path, FILE_READ);
+  if (!f) {
+    lua_pushnil(L);
+    lua_pushstring(L, "Datei fehlt");
+    return 2;
+  }
+  size_t size = f.size();
+  String data;
+  data.reserve(size);
+  while (f.available()) {
+    data += static_cast<char>(f.read());
+  }
+  f.close();
+  lua_pushlstring(L, data.c_str(), data.length());
+  return 1;
+}
+
+int LuaApp::lua_fs_write(lua_State* L) {
+  const char* raw = luaL_checkstring(L, 1);
+  size_t len = 0;
+  const char* content = luaL_checklstring(L, 2, &len);
+  String path = sanitizeFsPath(raw);
+  if (path.isEmpty() || !pathAllowed(path)) {
+    lua_pushboolean(L, 0);
+    lua_pushstring(L, "Pfad verboten");
+    return 2;
+  }
+  File f = LittleFS.open(path, FILE_WRITE);
+  if (!f) {
+    lua_pushboolean(L, 0);
+    lua_pushstring(L, "Schreibfehler");
+    return 2;
+  }
+  size_t written = f.write(reinterpret_cast<const uint8_t*>(content), len);
+  f.close();
+  if (written != len) {
+    lua_pushboolean(L, 0);
+    lua_pushstring(L, "Schreibfehler");
+    return 2;
+  }
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+int LuaApp::lua_fs_list(lua_State* L) {
+  const char* raw = luaL_optstring(L, 1, "/scripts");
+  String path = sanitizeFsPath(raw);
+  if (path.isEmpty() || !pathAllowed(path)) {
+    lua_pushnil(L);
+    lua_pushstring(L, "Pfad verboten");
+    return 2;
+  }
+  File dir = LittleFS.open(path, FILE_READ);
+  if (!dir || !dir.isDirectory()) {
+    lua_pushnil(L);
+    lua_pushstring(L, "Kein Verzeichnis");
+    return 2;
+  }
+  lua_newtable(L);
+  int index = 1;
+  for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
+    String entry = f.name();
+    if (entry.startsWith(path) && path.length() > 1) {
+      entry = entry.substring(path.length() + (path.endsWith("/") ? 0 : 1));
+    }
+    lua_pushinteger(L, index++);
+    lua_pushstring(L, entry.c_str());
+    lua_settable(L, -3);
+  }
+  dir.close();
   return 1;
 }
