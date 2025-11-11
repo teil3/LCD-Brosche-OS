@@ -14,6 +14,6 @@ int16_t measure(const String& text);
 
 void draw(int16_t x, int16_t yTop, const String& text, uint16_t fgColor, uint16_t outlineColor);
 void drawCentered(int16_t yTop, const String& text, uint16_t fgColor, uint16_t outlineColor);
-
+int16_t helperLineHeight();
+void drawHelperCentered(int16_t yTop, const String& text, uint16_t fgColor, uint16_t bgColor);
 }  // namespace TextRenderer
-

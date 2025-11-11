@@ -31,6 +31,13 @@ public:
   void onUsbTransferError(const char* message);
   void onUsbTransferAborted(const char* message);
 
+  bool enterStorageSetup();      // öffnet das Storage-Menü
+  bool startSdCopyWorkflow();    // startet Kopierdialog
+  bool enterTransferMode();      // aktiviert Transferanzeige
+
+  void setUiLocked(bool locked);
+  bool isUiLocked() const { return uiLocked_; }
+
 private:
   enum class ControlMode : uint8_t { Auto = 0, Manual = 1, StorageMenu = 2, BleReceive = 3, DeleteMenu = 4 };
   enum class CopyState : uint8_t { Idle = 0, Confirm = 1, Running = 2, Done = 3, Error = 4, Aborted = 5 };
@@ -106,6 +113,7 @@ private:
   uint32_t deleteSingleTimer_ = 0;
   String deleteCurrentFile_;
   size_t deleteCount_ = 0;
+  bool uiLocked_ = false;
 
   void setControlMode_(ControlMode mode, bool showToast = true);
   void setSource_(SlideSource src, bool showToast = true);

@@ -19,6 +19,68 @@ int16_t cachedDescent = 4;
 #endif
 
 uint8_t* loadedFontData = nullptr;
+constexpr const char* kHelperFontBase = "/system/fontsmall";
+constexpr const char* kHelperFontFile = "/system/fontsmall.vlw";
+bool helperFontChecked = false;
+bool helperFontAvailable = false;
+
+struct HelperFontState {
+  uint8_t prevDatum = TL_DATUM;
+  uint16_t prevPadding = 0;
+  bool restoreMain = false;
+  bool helperLoaded = false;
+};
+
+bool helperFontExists() {
+  if (!helperFontChecked) {
+    helperFontChecked = true;
+    helperFontAvailable = LittleFS.exists(kHelperFontFile);
+  }
+  return helperFontAvailable;
+}
+
+HelperFontState beginHelperFont() {
+  HelperFontState state;
+  state.prevDatum = tft.getTextDatum();
+  state.prevPadding = tft.getTextPadding();
+  state.restoreMain = fontLoaded && (loadedFontData != nullptr);
+
+  if (state.restoreMain) {
+    tft.unloadFont();
+  }
+
+  if (helperFontExists()) {
+    tft.loadFont(kHelperFontBase, LittleFS);
+    tft.setTextWrap(false);
+    state.helperLoaded = true;
+  }
+
+  if (!state.helperLoaded) {
+    tft.setTextFont(2);
+    tft.setTextSize(1);
+    tft.setTextWrap(false);
+  }
+
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextPadding(0);
+  return state;
+}
+
+void endHelperFont(const HelperFontState& state) {
+  if (state.helperLoaded) {
+    tft.unloadFont();
+  }
+  if (state.restoreMain && loadedFontData) {
+    tft.loadFont(loadedFontData);
+    tft.setTextWrap(false);
+  } else if (!state.helperLoaded) {
+    tft.setTextFont(2);
+    tft.setTextSize(1);
+    tft.setTextWrap(false);
+  }
+  tft.setTextDatum(state.prevDatum);
+  tft.setTextPadding(state.prevPadding);
+}
 
 bool loadFontFromFile(const char* path) {
   if (!path || !path[0]) return false;
@@ -200,6 +262,26 @@ void drawCentered(int16_t yTop, const String& text, uint16_t fgColor, uint16_t o
   int16_t x = (tft.width() - measure(text)) / 2;
   if (x < 0) x = 0;
   draw(x, yTop, text, fgColor, outlineColor);
+}
+
+int16_t helperLineHeight() {
+  ensureFont();
+  HelperFontState state = beginHelperFont();
+  int16_t height = tft.fontHeight();
+  if (height <= 0) height = 10;
+  endHelperFont(state);
+  return height;
+}
+
+void drawHelperCentered(int16_t yTop, const String& text, uint16_t fgColor, uint16_t bgColor) {
+  ensureFont();
+  HelperFontState state = beginHelperFont();
+  tft.setTextColor(fgColor, bgColor);
+  int16_t width = tft.textWidth(text);
+  int16_t x = (tft.width() - width) / 2;
+  if (x < 0) x = 0;
+  tft.drawString(text, x, yTop);
+  endHelperFont(state);
 }
 
 }  // namespace TextRenderer

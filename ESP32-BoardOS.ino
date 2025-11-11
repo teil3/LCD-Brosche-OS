@@ -16,6 +16,7 @@
 #include "Core/Storage.h"
 #include "Core/BleImageTransfer.h"
 #include "Core/SerialImageTransfer.h"
+#include "Core/SetupMenu.h"
 
 // Buttons
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
@@ -43,6 +44,7 @@ RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
 TextApp app_text;
 LuaApp app_lua;
+SetupMenu setupMenu;
 
 void setup() {
   Serial.setRxBufferSize(8192);
@@ -191,6 +193,59 @@ static void pumpUsbEvents() {
   }
 }
 
+static bool ensureSlideshowActive() {
+  App* active = appman.activeApp();
+  if (active == &app_slideshow) {
+    return true;
+  }
+  return appman.activate(&app_slideshow);
+}
+
+static void handleSetupSelection() {
+  using Item = SetupMenu::Item;
+  Item choice = setupMenu.currentItem();
+
+  if (choice == Item::Exit) {
+    setupMenu.hide();
+    return;
+  }
+
+  if (!ensureSlideshowActive()) {
+    setupMenu.showStatus("Diashow nicht verfügbar", 1500);
+    return;
+  }
+
+  bool shouldHide = true;
+  switch (choice) {
+    case Item::UsbBleTransfer:
+      if (!app_slideshow.enterTransferMode()) {
+        setupMenu.showStatus("Transfer nicht möglich", 1500);
+        shouldHide = false;
+      }
+      break;
+    case Item::SdTransfer:
+      if (!app_slideshow.startSdCopyWorkflow()) {
+        setupMenu.showStatus("Kopie läuft bereits", 1500);
+        shouldHide = false;
+      }
+      break;
+    case Item::SourceSelection:
+      if (!app_slideshow.enterStorageSetup()) {
+        setupMenu.showStatus("Nicht verfügbar", 1500);
+        shouldHide = false;
+      }
+      break;
+    case Item::Exit:
+    case Item::Count:
+      shouldHide = true;
+      break;
+  }
+
+  if (shouldHide) {
+    setupMenu.hide();
+  }
+}
+
 void loop() {
   #ifdef USB_DEBUG
     static bool first=true;
@@ -207,22 +262,34 @@ void loop() {
     #ifdef USB_DEBUG
       Serial.printf("[BTN] BTN1 %s\n", btnEventName(e1));
     #endif
-    switch (e1) {
-      case BtnEvent::Single: {
-        App* active = appman.activeApp();
-        if (active == &app_lua) {
-          if (!app_lua.handleSystemNextRequest()) {
+    if (setupMenu.isVisible()) {
+      if (e1 == BtnEvent::Double) {
+        setupMenu.hide();
+      }
+    } else {
+      switch (e1) {
+        case BtnEvent::Single: {
+          App* active = appman.activeApp();
+          if (active == &app_lua) {
+            if (!app_lua.handleSystemNextRequest()) {
+              appman.next();
+            }
+          } else {
             appman.next();
           }
-        } else {
-          appman.next();
+          break;
         }
-        break;
+        case BtnEvent::Double:
+          setupMenu.show();
+          break;
+        case BtnEvent::Triple:
+          break;
+        case BtnEvent::Long:
+          appman.prev();
+          break;
+        default:
+          break;
       }
-      case BtnEvent::Double: /* frei: z.B. App-List OSD */ break;
-      case BtnEvent::Triple: /* frei */ break;
-      case BtnEvent::Long:   appman.prev(); break;
-      default: break;
     }
   }
 
@@ -232,19 +299,44 @@ void loop() {
     #ifdef USB_DEBUG
       Serial.printf("[BTN] BTN2 %s\n", btnEventName(e2));
     #endif
-    appman.dispatchBtn(2, e2);
+    if (setupMenu.isVisible()) {
+      switch (e2) {
+        case BtnEvent::Single:
+          setupMenu.next();
+          break;
+        case BtnEvent::Long:
+          handleSetupSelection();
+          break;
+        default:
+          break;
+      }
+    } else {
+      appman.dispatchBtn(2, e2);
+    }
   }
 
+  bool setupActive = setupMenu.isVisible();
+  App* currentApp = appman.activeApp();
+  bool slideshowActive = (currentApp == &app_slideshow);
+  if (slideshowActive) {
+    app_slideshow.setUiLocked(setupActive);
+  } else if (!setupActive && app_slideshow.isUiLocked()) {
+    app_slideshow.setUiLocked(false);
+  }
   SerialImageTransfer::tick();
   pumpUsbEvents();
 
   appman.tick(dt);
-  appman.draw();
+  if (!setupActive) {
+    appman.draw();
+  }
 
   SerialImageTransfer::tick();
   pumpUsbEvents();
   BleImageTransfer::tick();
   pumpBleEvents();
+
+  setupMenu.draw();
 
   delay(1);
 }
@@ -252,6 +344,7 @@ void loop() {
 // --- force-compile local cpp units (Arduino ignores subfolders otherwise)
 #include "Core/Buttons.cpp"
 #include "Core/AppManager.cpp"
+#include "Core/SetupMenu.cpp"
 #include "Core/Gfx.cpp"
 #include "Core/Storage.cpp"
 #include "Core/TextRenderer.cpp"

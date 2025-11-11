@@ -10,6 +10,7 @@ public:
   void next();
   void prev();
   void setActive(int i);
+  bool activate(App* app);
   App* activeApp() const;
   void dispatchBtn(uint8_t idx, BtnEvent e);
   void tick(uint32_t dt);

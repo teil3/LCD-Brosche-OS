@@ -797,6 +797,16 @@ void SlideshowApp::cancelDeleteSingle_() {
   }
 }
 
+void SlideshowApp::setUiLocked(bool locked) {
+  if (uiLocked_ == locked) {
+    return;
+  }
+  uiLocked_ = locked;
+  if (!uiLocked_) {
+    timeSinceSwitch_ = 0;
+  }
+}
+
 void SlideshowApp::performDeleteAll_() {
   if (!ensureFlashReady_()) {
     deleteState_ = DeleteState::Error;
@@ -1649,6 +1659,10 @@ void SlideshowApp::tick(uint32_t delta_ms) {
     return;
   }
 
+  if (uiLocked_) {
+    return;
+  }
+
   if (toastUntil_ && now >= toastUntil_) {
     toastUntil_ = 0;
     toastText_.clear();
@@ -1892,4 +1906,29 @@ void SlideshowApp::shutdown() {
   BleImageTransfer::setTransferEnabled(false);
   SerialImageTransfer::setTransferEnabled(false);
   transferSource_ = TransferSource::None;
+}
+
+bool SlideshowApp::enterStorageSetup() {
+  if (copyState_ == CopyState::Running) {
+    return false;
+  }
+  enterStorageMenu_();
+  return true;
+}
+
+bool SlideshowApp::startSdCopyWorkflow() {
+  if (copyState_ == CopyState::Running) {
+    return true;  // bereits aktiv
+  }
+  enterStorageMenu_();
+  requestCopy_();
+  return true;
+}
+
+bool SlideshowApp::enterTransferMode() {
+  if (copyState_ == CopyState::Running) {
+    return false;
+  }
+  setControlMode_(ControlMode::BleReceive);
+  return true;
 }

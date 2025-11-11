@@ -25,6 +25,17 @@ void AppManager::setActive(int i) {
   apps_[active_]->init();
 }
 
+bool AppManager::activate(App* app) {
+  if (!app) return false;
+  for (size_t i = 0; i < apps_.size(); ++i) {
+    if (apps_[i] == app) {
+      setActive(static_cast<int>(i));
+      return true;
+    }
+  }
+  return false;
+}
+
 void AppManager::next() { if (!apps_.empty()) setActive((active_+1)%apps_.size()); }
 void AppManager::prev() { if (!apps_.empty()) setActive((active_+apps_.size()-1)%apps_.size()); }
 
