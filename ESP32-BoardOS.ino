@@ -16,7 +16,7 @@
 #include "Core/Storage.h"
 #include "Core/BleImageTransfer.h"
 #include "Core/SerialImageTransfer.h"
-#include "Core/SetupMenu.h"
+#include "Core/SystemUI.h"
 
 // Buttons
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
@@ -44,7 +44,7 @@ RandomChaoticLinesApp app_random_lines;
 RandomStripesIntoneApp app_random_stripes;
 TextApp app_text;
 LuaApp app_lua;
-SetupMenu setupMenu;
+SystemUI systemUi;
 
 void setup() {
   Serial.setRxBufferSize(8192);
@@ -109,6 +109,16 @@ void setup() {
     Serial.println("[BOOT] appman.begin done");
   #endif
 
+  SystemUI::Callbacks sysCallbacks;
+  sysCallbacks.ensureSlideshowActive = []() { return ensureSlideshowActive(); };
+  sysCallbacks.setSource = [](SlideSource src) { return app_slideshow.setSlideSource(src, false, false); };
+  sysCallbacks.currentSource = []() { return app_slideshow.slideSource(); };
+  sysCallbacks.sourceLabel = []() { return app_slideshow.sourceLabel(); };
+  sysCallbacks.focusTransferredFile = [](const char* filename, size_t size) {
+    return app_slideshow.focusTransferredFile(filename ? filename : "", size);
+  };
+  systemUi.begin(sysCallbacks);
+
   BleImageTransfer::begin();
   #ifdef USB_DEBUG
     Serial.println("[BOOT] BLE ready");
@@ -135,22 +145,19 @@ static void pumpBleEvents() {
                   evt.filename,
                   evt.message);
 
-    App* active = appman.activeApp();
-    if (active == &app_slideshow) {
-      switch (evt.type) {
-        case BleImageTransfer::EventType::Started:
-          app_slideshow.onBleTransferStarted(evt.filename, evt.size);
-          break;
-        case BleImageTransfer::EventType::Completed:
-          app_slideshow.onBleTransferCompleted(evt.filename, evt.size);
-          break;
-        case BleImageTransfer::EventType::Error:
-          app_slideshow.onBleTransferError(evt.message);
-          break;
-        case BleImageTransfer::EventType::Aborted:
-          app_slideshow.onBleTransferAborted(evt.message);
-          break;
-      }
+    switch (evt.type) {
+      case BleImageTransfer::EventType::Started:
+        systemUi.onTransferStarted(SystemUI::TransferSource::Ble, evt.filename, evt.size);
+        break;
+      case BleImageTransfer::EventType::Completed:
+        systemUi.onTransferCompleted(SystemUI::TransferSource::Ble, evt.filename, evt.size);
+        break;
+      case BleImageTransfer::EventType::Error:
+        systemUi.onTransferError(SystemUI::TransferSource::Ble, evt.message);
+        break;
+      case BleImageTransfer::EventType::Aborted:
+        systemUi.onTransferAborted(SystemUI::TransferSource::Ble, evt.message);
+        break;
     }
   }
 }
@@ -173,22 +180,19 @@ static void pumpUsbEvents() {
                     evt.message);
     #endif
 
-    App* active = appman.activeApp();
-    if (active == &app_slideshow) {
-      switch (evt.type) {
-        case SerialImageTransfer::EventType::Started:
-          app_slideshow.onUsbTransferStarted(evt.filename, evt.size);
-          break;
-        case SerialImageTransfer::EventType::Completed:
-          app_slideshow.onUsbTransferCompleted(evt.filename, evt.size);
-          break;
-        case SerialImageTransfer::EventType::Error:
-          app_slideshow.onUsbTransferError(evt.message);
-          break;
-        case SerialImageTransfer::EventType::Aborted:
-          app_slideshow.onUsbTransferAborted(evt.message);
-          break;
-      }
+    switch (evt.type) {
+      case SerialImageTransfer::EventType::Started:
+        systemUi.onTransferStarted(SystemUI::TransferSource::Usb, evt.filename, evt.size);
+        break;
+      case SerialImageTransfer::EventType::Completed:
+        systemUi.onTransferCompleted(SystemUI::TransferSource::Usb, evt.filename, evt.size);
+        break;
+      case SerialImageTransfer::EventType::Error:
+        systemUi.onTransferError(SystemUI::TransferSource::Usb, evt.message);
+        break;
+      case SerialImageTransfer::EventType::Aborted:
+        systemUi.onTransferAborted(SystemUI::TransferSource::Usb, evt.message);
+        break;
     }
   }
 }
@@ -199,51 +203,6 @@ static bool ensureSlideshowActive() {
     return true;
   }
   return appman.activate(&app_slideshow);
-}
-
-static void handleSetupSelection() {
-  using Item = SetupMenu::Item;
-  Item choice = setupMenu.currentItem();
-
-  if (choice == Item::Exit) {
-    setupMenu.hide();
-    return;
-  }
-
-  if (!ensureSlideshowActive()) {
-    setupMenu.showStatus("Diashow nicht verfügbar", 1500);
-    return;
-  }
-
-  bool shouldHide = true;
-  switch (choice) {
-    case Item::UsbBleTransfer:
-      if (!app_slideshow.enterTransferMode()) {
-        setupMenu.showStatus("Transfer nicht möglich", 1500);
-        shouldHide = false;
-      }
-      break;
-    case Item::SdTransfer:
-      if (!app_slideshow.startSdCopyWorkflow()) {
-        setupMenu.showStatus("Kopie läuft bereits", 1500);
-        shouldHide = false;
-      }
-      break;
-    case Item::SourceSelection:
-      if (!app_slideshow.enterStorageSetup()) {
-        setupMenu.showStatus("Nicht verfügbar", 1500);
-        shouldHide = false;
-      }
-      break;
-    case Item::Exit:
-    case Item::Count:
-      shouldHide = true;
-      break;
-  }
-
-  if (shouldHide) {
-    setupMenu.hide();
-  }
 }
 
 void loop() {
@@ -262,11 +221,8 @@ void loop() {
     #ifdef USB_DEBUG
       Serial.printf("[BTN] BTN1 %s\n", btnEventName(e1));
     #endif
-    if (setupMenu.isVisible()) {
-      if (e1 == BtnEvent::Double) {
-        setupMenu.hide();
-      }
-    } else {
+    bool handled = systemUi.isActive() && systemUi.handleButton(1, e1);
+    if (!handled) {
       switch (e1) {
         case BtnEvent::Single: {
           App* active = appman.activeApp();
@@ -280,7 +236,7 @@ void loop() {
           break;
         }
         case BtnEvent::Double:
-          setupMenu.show();
+          systemUi.showSetup();
           break;
         case BtnEvent::Triple:
           break;
@@ -299,35 +255,25 @@ void loop() {
     #ifdef USB_DEBUG
       Serial.printf("[BTN] BTN2 %s\n", btnEventName(e2));
     #endif
-    if (setupMenu.isVisible()) {
-      switch (e2) {
-        case BtnEvent::Single:
-          setupMenu.next();
-          break;
-        case BtnEvent::Long:
-          handleSetupSelection();
-          break;
-        default:
-          break;
-      }
-    } else {
+    if (!systemUi.handleButton(2, e2)) {
       appman.dispatchBtn(2, e2);
     }
   }
 
-  bool setupActive = setupMenu.isVisible();
+  bool overlayActive = systemUi.shouldPauseApps();
   App* currentApp = appman.activeApp();
   bool slideshowActive = (currentApp == &app_slideshow);
   if (slideshowActive) {
-    app_slideshow.setUiLocked(setupActive);
-  } else if (!setupActive && app_slideshow.isUiLocked()) {
+    app_slideshow.setUiLocked(overlayActive);
+  } else if (!overlayActive && app_slideshow.isUiLocked()) {
     app_slideshow.setUiLocked(false);
   }
+
   SerialImageTransfer::tick();
   pumpUsbEvents();
 
-  appman.tick(dt);
-  if (!setupActive) {
+  if (!overlayActive) {
+    appman.tick(dt);
     appman.draw();
   }
 
@@ -336,7 +282,7 @@ void loop() {
   BleImageTransfer::tick();
   pumpBleEvents();
 
-  setupMenu.draw();
+  systemUi.draw();
 
   delay(1);
 }
@@ -345,6 +291,7 @@ void loop() {
 #include "Core/Buttons.cpp"
 #include "Core/AppManager.cpp"
 #include "Core/SetupMenu.cpp"
+#include "Core/SystemUI.cpp"
 #include "Core/Gfx.cpp"
 #include "Core/Storage.cpp"
 #include "Core/TextRenderer.cpp"

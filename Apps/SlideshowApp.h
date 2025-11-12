@@ -34,9 +34,12 @@ public:
   bool enterStorageSetup();      // öffnet das Storage-Menü
   bool startSdCopyWorkflow();    // startet Kopierdialog
   bool enterTransferMode();      // aktiviert Transferanzeige
-
+  bool setSlideSource(SlideSource src, bool showToast = true, bool renderNow = true);
+  SlideSource slideSource() const { return source_; }
+  String sourceLabel() const;
   void setUiLocked(bool locked);
   bool isUiLocked() const { return uiLocked_; }
+  bool focusTransferredFile(const char* filename, size_t size);
 
 private:
   enum class ControlMode : uint8_t { Auto = 0, Manual = 1, StorageMenu = 2, BleReceive = 3, DeleteMenu = 4 };

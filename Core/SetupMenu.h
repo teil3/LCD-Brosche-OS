@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef CORE_SETUPMENU_H
+#define CORE_SETUPMENU_H
+
 #include <Arduino.h>
 
 // Einfache System-Overlay-Navigation mit vier Einträgen.
@@ -28,3 +31,5 @@ private:
   String statusText_;
   uint32_t statusUntil_ = 0;
 };
+
+#endif // CORE_SETUPMENU_H

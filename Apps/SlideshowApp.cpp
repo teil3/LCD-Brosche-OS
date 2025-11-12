@@ -203,6 +203,49 @@ void SlideshowApp::handleTransferAborted_(TransferSource src, const char* messag
   }
 }
 
+bool SlideshowApp::focusTransferredFile(const char* filename, size_t size) {
+  if (!ensureFlashReady_()) {
+    showToast_("Flash-Fehler", 1800);
+    return false;
+  }
+  if (!rebuildFileListFrom_(SlideSource::Flash)) {
+    showToast_("Keine Flash-Bilder", 1500);
+    return false;
+  }
+  source_ = SlideSource::Flash;
+  String target = filename ? String(filename) : String();
+  target.toLowerCase();
+
+  idx_ = 0;
+  if (!target.isEmpty()) {
+    for (size_t i = 0; i < files_.size(); ++i) {
+      String candidate = files_[i];
+      int s = candidate.lastIndexOf('/');
+      if (s >= 0) candidate = candidate.substring(s + 1);
+      candidate.toLowerCase();
+      if (candidate == target) {
+        idx_ = i;
+        break;
+      }
+    }
+  }
+
+  timeSinceSwitch_ = 0;
+  showCurrent_();
+
+  if (filename && filename[0]) {
+    String msg = String("Transfer fertig: ") + filename;
+    if (size > 0) {
+      uint32_t kb = (static_cast<uint32_t>(size) + 1023) / 1024;
+      msg += " (";
+      msg += kb;
+      msg += " KB)";
+    }
+    showToast_(msg, 1500);
+  }
+  return true;
+}
+
 void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
   if (copyState_ == CopyState::Running) return;
   ControlMode previous = controlMode_;
@@ -337,6 +380,39 @@ void SlideshowApp::setSource_(SlideSource src, bool showToast) {
 void SlideshowApp::toggleSource_() {
   SlideSource next = (source_ == SlideSource::SDCard) ? SlideSource::Flash : SlideSource::SDCard;
   setSource_(next, true);
+}
+
+bool SlideshowApp::setSlideSource(SlideSource src, bool showToast, bool renderNow) {
+  if (source_ == src && !files_.empty()) {
+    if (showToast) {
+      showToast_(String("Quelle: ") + sourceLabel_(), kToastShortMs);
+    }
+    if (renderNow) {
+      showCurrent_();
+    }
+    return true;
+  }
+
+  source_ = src;
+  if (!rebuildFileList_()) {
+    showToast_(String("Keine Bilder: ") + sourceLabel_(), kToastLongMs);
+    tft.fillScreen(TFT_BLACK);
+    return false;
+  }
+
+  idx_ = 0;
+  timeSinceSwitch_ = 0;
+  if (renderNow) {
+    showCurrent_();
+  }
+  if (showToast) {
+    showToast_(String("Quelle: ") + sourceLabel_(), kToastShortMs);
+  }
+  return true;
+}
+
+String SlideshowApp::sourceLabel() const {
+  return sourceLabel_();
 }
 
 void SlideshowApp::enterStorageMenu_() {
