@@ -1,23 +1,18 @@
 #include "SlideshowApp.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 
-#include "Core/Gfx.h"
 #include "Config.h"
-#include "Core/TextRenderer.h"
+#include "Core/Gfx.h"
 #include "Core/Storage.h"
-#include "Core/BleImageTransfer.h"
-#include "Core/SerialImageTransfer.h"
+#include "Core/TextRenderer.h"
 
 namespace {
 constexpr std::array<uint32_t, 5> kDwellSteps{1000, 5000, 10000, 30000, 300000};
 constexpr uint32_t kToastShortMs = 1000;
 constexpr uint32_t kToastLongMs = 1500;
-constexpr uint32_t kCopyTickBudgetMs = 25;   // max Arbeit je loop
-constexpr uint32_t kCopyAbortToastMs = 1200;
-constexpr uint32_t kCopyDoneToastMs = 1800;
-constexpr uint32_t kCopyErrorToastMs = 1800;
 constexpr uint32_t kManualFilenameDurationMs = 2000;
 }
 
@@ -25,182 +20,6 @@ bool SlideshowApp::isJpeg_(const String& n) {
   String l = n;
   l.toLowerCase();
   return l.endsWith(".jpg") || l.endsWith(".jpeg");
-}
-
-void SlideshowApp::onBleTransferStarted(const char* filename, size_t size) {
-  handleTransferStarted_(TransferSource::Ble, filename, size);
-}
-
-void SlideshowApp::onUsbTransferStarted(const char* filename, size_t size) {
-  handleTransferStarted_(TransferSource::Usb, filename, size);
-}
-
-void SlideshowApp::onBleTransferCompleted(const char* filename, size_t size) {
-  handleTransferCompleted_(TransferSource::Ble, filename, size);
-}
-
-void SlideshowApp::onUsbTransferCompleted(const char* filename, size_t size) {
-  handleTransferCompleted_(TransferSource::Usb, filename, size);
-}
-
-void SlideshowApp::onBleTransferError(const char* message) {
-  handleTransferError_(TransferSource::Ble, message);
-}
-
-void SlideshowApp::onBleTransferAborted(const char* message) {
-  handleTransferAborted_(TransferSource::Ble, message);
-}
-
-void SlideshowApp::onUsbTransferError(const char* message) {
-  handleTransferError_(TransferSource::Usb, message);
-}
-
-void SlideshowApp::onUsbTransferAborted(const char* message) {
-  handleTransferAborted_(TransferSource::Usb, message);
-}
-
-const char* SlideshowApp::transferLabel_(TransferSource src) const {
-  switch (src) {
-    case TransferSource::Usb: return "USB";
-    case TransferSource::Ble: return "BLE";
-    default:                  return "Transfer";
-  }
-}
-
-void SlideshowApp::handleTransferStarted_(TransferSource src, const char* filename, size_t size) {
-  if (copyState_ == CopyState::Running) return;
-  const char* label = transferLabel_(src);
-  if (controlMode_ != ControlMode::BleReceive) {
-    showToast_(String(label) + String(": Modus aktivieren"), 1200);
-    return;
-  }
-
-  transferSource_ = src;
-  bleState_ = BleState::Receiving;
-  bleLastFilename_ = filename ? String(filename) : String();
-  bleLastBytesExpected_ = size;
-  bleLastBytesReceived_ = 0;
-  if (bleLastFilename_.isEmpty()) {
-    bleLastMessage_ = String(label) + String(": Empfang läuft");
-  } else {
-    bleLastMessage_ = String(label) + String(": ") + bleLastFilename_;
-  }
-  bleOverlayDirty_ = true;
-}
-
-void SlideshowApp::handleTransferCompleted_(TransferSource src, const char* filename, size_t size) {
-  if (copyState_ == CopyState::Running) return;
-
-  const char* label = transferLabel_(src);
-  bool inTransferMode = (controlMode_ == ControlMode::BleReceive);
-  if (!ensureFlashReady_()) {
-    if (inTransferMode) {
-      transferSource_ = src;
-      bleState_ = BleState::Error;
-      bleLastMessage_ = "Flash-Fehler";
-      bleOverlayDirty_ = true;
-    } else {
-      showToast_(String(label) + String(": Flash Fehler"), 1800);
-    }
-    return;
-  }
-
-  if (!rebuildFileListFrom_(SlideSource::Flash)) {
-    if (inTransferMode) {
-      transferSource_ = src;
-      bleState_ = BleState::Error;
-      bleLastMessage_ = "Keine Flash-Bilder";
-      bleOverlayDirty_ = true;
-    } else {
-      showToast_(String(label) + String(": Keine Flash-Bilder"), 1500);
-    }
-    return;
-  }
-
-  source_ = SlideSource::Flash;
-  String target = filename ? String(filename) : String();
-  target.toLowerCase();
-
-  idx_ = 0;
-  if (!target.isEmpty()) {
-    for (size_t i = 0; i < files_.size(); ++i) {
-      String candidate = files_[i];
-      int s = candidate.lastIndexOf('/');
-      if (s >= 0) candidate = candidate.substring(s + 1);
-      candidate.toLowerCase();
-      if (candidate == target) {
-        idx_ = i;
-        break;
-      }
-    }
-  }
-
-  timeSinceSwitch_ = 0;
-  showCurrent_();
-
-  if (inTransferMode) {
-    transferSource_ = src;
-    bleState_ = BleState::Completed;
-    bleLastFilename_ = filename ? String(filename) : String();
-    bleLastBytesExpected_ = size;
-    bleLastBytesReceived_ = size;
-    bleLastMessage_ = bleLastFilename_.isEmpty() ? String("Empfang abgeschlossen")
-                                                 : String("Fertig: ") + bleLastFilename_;
-    bleOverlayDirty_ = true;
-    bleLastHeader_.clear();
-    bleLastPrimary_.clear();
-    bleLastSecondary_.clear();
-    bleLastFooter_.clear();
-  } else {
-    String msg = String(label) + String(" fertig");
-    if (filename && filename[0]) {
-      msg += ": ";
-      msg += filename;
-    }
-    if (size > 0) {
-      uint32_t kb = (static_cast<uint32_t>(size) + 1023) / 1024;
-      msg += " (";
-      msg += kb;
-      msg += " KB)";
-    }
-    showToast_(msg, 1800);
-  }
-}
-
-void SlideshowApp::handleTransferError_(TransferSource src, const char* message) {
-  if (copyState_ == CopyState::Running) return;
-  const char* label = transferLabel_(src);
-  if (controlMode_ == ControlMode::BleReceive) {
-    transferSource_ = src;
-    bleState_ = BleState::Error;
-    bleLastMessage_ = message ? String(message) : String("Fehler");
-    bleOverlayDirty_ = true;
-  } else {
-    String msg = String(label) + String(" Fehler");
-    if (message && message[0]) {
-      msg += ": ";
-      msg += message;
-    }
-    showToast_(msg, 1800);
-  }
-}
-
-void SlideshowApp::handleTransferAborted_(TransferSource src, const char* message) {
-  if (copyState_ == CopyState::Running) return;
-  const char* label = transferLabel_(src);
-  if (controlMode_ == ControlMode::BleReceive) {
-    transferSource_ = src;
-    bleState_ = BleState::Aborted;
-    bleLastMessage_ = message ? String(message) : String("Abgebrochen");
-    bleOverlayDirty_ = true;
-  } else {
-    String msg = String(label) + String(" abgebrochen");
-    if (message && message[0]) {
-      msg += ": ";
-      msg += message;
-    }
-    showToast_(msg, 1200);
-  }
 }
 
 bool SlideshowApp::focusTransferredFile(const char* filename, size_t size) {
@@ -247,25 +66,8 @@ bool SlideshowApp::focusTransferredFile(const char* filename, size_t size) {
 }
 
 void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
-  if (copyState_ == CopyState::Running) return;
   ControlMode previous = controlMode_;
   if (previous == mode) return;
-
-  if (previous == ControlMode::BleReceive) {
-    BleImageTransfer::setTransferEnabled(false);
-    SerialImageTransfer::setTransferEnabled(false);
-    bleState_ = BleState::Idle;
-    bleLastBytesExpected_ = 0;
-    bleLastBytesReceived_ = 0;
-    bleOverlayNeedsClear_ = true;
-    bleProgressFrameDrawn_ = false;
-    bleBarFill_ = 0;
-    bleLastHeader_.clear();
-    bleLastPrimary_.clear();
-    bleLastSecondary_.clear();
-    bleLastFooter_.clear();
-    transferSource_ = TransferSource::None;
-  }
 
   controlMode_ = mode;
   if (controlMode_ != ControlMode::Manual) {
@@ -273,68 +75,36 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
     manualFilenameLabel_.clear();
     manualFilenameUntil_ = 0;
   }
-  if (controlMode_ == ControlMode::StorageMenu) {
-    markStorageMenuDirty_();
-  }
-  if (controlMode_ == ControlMode::BleReceive) {
-    bleState_ = BleState::Idle;
-    transferSource_ = TransferSource::None;
-    bleLastMessage_.clear();
-    bleLastFilename_.clear();
-    bleLastBytesExpected_ = 0;
-    bleLastBytesReceived_ = 0;
-    bleOverlayDirty_ = true;
-    BleImageTransfer::setTransferEnabled(true);
-    SerialImageTransfer::setTransferEnabled(true);
-    bleOverlayNeedsClear_ = true;
-    bleProgressFrameDrawn_ = false;
-    bleBarFill_ = 0;
-    bleLastHeader_.clear();
-    bleLastPrimary_.clear();
-    bleLastSecondary_.clear();
-    bleLastFooter_.clear();
-  }
+
   switch (controlMode_) {
     case ControlMode::Auto:
       auto_mode = true;
-      if (showToast) showToast_(modeLabel_(), kToastShortMs);
+      if (showToast) {
+        showToast_(modeLabel_(), kToastShortMs);
+      }
       break;
 
     case ControlMode::Manual:
       auto_mode = false;
-      if (showToast) showToast_(modeLabel_(), kToastShortMs);
-      break;
-
-    case ControlMode::StorageMenu:
-      auto_mode = false;
-      toastText_.clear();
-      toastUntil_ = 0;
-      storageMenuLastFooter_.clear();
-      storageMenuLastSource_.clear();
-      storageMenuLastToastActive_ = false;
-      break;
-
-    case ControlMode::BleReceive:
-      auto_mode = false;
-      toastText_.clear();
-      toastUntil_ = 0;
-      bleOverlayDirty_ = true;
-      bleOverlayNeedsClear_ = true;
+      if (showToast) {
+        showToast_(modeLabel_(), kToastShortMs);
+      }
       break;
 
     case ControlMode::DeleteMenu:
       auto_mode = false;
       toastText_.clear();
       toastUntil_ = 0;
+      toastDirty_ = false;
       deleteState_ = DeleteState::Idle;
       deleteMenuSelection_ = 0;
       markDeleteMenuDirty_();
       break;
   }
+
   timeSinceSwitch_ = 0;
 
-  if ((previous == ControlMode::StorageMenu || previous == ControlMode::BleReceive || previous == ControlMode::DeleteMenu) &&
-      controlMode_ != ControlMode::StorageMenu && controlMode_ != ControlMode::BleReceive && controlMode_ != ControlMode::DeleteMenu) {
+  if (controlMode_ != ControlMode::DeleteMenu) {
     if (!files_.empty()) {
       showCurrent_();
     } else {
@@ -354,17 +124,8 @@ void SlideshowApp::setSource_(SlideSource src, bool showToast) {
   }
 
   source_ = src;
-  if (controlMode_ == ControlMode::StorageMenu) {
-    markStorageMenuDirty_();
-  }
   if (!rebuildFileList_()) {
-    if (controlMode_ == ControlMode::StorageMenu) {
-      toastText_.clear();
-      toastUntil_ = 0;
-      markStorageMenuDirty_();
-    } else {
-      showToast_(String("Keine Bilder: ") + sourceLabel_(), kToastLongMs);
-    }
+    showToast_(String("Keine Bilder: ") + sourceLabel_(), kToastLongMs);
     tft.fillScreen(TFT_BLACK);
     return;
   }
@@ -375,11 +136,6 @@ void SlideshowApp::setSource_(SlideSource src, bool showToast) {
   if (showToast) {
     showToast_(String("Quelle: ") + sourceLabel_(), kToastShortMs);
   }
-}
-
-void SlideshowApp::toggleSource_() {
-  SlideSource next = (source_ == SlideSource::SDCard) ? SlideSource::Flash : SlideSource::SDCard;
-  setSource_(next, true);
 }
 
 bool SlideshowApp::setSlideSource(SlideSource src, bool showToast, bool renderNow) {
@@ -415,33 +171,9 @@ String SlideshowApp::sourceLabel() const {
   return sourceLabel_();
 }
 
-void SlideshowApp::enterStorageMenu_() {
-  setControlMode_(ControlMode::StorageMenu);
-}
 
-void SlideshowApp::exitStorageMenu_() {
-  if (controlMode_ != ControlMode::StorageMenu) return;
-  setControlMode_(ControlMode::Auto);
-}
 
-void SlideshowApp::requestCopy_() {
-  if (copyState_ == CopyState::Running) return;
-  copyState_ = CopyState::Confirm;
-  copyAbortRequest_ = false;
-  copyConfirmSelection_ = 1; // Ja vorauswaehlen
-  toastText_.clear();
-  toastUntil_ = 0;
-  toastDirty_ = false;
-  markCopyConfirmDirty_();
-}
 
-void SlideshowApp::cancelCopy_() {
-  if (copyState_ == CopyState::Confirm) {
-    copyState_ = CopyState::Idle;
-    showToast_("Abgebrochen", kToastShortMs);
-    markCopyConfirmDirty_();
-  }
-}
 
 bool SlideshowApp::ensureFlashReady_() {
   if (!mountLittleFs(false)) {
@@ -485,292 +217,10 @@ bool SlideshowApp::ensureSdReady_() {
   return ok;
 }
 
-bool SlideshowApp::prepareCopyQueue_() {
-  copyQueue_.clear();
-  copyQueueIndex_ = 0;
-  copyBytesDone_ = 0;
-  copyBytesTotal_ = 0;
-  copyFileBytesDone_ = 0;
-  copyAbortRequest_ = false;
-  closeCopyFiles_();
 
-  if (!ensureSdReady_()) {
-    return false;
-  }
 
-  if (!ensureFlashReady_()) {
-    #ifdef USB_DEBUG
-      Serial.println("[Slideshow] prepareCopyQueue: ensureFlashReady_ failed");
-    #endif
-    return false;
-  }
 
-  if (!ensureDirectory("/scripts")) {
-    #ifdef USB_DEBUG
-      Serial.println("[Slideshow] prepareCopyQueue: /scripts mkdir failed");
-    #endif
-    return false;
-  }
 
-  // Suche alle relevanten Dateien im SD-Root
-  File root = SD.open("/");
-  if (!root || !root.isDirectory()) {
-    #ifdef USB_DEBUG
-      Serial.println("[Slideshow] prepareCopyQueue: SD root open failed");
-    #endif
-    return false;
-  }
-
-  std::vector<CopyItem> items;
-
-  for (File f = root.openNextFile(); f; f = root.openNextFile()) {
-    if (f.isDirectory()) continue;
-
-    String filename = f.name();
-    int s = filename.lastIndexOf('/');
-    if (s >= 0) filename = filename.substring(s + 1);
-
-    String lower = filename;
-    lower.toLowerCase();
-
-    // Prüfe Dateityp und Größe
-    size_t size = f.size();
-    if (size == 0) continue;
-
-    CopyItem ci;
-    ci.path = String("/") + filename;
-    ci.name = filename;
-    ci.size = size;
-
-    // Bestimme Dateityp und Ziel
-    if (lower == "bootlogo.jpg") {
-      // bootlogo.jpg -> /system/bootlogo.jpg (überschreiben)
-      ci.type = CopyFileType::Bootlogo;
-      ci.destPath = "/system/bootlogo.jpg";
-      items.push_back(ci);
-      #ifdef USB_DEBUG
-        Serial.printf("[Slideshow] Queue bootlogo: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
-      #endif
-      continue;  // Nicht als normales JPG behandeln
-    } else if (lower == "textapp.cfg") {
-      // textapp.cfg -> /textapp.cfg (nur wenn nicht vorhanden)
-      if (!LittleFS.exists("/textapp.cfg")) {
-        ci.type = CopyFileType::Config;
-        ci.destPath = "/textapp.cfg";
-        items.push_back(ci);
-        #ifdef USB_DEBUG
-          Serial.printf("[Slideshow] Queue config: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
-        #endif
-      } else {
-        #ifdef USB_DEBUG
-          Serial.println("[Slideshow] Skip textapp.cfg: already exists");
-        #endif
-      }
-      continue;  // Nicht weiter verarbeiten
-    } else if (lower == "font.vlw") {
-      // font.vlw -> /system/font.vlw (überschreiben wenn <= 16KB)
-      if (size > 16384) {
-        #ifdef USB_DEBUG
-          Serial.printf("[Slideshow] Skip font.vlw: too large (%u bytes)\n", size);
-        #endif
-        continue;
-      }
-      ci.type = CopyFileType::Font;
-      ci.destPath = "/system/font.vlw";
-      items.push_back(ci);
-      #ifdef USB_DEBUG
-        Serial.printf("[Slideshow] Queue font.vlw: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
-      #endif
-      continue;  // Nicht weiter verarbeiten
-    } else if (lower.endsWith(".vlw")) {
-      // .vlw -> /system/fonts/ (überschreiben wenn <= 30KB)
-      if (size > 30720) {
-        #ifdef USB_DEBUG
-          Serial.printf("[Slideshow] Skip font %s: too large (%u bytes)\n", filename.c_str(), size);
-        #endif
-        continue;
-      }
-      ci.type = CopyFileType::Font;
-      ci.destPath = String("/system/fonts/") + lower;  // Kleinbuchstaben
-      items.push_back(ci);
-      #ifdef USB_DEBUG
-        Serial.printf("[Slideshow] Queue font: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
-      #endif
-      continue;  // Nicht weiter verarbeiten
-    } else if (lower.endsWith(".lua")) {
-      ci.type = CopyFileType::Lua;
-      ci.destPath = String("/scripts/") + filename;
-      items.push_back(ci);
-      #ifdef USB_DEBUG
-        Serial.printf("[Slideshow] Queue lua: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
-      #endif
-      continue;
-    } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
-      // .jpg -> /slides/ (mit Auto-Umbenennung)
-      ci.type = CopyFileType::Jpg;
-
-      // Erzeuge eindeutigen Dateinamen
-      String destName = filename;
-      String baseName = destName;
-      String ext = ".jpg";
-      int dotIdx = destName.lastIndexOf('.');
-      if (dotIdx >= 0) {
-        ext = destName.substring(dotIdx);
-        baseName = destName.substring(0, dotIdx);
-      }
-
-      ci.destPath = String(kFlashSlidesDir) + "/" + destName;
-      int counter = 1;
-      while (LittleFS.exists(ci.destPath) && counter < 1000) {
-        destName = baseName + "-" + String(counter) + ext;
-        ci.destPath = String(kFlashSlidesDir) + "/" + destName;
-        ++counter;
-      }
-
-      items.push_back(ci);
-      #ifdef USB_DEBUG
-        Serial.printf("[Slideshow] Queue image: %s -> %s\n", ci.path.c_str(), ci.destPath.c_str());
-      #endif
-    }
-  }
-  root.close();
-
-  if (items.empty()) {
-    #ifdef USB_DEBUG
-      Serial.println("[Slideshow] prepareCopyQueue: no files to copy");
-    #endif
-    return false;
-  }
-
-  std::sort(items.begin(), items.end(), [](const CopyItem& a, const CopyItem& b) {
-    // Bootlogo/Config vor Fonts, danach Lua, zuletzt JPGs
-    if (a.type != b.type) return static_cast<int>(a.type) < static_cast<int>(b.type);
-    return a.name < b.name;
-  });
-
-  copyQueue_ = std::move(items);
-  for (const auto& item : copyQueue_) {
-    copyBytesTotal_ += item.size;
-  }
-  #ifdef USB_DEBUG
-    Serial.printf("[Slideshow] prepareCopyQueue: %u files, total=%u bytes\n",
-                  static_cast<unsigned>(copyQueue_.size()),
-                  static_cast<unsigned>(copyBytesTotal_));
-  #endif
-  return true;
-}
-
-void SlideshowApp::beginCopy_() {
-  if (!prepareCopyQueue_()) {
-    finalizeCopy_(CopyState::Error, "Keine Dateien gefunden");
-    return;
-  }
-
-  // Stelle sicher, dass /system und /system/fonts existieren
-  if (!LittleFS.exists("/system")) {
-    LittleFS.mkdir("/system");
-  }
-  if (!LittleFS.exists("/system/fonts")) {
-    LittleFS.mkdir("/system/fonts");
-  }
-
-  copyState_ = CopyState::Running;
-  auto_mode = false;
-  controlMode_ = ControlMode::StorageMenu;
-  tft.fillScreen(TFT_BLACK);
-  copyOverlayNeedsClear_ = true;
-  copyHeaderChecksum_ = 0xFFFFFFFFu;
-  copyBarFill_ = 0;
-  copyHintDrawn_ = false;
-  copyToastActive_ = false;
-  copyLastToast_.clear();
-  drawCopyOverlay_();
-}
-
-void SlideshowApp::closeCopyFiles_() {
-  if (copySrc_) copySrc_.close();
-  if (copyDst_) copyDst_.close();
-}
-
-void SlideshowApp::finalizeCopy_(CopyState state, const String& message) {
-  closeCopyFiles_();
-  copyQueue_.clear();
-  copyQueueIndex_ = 0;
-  copyBytesTotal_ = 0;
-  copyBytesDone_ = 0;
-  copyFileBytesDone_ = 0;
-  copyAbortRequest_ = false;
-  copyState_ = CopyState::Idle;
-  copyOverlayNeedsClear_ = true;
-  copyHeaderChecksum_ = 0xFFFFFFFFu;
-  copyBarFill_ = 0;
-  copyHintDrawn_ = false;
-  copyToastActive_ = false;
-  copyLastToast_.clear();
-  markCopyConfirmDirty_();
-
-  if (!message.isEmpty()) {
-    showToast_(message, (state == CopyState::Error) ? kCopyErrorToastMs : kToastLongMs);
-  }
-
-  if (state == CopyState::Done) {
-    setSource_(SlideSource::Flash, false);
-    showToast_("Fertig kopiert", kCopyDoneToastMs);
-  }
-}
-
-void SlideshowApp::handleCopyTick_(uint32_t budget_ms) {
-  const uint32_t start = millis();
-
-  while (copyState_ == CopyState::Running && (millis() - start) < budget_ms) {
-    if (copyAbortRequest_) {
-      finalizeCopy_(CopyState::Aborted, "Abgebrochen");
-      return;
-    }
-
-    if (!copySrc_) {
-      if (copyQueueIndex_ >= copyQueue_.size()) {
-        finalizeCopy_(CopyState::Done, "");
-        return;
-      }
-
-      const CopyItem& item = copyQueue_[copyQueueIndex_];
-
-      copySrc_ = SD.open(item.path.c_str(), FILE_READ);
-      copyDst_ = LittleFS.open(item.destPath.c_str(), FILE_WRITE);
-      copyFileBytesDone_ = 0;
-
-      if (!copySrc_ || !copyDst_) {
-        finalizeCopy_(CopyState::Error, String("Fehler bei ") + item.name);
-        return;
-      }
-    }
-
-    const size_t chunkSize = copyBuf_.size();
-    size_t available = copySrc_.available();
-    if (available == 0) {
-      copySrc_.close();
-      copyDst_.close();
-      ++copyQueueIndex_;
-      continue;
-    }
-
-    size_t toRead = std::min(chunkSize, available);
-    size_t n = copySrc_.read(copyBuf_.data(), toRead);
-    if (n == 0) {
-      finalizeCopy_(CopyState::Error, "Lesefehler");
-      return;
-    }
-    if (copyDst_.write(copyBuf_.data(), n) != n) {
-      finalizeCopy_(CopyState::Error, "Schreibfehler");
-      return;
-    }
-
-    copyBytesDone_ += n;
-    copyFileBytesDone_ += n;
-  }
-
-}
 
 void SlideshowApp::enterDeleteMenu_() {
   setControlMode_(ControlMode::DeleteMenu);
@@ -886,7 +336,7 @@ void SlideshowApp::setUiLocked(bool locked) {
 void SlideshowApp::performDeleteAll_() {
   if (!ensureFlashReady_()) {
     deleteState_ = DeleteState::Error;
-    showToast_("Flash-Fehler", kCopyErrorToastMs);
+    showToast_("Flash-Fehler", kToastLongMs);
     deleteState_ = DeleteState::Idle;
     markDeleteMenuDirty_();
     return;
@@ -916,7 +366,7 @@ void SlideshowApp::performDeleteAll_() {
 
   deleteState_ = DeleteState::Done;
   String msg = String(deleteCount_) + String(" Bilder gelöscht");
-  showToast_(msg, kCopyDoneToastMs);
+  showToast_(msg, kToastLongMs);
 
   files_.clear();
   idx_ = 0;
@@ -1046,9 +496,6 @@ void SlideshowApp::showCurrent_(bool allowManualOverlay, bool clearScreen) {
     Serial.printf("[Slideshow] OK (%s): %s\n", slideSourceLabel(source_), path.c_str());
   #endif
 
-  if (controlMode_ == ControlMode::StorageMenu) {
-    markStorageMenuDirty_();
-  }
 }
 
 void SlideshowApp::advance_(int step) {
@@ -1083,10 +530,6 @@ String SlideshowApp::modeLabel_() const {
       return String("AUTO ") + dwellLabel_();
     case ControlMode::Manual:
       return String("MANUELL");
-    case ControlMode::StorageMenu:
-      return String("EINSTELLUNG");
-    case ControlMode::BleReceive:
-      return String("TRANSFER");
     case ControlMode::DeleteMenu:
       return String("LÖSCHEN");
   }
@@ -1105,13 +548,11 @@ void SlideshowApp::showToast_(const String& txt, uint32_t duration_ms) {
   toastText_ = txt;
   toastUntil_ = millis() + duration_ms;
   toastDirty_ = true;
-  if (controlMode_ == ControlMode::StorageMenu) {
-    markStorageMenuDirty_();
-  } else if (controlMode_ == ControlMode::BleReceive) {
-    bleOverlayDirty_ = true;
-  } else {
-    drawToastOverlay_();
+  if (controlMode_ == ControlMode::DeleteMenu) {
+    markDeleteMenuDirty_();
+    return;
   }
+  drawToastOverlay_();
 }
 
 void SlideshowApp::drawManualFilenameOverlay_() {
@@ -1167,165 +608,10 @@ void SlideshowApp::drawToastOverlay_() {
   TextRenderer::drawCentered(textY, toastText_, TFT_WHITE, TFT_BLACK);
 }
 
-void SlideshowApp::drawCopyOverlay_() {
-  if (copyState_ != CopyState::Running) return;
 
-  const uint32_t now = millis();
-  bool headerChanged = false;
-  bool progressChanged = false;
 
-  const size_t totalFiles = copyQueue_.size();
-  const size_t displayedIndex = std::min(copyQueueIndex_ + (copySrc_ ? 1u : 0u), totalFiles);
 
-  int16_t headerY = 52;
-  int16_t barWidth = TFT_W - 40;
-  int16_t barHeight = 20;
-  int16_t barX = (TFT_W - barWidth) / 2;
-  int16_t barY = (TFT_H / 2) - 6;
 
-  uint32_t headerChecksum = ((static_cast<uint32_t>(displayedIndex) & 0xFFFF) << 16) |
-                           (static_cast<uint32_t>(totalFiles) & 0xFFFF);
-  float progress = (copyBytesTotal_ == 0) ? 0.0f : static_cast<float>(copyBytesDone_) / static_cast<float>(copyBytesTotal_);
-  progress = std::min(std::max(progress, 0.0f), 1.0f);
-  uint16_t progressFill = static_cast<uint16_t>((barWidth - 2) * progress);
-  if (progressFill < copyBarFill_) {
-    progressFill = copyBarFill_;
-  }
-
-  if (copyOverlayNeedsClear_) {
-    tft.fillScreen(TFT_BLACK);
-    copyOverlayNeedsClear_ = false;
-    headerChanged = true;
-    progressChanged = true;
-  }
-
-  if (headerChecksum != copyHeaderChecksum_) {
-    headerChanged = true;
-    copyHeaderChecksum_ = headerChecksum;
-  }
-
-  uint16_t fillDelta = (progressFill > copyBarFill_) ? (progressFill - copyBarFill_) : 0;
-  if (progressFill != copyBarFill_) {
-    progressChanged = true;
-  }
-  if (!progressChanged) {
-    // force repaint each frame to avoid stale fill when queue started anew
-    progressChanged = true;
-  }
-
-  if (headerChanged) {
-    tft.fillRect(0, headerY - 6, TFT_W, TextRenderer::lineHeight() * 2 + 44, TFT_BLACK);
-    String header = String("Kopiere ") + String(displayedIndex) + "/" + String(totalFiles);
-    TextRenderer::drawCentered(headerY, header, TFT_WHITE, TFT_BLACK);
-  }
-
-  if (progressChanged) {
-    tft.drawRect(barX, barY, barWidth, barHeight, TFT_WHITE);
-    tft.fillRect(barX + 1, barY + 1, barWidth - 2, barHeight - 2, TFT_BLACK);
-    if (progressFill > 0) {
-      tft.fillRect(barX + 1, barY + 1, progressFill, barHeight - 2, TFT_WHITE);
-    }
-    copyBarFill_ = progressFill;
-  }
-
-  const int16_t textTop = barY + barHeight + 10;
-  const int16_t hintY = textTop + TextRenderer::lineHeight() - 15;
-  const bool toastActive = toastUntil_ && now < toastUntil_;
-  const bool toastChanged = (toastActive != copyToastActive_) || (toastActive && toastText_ != copyLastToast_);
-
-  if (toastChanged) {
-    tft.fillRect(0, textTop - 4, TFT_W, TextRenderer::lineHeight() * 2 + 24, TFT_BLACK);
-    copyHintDrawn_ = false;
-  }
-
-  if (toastActive) {
-    if (toastChanged || !copyToastActive_) {
-      TextRenderer::drawCentered(textTop, toastText_, TFT_WHITE, TFT_BLACK);
-    }
-    copyLastToast_ = toastText_;
-  } else if (toastChanged) {
-    copyLastToast_.clear();
-  }
-
-  if (!copyHintDrawn_) {
-    TextRenderer::drawCentered(hintY, "Lang: Abbrechen", TFT_WHITE, TFT_BLACK);
-    copyHintDrawn_ = true;
-  }
-
-  copyToastActive_ = toastActive;
-}
-
-void SlideshowApp::drawCopyConfirmOverlay_() {
-  if (!copyConfirmDirty_ && copyConfirmLastSelection_ == copyConfirmSelection_) {
-    return;
-  }
-
-  copyConfirmDirty_ = false;
-  copyConfirmLastSelection_ = copyConfirmSelection_;
-
-  tft.fillScreen(TFT_BLACK);
-
-  const int16_t line = TextRenderer::lineHeight();
-  const int16_t top = 26;
-  TextRenderer::drawCentered(top, "SD", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(top + line, "kopieren", TFT_WHITE, TFT_BLACK);
-
-  String options = (copyConfirmSelection_ == 0) ? String("> Nein    Ja")
-                                               : String("Nein    > Ja");
-  TextRenderer::drawCentered(top + line * 2 + 16, options, TFT_WHITE, TFT_BLACK);
-
-  TextRenderer::drawCentered(top + line * 3 + 28, "Klick: Wechseln", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(top + line * 4 + 28, "Lang: Bestätigen", TFT_WHITE, TFT_BLACK);
-}
-
-void SlideshowApp::drawStorageMenuOverlay_() {
-  bool toastActive = toastUntil_ && millis() < toastUntil_;
-  if (!toastActive && toastUntil_) {
-    toastUntil_ = 0;
-    toastText_.clear();
-    toastActive = false;
-  }
-
-  String sourceLine = String("Quelle: ") + sourceLabel_();
-  String footerLine = toastActive ? toastText_ : String("Lang: Transfer-Modus");
-
-  if (!storageMenuDirty_ &&
-      storageMenuLastSource_ == sourceLine &&
-      storageMenuLastFooter_ == footerLine &&
-      storageMenuLastToastActive_ == toastActive) {
-    return;
-  }
-
-  storageMenuDirty_ = false;
-  storageMenuLastSource_ = sourceLine;
-  storageMenuLastFooter_ = footerLine;
-  storageMenuLastToastActive_ = toastActive;
-
-  tft.fillScreen(TFT_BLACK);
-
-  const int16_t line = TextRenderer::lineHeight();
-  const int16_t spacing = 10;
-  const int16_t top = 22;
-  const int16_t sourceY = top + line + spacing;
-  const int16_t singleY = sourceY + line + spacing;
-  const int16_t doubleY = singleY + line + spacing;
-  const int16_t footerY = doubleY + line + spacing;
-
-  TextRenderer::drawCentered(top, "Setup", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(sourceY, sourceLine, TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(singleY, "Klick: Quelle", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(doubleY, "Doppel: SD-Kopie", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(footerY, footerLine, TFT_WHITE, TFT_BLACK);
-}
-
-void SlideshowApp::markStorageMenuDirty_() {
-  storageMenuDirty_ = true;
-}
-
-void SlideshowApp::markCopyConfirmDirty_() {
-  copyConfirmDirty_ = true;
-  copyConfirmLastSelection_ = 255;
-}
 
 void SlideshowApp::drawDeleteMenuOverlay_() {
   if (!deleteMenuDirty_) return;
@@ -1396,208 +682,6 @@ void SlideshowApp::drawDeleteSingleConfirmOverlay_() {
   TextRenderer::drawCentered(top + line * 4 + 32, "Lang: Bestätigen", TFT_WHITE, TFT_BLACK);
 }
 
-void SlideshowApp::drawBleReceiveOverlay_() {
-  if (bleState_ == BleState::Receiving) {
-    size_t expected = 0;
-    size_t received = 0;
-    if (transferSource_ == TransferSource::Usb) {
-      expected = SerialImageTransfer::bytesExpected();
-      received = SerialImageTransfer::bytesReceived();
-    } else {
-      expected = BleImageTransfer::bytesExpected();
-      received = BleImageTransfer::bytesReceived();
-    }
-    if (expected > 0 && expected != bleLastBytesExpected_) {
-      bleLastBytesExpected_ = expected;
-      bleOverlayDirty_ = true;
-    }
-    if (received != bleLastBytesReceived_) {
-      bleLastBytesReceived_ = received;
-      bleOverlayDirty_ = true;
-    }
-  }
-
-  const int16_t line = TextRenderer::lineHeight();
-  const int16_t headerY = 44;
-  const int16_t primaryY = headerY + line + 12;
-  const int16_t secondaryY = primaryY + line + 10;
-  const int16_t barWidth = tft.width() - 48;
-  const int16_t barHeight = 14;
-  const int16_t barX = (tft.width() - barWidth) / 2;
-  const int16_t barY = secondaryY + line + 18;
-  const int16_t footerY = tft.height() - line - 36;
-
-  if (bleOverlayNeedsClear_) {
-    tft.fillScreen(TFT_BLACK);
-    bleOverlayNeedsClear_ = false;
-    bleProgressFrameDrawn_ = false;
-    bleBarFill_ = 0;
-    bleLastHeader_.clear();
-    bleLastPrimary_.clear();
-    bleLastSecondary_.clear();
-    bleLastFooter_.clear();
-  }
-
-  auto formatKB = [](size_t bytes) -> String {
-    if (bytes < 1024) {
-      uint32_t tenth = static_cast<uint32_t>(((bytes * 10UL) + 512UL) / 1024UL);
-      if (tenth >= 10) {
-        return String("1.0");
-      }
-      char buf[16];
-      std::snprintf(buf, sizeof(buf), "0.%u", tenth);
-      return String(buf);
-    }
-    uint32_t whole = bytes / 1024;
-    uint32_t tenth = static_cast<uint32_t>(((bytes % 1024) * 10UL) / 1024UL);
-    if (tenth == 0) {
-      return String(whole);
-    }
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), "%u.%u", whole, tenth);
-    return String(buf);
-  };
-
-  bool allowClear = (bleState_ != BleState::Completed);
-
-  String header;
-  switch (transferSource_) {
-    case TransferSource::Usb:
-      header = "USB-Transfer";
-      break;
-    case TransferSource::Ble:
-      header = "Bluetooth Transfer";
-      break;
-    default:
-      header = "Übertragung (USB/BLE)";
-      break;
-  }
-  if (allowClear) {
-    if (header != bleLastHeader_) {
-      tft.fillRect(0, headerY - 4, tft.width(), line + 8, TFT_BLACK);
-      TextRenderer::drawCentered(headerY, header, TFT_WHITE, TFT_BLACK);
-      bleLastHeader_ = header;
-    }
-  } else if (header != bleLastHeader_) {
-    TextRenderer::drawCentered(headerY, header, TFT_WHITE, TFT_BLACK);
-    bleLastHeader_ = header;
-  }
-
-  String primary;
-  String secondary;
-
-  switch (bleState_) {
-    case BleState::Idle:
-      primary = "Im Tool \"Über USB\" oder \"Per Bluetooth\" starten";
-      secondary = "Gerät wartet auf neue Übertragung";
-      break;
-    case BleState::Receiving: {
-      const char* label = transferLabel_(transferSource_);
-      primary = bleLastFilename_.isEmpty()
-                  ? String(label) + String(": Empfang läuft")
-                  : String(label) + String(": ") + bleLastFilename_;
-      if (bleLastBytesExpected_ > 0) {
-        uint32_t pct = static_cast<uint32_t>((bleLastBytesReceived_ * 100UL) / bleLastBytesExpected_);
-        String recv = formatKB(bleLastBytesReceived_);
-        String total = formatKB(bleLastBytesExpected_);
-        secondary = String(pct) + String("% (") + recv + String("/") + total + String(" KB)");
-      } else {
-        secondary = String(bleLastBytesReceived_) + String(" B erhalten");
-      }
-      break;
-    }
-    case BleState::Completed: {
-      const char* label = transferLabel_(transferSource_);
-      primary = String(label) + String(": Empfangen fertig");
-      secondary = bleLastFilename_.isEmpty() ? bleLastMessage_ : bleLastFilename_;
-      break;
-    }
-    case BleState::Error: {
-      const char* label = transferLabel_(transferSource_);
-      primary = String(label) + String(": Fehler");
-      secondary = bleLastMessage_.isEmpty() ? String("Übertragung fehlgeschlagen") : bleLastMessage_;
-      break;
-    }
-    case BleState::Aborted: {
-      const char* label = transferLabel_(transferSource_);
-      primary = String(label) + String(": Abgebrochen");
-      secondary = bleLastMessage_.isEmpty() ? String("Übertragung abgebrochen") : bleLastMessage_;
-      break;
-    }
-  }
-
-  if (allowClear) {
-    if (primary != bleLastPrimary_) {
-      tft.fillRect(0, primaryY - 4, tft.width(), line + 8, TFT_BLACK);
-      TextRenderer::drawCentered(primaryY, primary, TFT_WHITE, TFT_BLACK);
-      bleLastPrimary_ = primary;
-    }
-    if (secondary != bleLastSecondary_) {
-      tft.fillRect(0, secondaryY - 4, tft.width(), line + 8, TFT_BLACK);
-      if (!secondary.isEmpty()) {
-        TextRenderer::drawCentered(secondaryY, secondary, TFT_WHITE, TFT_BLACK);
-      }
-      bleLastSecondary_ = secondary;
-    }
-  } else {
-    if (primary != bleLastPrimary_) {
-      TextRenderer::drawCentered(primaryY, primary, TFT_WHITE, TFT_BLACK);
-      bleLastPrimary_ = primary;
-    }
-    if (secondary != bleLastSecondary_) {
-      if (!secondary.isEmpty()) {
-        TextRenderer::drawCentered(secondaryY, secondary, TFT_WHITE, TFT_BLACK);
-      }
-      bleLastSecondary_ = secondary;
-    }
-  }
-
-  if (bleState_ == BleState::Receiving && bleLastBytesExpected_ > 0) {
-    size_t denom = bleLastBytesExpected_ ? bleLastBytesExpected_ : 1;
-    uint16_t fill = static_cast<uint16_t>(((barWidth - 2) * bleLastBytesReceived_) / denom);
-    if (!bleProgressFrameDrawn_) {
-      tft.drawRect(barX, barY, barWidth, barHeight, TFT_WHITE);
-      bleProgressFrameDrawn_ = true;
-      bleBarFill_ = 0;
-    }
-    if (fill != bleBarFill_) {
-      tft.fillRect(barX + 1, barY + 1, barWidth - 2, barHeight - 2, TFT_BLACK);
-      if (fill > 0) {
-        if (fill > barWidth - 2) fill = barWidth - 2;
-        tft.fillRect(barX + 1, barY + 1, fill, barHeight - 2, TFT_WHITE);
-      }
-      bleBarFill_ = fill;
-    }
-  } else {
-    if (bleProgressFrameDrawn_ || bleBarFill_ != 0) {
-      if (allowClear) {
-        tft.fillRect(barX, barY, barWidth, barHeight, TFT_BLACK);
-      }
-      bleProgressFrameDrawn_ = false;
-      bleBarFill_ = 0;
-    }
-  }
-
-  String footer;
-  if (toastUntil_ && millis() < toastUntil_) {
-    footer = toastText_;
-  }
-  if (footer.isEmpty()) {
-    footer = "Lang: Löschmodus";
-  }
-  if (allowClear) {
-    if (footer != bleLastFooter_) {
-      tft.fillRect(0, footerY - 4, tft.width(), line + 8, TFT_BLACK);
-      TextRenderer::drawCentered(footerY, footer, TFT_WHITE, TFT_BLACK);
-      bleLastFooter_ = footer;
-    }
-  } else if (footer != bleLastFooter_) {
-    TextRenderer::drawCentered(footerY, footer, TFT_WHITE, TFT_BLACK);
-    bleLastFooter_ = footer;
-  }
-
-  bleOverlayDirty_ = false;
-}
 
 bool SlideshowApp::readDirectoryEntries_(fs::FS* fs, const String& basePath, std::vector<String>& out) {
   if (!fs) return false;
@@ -1678,30 +762,6 @@ void SlideshowApp::init() {
   dwellIdx_ = 1;
   auto_mode = true;
   controlMode_ = ControlMode::Auto;
-  source_ = SlideSource::SDCard;
-  copyState_ = CopyState::Idle;
-  copyAbortRequest_ = false;
-  markCopyConfirmDirty_();
-  storageMenuDirty_ = true;
-  storageMenuLastSource_.clear();
-  storageMenuLastFooter_.clear();
-  storageMenuLastToastActive_ = false;
-  bleState_ = BleState::Idle;
-  bleOverlayDirty_ = true;
-  bleLastMessage_.clear();
-  bleLastFilename_.clear();
-  bleLastBytesExpected_ = 0;
-  bleLastBytesReceived_ = 0;
-  BleImageTransfer::setTransferEnabled(false);
-  SerialImageTransfer::setTransferEnabled(false);
-  bleOverlayNeedsClear_ = true;
-  bleProgressFrameDrawn_ = false;
-  bleBarFill_ = 0;
-  bleLastHeader_.clear();
-  bleLastPrimary_.clear();
-  bleLastSecondary_.clear();
-  bleLastFooter_.clear();
-  transferSource_ = TransferSource::None;
   deleteState_ = DeleteState::Idle;
   deleteMenuSelection_ = 0;
   deleteConfirmSelection_ = 0;
@@ -1730,11 +790,6 @@ void SlideshowApp::init() {
 void SlideshowApp::tick(uint32_t delta_ms) {
   const uint32_t now = millis();
 
-  if (copyState_ == CopyState::Running) {
-    handleCopyTick_(kCopyTickBudgetMs);
-    return;
-  }
-
   if (uiLocked_) {
     return;
   }
@@ -1743,33 +798,11 @@ void SlideshowApp::tick(uint32_t delta_ms) {
     toastUntil_ = 0;
     toastText_.clear();
     toastDirty_ = false;
-    if (controlMode_ == ControlMode::StorageMenu) {
-      markStorageMenuDirty_();
+    if (controlMode_ == ControlMode::DeleteMenu) {
+      markDeleteMenuDirty_();
     } else if (!files_.empty()) {
       showCurrent_();
     }
-  }
-
-  if (controlMode_ == ControlMode::BleReceive) {
-    if (bleState_ == BleState::Receiving) {
-      size_t expected = 0;
-      size_t received = 0;
-      if (transferSource_ == TransferSource::Usb) {
-        expected = SerialImageTransfer::bytesExpected();
-        received = SerialImageTransfer::bytesReceived();
-      } else {
-        expected = BleImageTransfer::bytesExpected();
-        received = BleImageTransfer::bytesReceived();
-      }
-      if (expected > 0) {
-        bleLastBytesExpected_ = expected;
-      }
-      if (received != bleLastBytesReceived_) {
-        bleLastBytesReceived_ = received;
-        bleOverlayDirty_ = true;
-      }
-    }
-    return;
   }
 
   if (deleteState_ == DeleteState::DeleteSingle) {
@@ -1839,53 +872,24 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
       break;
   }
 
-  switch (copyState_) {
-    case CopyState::Running:
-      if (e == BtnEvent::Long) {
-        copyAbortRequest_ = true;
-        showToast_("Abbruch angefordert", kCopyAbortToastMs);
-      }
-      return;
-
-    case CopyState::Confirm:
-      if (e == BtnEvent::Single) {
-        copyConfirmSelection_ ^= 1;
-        markCopyConfirmDirty_();
-      } else if (e == BtnEvent::Long) {
-        if (copyConfirmSelection_ == 1) {
-          beginCopy_();
-        } else {
-          cancelCopy_();
-        }
-      }
-      return;
-
-    default:
-      break;
-  }
-
   switch (e) {
     case BtnEvent::Single:
-      if (controlMode_ == ControlMode::StorageMenu) {
-        toggleSource_();
-      } else if (controlMode_ == ControlMode::DeleteMenu) {
+      if (controlMode_ == ControlMode::DeleteMenu) {
         deleteMenuSelection_ ^= 1;
         markDeleteMenuDirty_();
-      } else if (controlMode_ != ControlMode::BleReceive) {
+      } else {
         advance_(+1);
       }
       break;
 
     case BtnEvent::Double:
-      if (controlMode_ == ControlMode::StorageMenu) {
-        requestCopy_();
-      } else if (controlMode_ == ControlMode::DeleteMenu) {
+      if (controlMode_ == ControlMode::DeleteMenu) {
         if (deleteMenuSelection_ == 0) {
           requestDeleteAll_();
         } else {
           startDeleteSingle_();
         }
-      } else if (controlMode_ != ControlMode::BleReceive) {
+      } else {
         dwellIdx_ = (dwellIdx_ + 1) % kDwellSteps.size();
         applyDwell_();
         timeSinceSwitch_ = 0;
@@ -1897,11 +901,9 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
       break;
 
     case BtnEvent::Triple:
-      if (controlMode_ == ControlMode::StorageMenu) {
-        showToast_("Lang: Modus verlassen", kToastShortMs);
-      } else if (controlMode_ == ControlMode::DeleteMenu) {
+      if (controlMode_ == ControlMode::DeleteMenu) {
         showToast_("Lang: Auto", kToastShortMs);
-      } else if (controlMode_ != ControlMode::BleReceive) {
+      } else {
         show_filename = !show_filename;
         if (controlMode_ == ControlMode::Manual) {
           if (show_filename) {
@@ -1921,15 +923,11 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
     case BtnEvent::Long: {
       if (controlMode_ == ControlMode::Auto) {
         if (files_.empty()) {
-          setControlMode_(ControlMode::StorageMenu);
+          showToast_("Keine Bilder", kToastShortMs);
         } else {
           setControlMode_(ControlMode::Manual);
         }
       } else if (controlMode_ == ControlMode::Manual) {
-        setControlMode_(ControlMode::StorageMenu);
-      } else if (controlMode_ == ControlMode::StorageMenu) {
-        setControlMode_(ControlMode::BleReceive);
-      } else if (controlMode_ == ControlMode::BleReceive) {
         setControlMode_(ControlMode::DeleteMenu);
       } else {
         setControlMode_(ControlMode::Auto);
@@ -1943,14 +941,6 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
 }
 
 void SlideshowApp::draw() {
-  if (copyState_ == CopyState::Running) {
-    drawCopyOverlay_();
-    return;
-  }
-  if (copyState_ == CopyState::Confirm) {
-    drawCopyConfirmOverlay_();
-    return;
-  }
   if (deleteState_ == DeleteState::DeleteAllConfirm) {
     drawDeleteAllConfirmOverlay_();
     return;
@@ -1963,48 +953,10 @@ void SlideshowApp::draw() {
     drawDeleteMenuOverlay_();
     return;
   }
-  if (controlMode_ == ControlMode::StorageMenu) {
-    drawStorageMenuOverlay_();
-    return;
-  }
-  if (controlMode_ == ControlMode::BleReceive) {
-    drawBleReceiveOverlay_();
-    return;
-  }
   drawManualFilenameOverlay_();
   drawToastOverlay_();
 }
 
 void SlideshowApp::shutdown() {
   files_.clear();
-  closeCopyFiles_();
-  copyQueue_.clear();
-  BleImageTransfer::setTransferEnabled(false);
-  SerialImageTransfer::setTransferEnabled(false);
-  transferSource_ = TransferSource::None;
-}
-
-bool SlideshowApp::enterStorageSetup() {
-  if (copyState_ == CopyState::Running) {
-    return false;
-  }
-  enterStorageMenu_();
-  return true;
-}
-
-bool SlideshowApp::startSdCopyWorkflow() {
-  if (copyState_ == CopyState::Running) {
-    return true;  // bereits aktiv
-  }
-  enterStorageMenu_();
-  requestCopy_();
-  return true;
-}
-
-bool SlideshowApp::enterTransferMode() {
-  if (copyState_ == CopyState::Running) {
-    return false;
-  }
-  setControlMode_(ControlMode::BleReceive);
-  return true;
 }
