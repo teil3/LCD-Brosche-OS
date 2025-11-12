@@ -30,26 +30,9 @@ void SystemUI::showSetup() {
   setupMenu_.show();
 }
 
-void SystemUI::showSourceMenu() {
-  activeScreen_ = Screen::Source;
-  if (callbacks_.currentSource) {
-    SlideSource current = callbacks_.currentSource();
-    sourceSelection_ = (current == SlideSource::Flash) ? 1 : 0;
-  } else {
-    sourceSelection_ = 0;
-  }
-  sourceDirty_ = true;
-  sourceStatus_.clear();
-  sourceStatusUntil_ = 0;
-}
-
 void SystemUI::hide() {
   if (activeScreen_ == Screen::Setup) {
     setupMenu_.hide();
-  } else if (activeScreen_ == Screen::Source) {
-    sourceStatus_.clear();
-    sourceStatusUntil_ = 0;
-    sourceDirty_ = true;
   } else if (activeScreen_ == Screen::SdCopyConfirm) {
     sdCopyCancel_();
     resetSdCopyUi_();
@@ -68,9 +51,6 @@ bool SystemUI::handleButton(uint8_t index, BtnEvent e) {
   switch (activeScreen_) {
     case Screen::Setup:
       handled = handleSetupButtons_(index, e);
-      break;
-    case Screen::Source:
-      handled = handleSourceButtons_(index, e);
       break;
     case Screen::SdCopyConfirm:
       handled = handleSdCopyConfirmButtons_(index, e);
@@ -146,10 +126,6 @@ void SystemUI::handleSetupSelection_() {
       }
       showSdCopyConfirm_();
       break;
-    case SetupMenu::Item::SourceSelection:
-      showSourceMenu();
-      shouldHide = false;
-      break;
     case SetupMenu::Item::Exit:
     case SetupMenu::Item::Count:
       break;
@@ -160,54 +136,10 @@ void SystemUI::handleSetupSelection_() {
   }
 }
 
-bool SystemUI::handleSourceButtons_(uint8_t index, BtnEvent e) {
-  if (index == 1 && e == BtnEvent::Single) {
-    showSetup();
-    return true;
-  }
-  if (index == 1 && e == BtnEvent::Double) {
-    hide();
-    return true;
-  }
-  if (index != 2) {
-    return false;
-  }
-  switch (e) {
-    case BtnEvent::Single:
-      sourceSelection_ = (sourceSelection_ + 1) % 3;
-      sourceDirty_ = true;
-      return true;
-    case BtnEvent::Long: {
-      if (sourceSelection_ == 2) {
-        showSetup();
-        return true;
-      }
-      if (!callbacks_.setSource) {
-        showSourceStatus_("Quelle nicht verfügbar", 1500);
-        return true;
-      }
-      SlideSource target = (sourceSelection_ == 0) ? SlideSource::SDCard : SlideSource::Flash;
-      if (callbacks_.setSource(target)) {
-        String label = callbacks_.sourceLabel ? callbacks_.sourceLabel() : String("?");
-        showSourceStatus_(String("Quelle: ") + label, 1200);
-      } else {
-        showSourceStatus_("Wechsel fehlgeschlagen", 1500);
-      }
-      return true;
-    }
-    default:
-      break;
-  }
-  return false;
-}
-
 void SystemUI::draw() {
   switch (activeScreen_) {
     case Screen::Setup:
       setupMenu_.draw();
-      break;
-    case Screen::Source:
-      drawSource_();
       break;
     case Screen::SdCopyConfirm:
       drawSdCopyConfirm_();
@@ -221,61 +153,6 @@ void SystemUI::draw() {
     default:
       break;
   }
-}
-
-void SystemUI::drawSource_() {
-  bool statusActive = false;
-  if (!sourceStatus_.isEmpty()) {
-    uint32_t now = millis();
-    if (now < sourceStatusUntil_) {
-      statusActive = true;
-    } else {
-      sourceStatus_.clear();
-      sourceStatusUntil_ = 0;
-      sourceDirty_ = true;
-    }
-  }
-
-  if (!sourceDirty_) {
-    return;
-  }
-  sourceDirty_ = false;
-
-  tft.fillScreen(TFT_BLACK);
-
-  const int16_t line = TextRenderer::lineHeight();
-  const int16_t spacing = 10;
-  const int16_t top = 22;
-  const char* labels[3] = {"SD-Karte", "Flash", "Exit"};
-  SlideSource current = callbacks_.currentSource ? callbacks_.currentSource() : SlideSource::SDCard;
-
-  TextRenderer::drawCentered(top, "Quellen-Wahl", TFT_WHITE, TFT_BLACK);
-  for (uint8_t i = 0; i < 3; ++i) {
-    String text = labels[i];
-    bool isCurrent = (i == 0 && current == SlideSource::SDCard) || (i == 1 && current == SlideSource::Flash);
-    if (isCurrent) {
-      text += " *";
-    }
-    uint16_t color = (i == sourceSelection_) ? TFT_WHITE : TFT_DARKGREY;
-    if (i == sourceSelection_) {
-      text = String("> ") + text;
-    }
-    TextRenderer::drawCentered(top + (line + spacing) * (i + 1), text, color, TFT_BLACK);
-  }
-
-  int16_t helperY = top + (line + spacing) * 4 + 26;
-  if (statusActive) {
-    TextRenderer::drawHelperCentered(helperY, sourceStatus_, TFT_WHITE, TFT_BLACK);
-  } else {
-    TextRenderer::drawHelperCentered(helperY, "BTN2 kurz: Wechseln", TFT_WHITE, TFT_BLACK);
-    TextRenderer::drawHelperCentered(helperY + TextRenderer::helperLineHeight() + 2, "BTN2 lang: Wählen", TFT_WHITE, TFT_BLACK);
-  }
-}
-
-void SystemUI::showSourceStatus_(const String& text, uint32_t duration_ms) {
-  sourceStatus_ = text;
-  sourceStatusUntil_ = millis() + duration_ms;
-  sourceDirty_ = true;
 }
 
 void SystemUI::showSdCopyConfirm_() {
@@ -884,6 +761,7 @@ void SystemUI::resetTransferUi_() {
   transferBarFill_ = 0;
   transferProgressFrameDrawn_ = false;
   transferHeader_.clear();
+  transferHeaderSub_.clear();
   transferPrimary_.clear();
   transferSecondary_.clear();
   transferFooter_.clear();
@@ -1051,15 +929,44 @@ void SystemUI::drawTransfer_() {
   transferDirty_ = false;
 
   const int16_t line = TextRenderer::lineHeight();
-  const int16_t headerY = 40;
-  const int16_t primaryY = headerY + line + 12;
-  const int16_t secondaryY = primaryY + line + 8;
+  const int16_t headerY = 28;
   const int16_t barWidth = TFT_W - 48;
   const int16_t barHeight = 16;
   const int16_t barX = (TFT_W - barWidth) / 2;
-  const int16_t barY = secondaryY + line + 18;
-  const int16_t statusY = barY + barHeight + 16;
+  int16_t primaryY = headerY + line + 10;
+  int16_t secondaryY = primaryY + line + 8;
+  int16_t barY = secondaryY + line + 18;
+  int16_t statusY = barY + barHeight + 16;
   const int16_t footerY = TFT_H - line - 24;
+
+  String header;
+  String headerSub;
+  String headerTertiary;
+  if (transferState_ == TransferState::Receiving) {
+    header = transferSourceLabel_(transferSource_);
+    headerSub = "Empfang läuft";
+    headerTertiary = transferFilename_.isEmpty() ? String() : transferFilename_;
+  } else if (transferState_ == TransferState::Completed) {
+    header = transferSourceLabel_(transferSource_);
+    headerSub = "Empfang abgeschlossen";
+    headerTertiary = transferFilename_.isEmpty() ? String("Datei gespeichert") : transferFilename_;
+  } else if (transferState_ == TransferState::Error) {
+    header = transferSourceLabel_(transferSource_);
+    headerSub = "Übertragung fehlgeschlagen";
+    headerTertiary = transferMessage_;
+  } else if (transferState_ == TransferState::Aborted) {
+    header = transferSourceLabel_(transferSource_);
+    headerSub = "Übertragung abgebrochen";
+    headerTertiary = transferMessage_;
+  } else {
+    header = "USB/BLE";
+    headerSub = "Übertragung";
+    headerTertiary = "Im Webtool starten";
+  }
+  int headerLines = 0;
+  if (!header.isEmpty()) headerLines++;
+  if (!headerSub.isEmpty()) headerLines++;
+  if (!headerTertiary.isEmpty()) headerLines++;
 
   if (transferNeedsClear_) {
     tft.fillScreen(TFT_BLACK);
@@ -1067,43 +974,45 @@ void SystemUI::drawTransfer_() {
     transferProgressFrameDrawn_ = false;
     transferBarFill_ = 0;
     transferHeader_.clear();
+    transferHeaderSub_.clear();
+    transferHeaderTertiary_.clear();
     transferPrimary_.clear();
     transferSecondary_.clear();
     transferFooter_.clear();
   }
 
-  String header;
-  if (transferState_ == TransferState::Receiving) {
-    header = String(transferSourceLabel_(transferSource_)) + " - Empfang läuft";
-  } else if (transferState_ == TransferState::Completed) {
-    header = String(transferSourceLabel_(transferSource_)) + " - Fertig";
-  } else if (transferState_ == TransferState::Error) {
-    header = String(transferSourceLabel_(transferSource_)) + " - Fehler";
-  } else if (transferState_ == TransferState::Aborted) {
-    header = String(transferSourceLabel_(transferSource_)) + " - Abgebrochen";
-  } else {
-    header = "Übertragung (USB/BLE)";
-  }
-  if (header != transferHeader_) {
-    tft.fillRect(0, headerY - 6, TFT_W, line + 12, TFT_BLACK);
-    TextRenderer::drawCentered(headerY, header, TFT_WHITE, TFT_BLACK);
+  if (header != transferHeader_ || headerSub != transferHeaderSub_ || headerTertiary != transferHeaderTertiary_) {
+    int16_t blockHeight = headerLines ? headerLines * (line + 6) + 8 : line + 12;
+    tft.fillRect(0, headerY - 6, TFT_W, blockHeight, TFT_BLACK);
+    int16_t yCursor = headerY;
+    auto drawHeaderLine = [&](const String& text) {
+      if (text.isEmpty()) return;
+      TextRenderer::drawCentered(yCursor, text, TFT_WHITE, TFT_BLACK);
+      yCursor += line + 6;
+    };
+    drawHeaderLine(header);
+    drawHeaderLine(headerSub);
+    drawHeaderLine(headerTertiary);
     transferHeader_ = header;
+    transferHeaderSub_ = headerSub;
+    transferHeaderTertiary_ = headerTertiary;
   }
+
+  int16_t headerBlock = headerLines * (line + 6);
+  primaryY = headerY + headerBlock + 6;
+  secondaryY = primaryY + line + 8;
+  barY = secondaryY + line + 18;
+  statusY = barY + barHeight + 16;
 
   String primary;
   String secondary;
   switch (transferState_) {
     case TransferState::Idle:
-      primary = "Im Tool \"Über USB\" oder \"Per Bluetooth\" starten";
-      secondary = "Gerät wartet auf neue Übertragung";
+      primary.clear();
+      secondary.clear();
       break;
     case TransferState::Receiving: {
-      const char* label = transferSourceLabel_(transferSource_);
-      if (transferFilename_.isEmpty()) {
-        primary = String(label) + String(": Empfang läuft");
-      } else {
-        primary = String(label) + String(": ") + transferFilename_;
-      }
+      primary = String(transferSourceLabel_(transferSource_)) + String(": Empfang läuft");
       if (transferBytesExpected_ > 0) {
         uint32_t pct = static_cast<uint32_t>(
             (transferBytesReceived_ * 100UL) / transferBytesExpected_);
@@ -1117,16 +1026,15 @@ void SystemUI::drawTransfer_() {
     }
     case TransferState::Completed:
       primary = "Empfang abgeschlossen";
-      secondary = transferFilename_.isEmpty() ? String("Datei gespeichert")
-                                              : transferFilename_;
+      secondary = transferFilename_.isEmpty() ? String("Datei gespeichert") : String();
       break;
     case TransferState::Error:
       primary = "Übertragung fehlgeschlagen";
-      secondary = transferMessage_;
+      secondary.clear();
       break;
     case TransferState::Aborted:
       primary = "Übertragung abgebrochen";
-      secondary = transferMessage_;
+      secondary.clear();
       break;
   }
 

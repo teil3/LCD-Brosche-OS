@@ -29,6 +29,7 @@ public:
 
 private:
   enum class ControlMode : uint8_t { Auto = 0, Manual = 1, DeleteMenu = 2 };
+  enum class MenuScreen : uint8_t { None = 0, Slideshow, Source, AutoSpeed };
   enum class DeleteState : uint8_t {
     Idle = 0,
     DeleteAllConfirm,
@@ -52,14 +53,26 @@ private:
   String manualFilenameLabel_;
   bool manualFilenameDirty_ = false;
   DeleteState deleteState_ = DeleteState::Idle;
-  uint8_t deleteMenuSelection_ = 0;     // 0=Alle löschen, 1=Einzeln
-  uint8_t deleteConfirmSelection_ = 0;  // 0=Nein, 1=Ja
+  uint8_t deleteMenuSelection_ = 0;     // 0=Alle löschen, 1=Einzeln, 2=Exit
+  uint8_t deleteConfirmSelection_ = 0;  // 0=Nein, 1=Ja, 2=Exit
   bool deleteMenuDirty_ = true;
   bool deleteConfirmDirty_ = true;
   uint32_t deleteSingleTimer_ = 0;
   String deleteCurrentFile_;
   size_t deleteCount_ = 0;
   bool uiLocked_ = false;
+  MenuScreen menuScreen_ = MenuScreen::None;
+  uint8_t slideshowMenuSelection_ = 0;
+  uint8_t sourceMenuSelection_ = 0;
+  uint8_t autoSpeedSelection_ = 0;
+  bool slideshowMenuDirty_ = false;
+  bool sourceMenuDirty_ = false;
+  bool autoSpeedMenuDirty_ = false;
+  String helperLinePrimary_;
+  String helperLineSecondary_;
+  String helperLineTertiary_;
+  uint32_t helperLinesUntil_ = 0;
+  bool helperLinesDirty_ = false;
 
   void setControlMode_(ControlMode mode, bool showToast = true);
   void setSource_(SlideSource src, bool showToast = true);
@@ -74,11 +87,28 @@ private:
   void showToast_(const String& txt, uint32_t duration_ms);
   void drawToastOverlay_();
   void drawManualFilenameOverlay_();
+  void drawHelperOverlay_();
+  void showHelperOverlay_(const String& primary,
+                          const String& secondary,
+                          const String& tertiary,
+                          uint32_t duration_ms);
+  void clearHelperOverlay_();
   bool rebuildFileList_();
   bool rebuildFileListFrom_(SlideSource src);
   bool readDirectoryEntries_(fs::FS* fs, const String& basePath, std::vector<String>& out);
   bool ensureFlashReady_();
   bool ensureSdReady_();
+  void openSlideshowMenu_();
+  void closeMenus_();
+  void openSourceMenu_();
+  void openAutoSpeedMenu_();
+  void handleMenuButton_(BtnEvent e);
+  void handleSourceMenuButton_(BtnEvent e);
+  void handleAutoSpeedMenuButton_(BtnEvent e);
+  void drawSlideshowMenu_();
+  void drawSourceMenu_();
+  void drawAutoSpeedMenu_();
+  String dwellOptionLabel_(uint8_t idx) const;
   void enterDeleteMenu_();
   void exitDeleteMenu_();
   void requestDeleteAll_();
@@ -95,4 +125,5 @@ private:
   void drawDeleteSingleConfirmOverlay_();
   void markDeleteMenuDirty_();
   void markDeleteConfirmDirty_();
+  void returnToSlideshowMenu_();
 };

@@ -112,8 +112,6 @@ void setup() {
   SystemUI::Callbacks sysCallbacks;
   sysCallbacks.ensureSlideshowActive = []() { return ensureSlideshowActive(); };
   sysCallbacks.setSource = [](SlideSource src) { return app_slideshow.setSlideSource(src, false, false); };
-  sysCallbacks.currentSource = []() { return app_slideshow.slideSource(); };
-  sysCallbacks.sourceLabel = []() { return app_slideshow.sourceLabel(); };
   sysCallbacks.focusTransferredFile = [](const char* filename, size_t size) {
     return app_slideshow.focusTransferredFile(filename ? filename : "", size);
   };

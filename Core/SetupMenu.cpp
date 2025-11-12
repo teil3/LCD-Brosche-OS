@@ -10,7 +10,6 @@ namespace {
 constexpr std::array<const char*, static_cast<size_t>(SetupMenu::Item::Count)> kLabels = {
   "USB/BLE-Transfer",
   "SD-Transfer",
-  "Quellen-Wahl",
   "Exit"
 };
 

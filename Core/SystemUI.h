@@ -19,15 +19,12 @@ class SystemUI {
   struct Callbacks {
     std::function<bool()> ensureSlideshowActive;
     std::function<bool(SlideSource)> setSource;
-    std::function<SlideSource()> currentSource;
-    std::function<String()> sourceLabel;
     std::function<bool(const char* filename, size_t size)> focusTransferredFile;
   };
 
   void begin(const Callbacks& cb);
 
   void showSetup();
-  void showSourceMenu();
   void hide();
   bool isActive() const { return activeScreen_ != Screen::None; }
   bool shouldPauseApps() const { return isActive(); }
@@ -43,7 +40,7 @@ class SystemUI {
   bool isTransferActive() const { return activeScreen_ == Screen::Transfer; }
 
  private:
-  enum class Screen : uint8_t { None = 0, Setup, Source, SdCopyConfirm, SdCopyProgress, Transfer };
+  enum class Screen : uint8_t { None = 0, Setup, SdCopyConfirm, SdCopyProgress, Transfer };
   enum class SdCopyState : uint8_t { Idle = 0, Confirm, Running };
   enum class SdCopyOutcome : uint8_t { None = 0, Success, Error, Aborted };
   enum class CopyFileType : uint8_t { Bootlogo = 0, Config, Font, Lua, Jpg };
@@ -66,13 +63,10 @@ class SystemUI {
   };
 
   bool handleSetupButtons_(uint8_t index, BtnEvent e);
-  bool handleSourceButtons_(uint8_t index, BtnEvent e);
   bool handleSdCopyConfirmButtons_(uint8_t index, BtnEvent e);
   bool handleSdCopyProgressButtons_(uint8_t index, BtnEvent e);
   bool handleTransferButtons_(uint8_t index, BtnEvent e);
   void handleSetupSelection_();
-  void drawSource_();
-  void showSourceStatus_(const String& text, uint32_t duration_ms = 1200);
   void showSdCopyConfirm_();
   void showSdCopyProgress_();
   void drawSdCopyConfirm_();
@@ -103,11 +97,6 @@ class SystemUI {
   Screen activeScreen_ = Screen::None;
   Callbacks callbacks_;
   SetupMenu setupMenu_;
-  bool sourceDirty_ = true;
-  String sourceLastLine_;
-  String sourceStatus_;
-  uint32_t sourceStatusUntil_ = 0;
-  uint8_t sourceSelection_ = 0;
   uint8_t sdCopySelection_ = 1;
   bool sdCopyDirty_ = true;
   String sdCopyStatusText_;
@@ -145,6 +134,8 @@ class SystemUI {
   uint16_t transferBarFill_ = 0;
   bool transferProgressFrameDrawn_ = false;
   String transferHeader_;
+  String transferHeaderSub_;
+  String transferHeaderTertiary_;
   String transferPrimary_;
   String transferSecondary_;
   String transferFooter_;

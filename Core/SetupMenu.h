@@ -11,8 +11,7 @@ public:
   enum class Item : uint8_t {
     UsbBleTransfer = 0,
     SdTransfer = 1,
-    SourceSelection = 2,
-    Exit = 3,
+    Exit = 2,
     Count
   };
 
