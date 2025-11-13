@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/App.h"
+#include "Core/I18n.h"
 #include <LittleFS.h>
 #include <TFT_eSPI.h>
 #include <vector>
@@ -15,7 +16,7 @@ extern "C" {
 
 class LuaApp : public App {
 public:
-  const char* name() const override { return "Lua"; }
+  const char* name() const override { return i18n.t("apps.lua"); }
   void init() override;
   void tick(uint32_t delta_ms) override;
   void draw() override;

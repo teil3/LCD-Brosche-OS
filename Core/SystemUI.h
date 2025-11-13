@@ -40,7 +40,7 @@ class SystemUI {
   bool isTransferActive() const { return activeScreen_ == Screen::Transfer; }
 
  private:
-  enum class Screen : uint8_t { None = 0, Setup, SdCopyConfirm, SdCopyProgress, Transfer };
+  enum class Screen : uint8_t { None = 0, Setup, Language, SdCopyConfirm, SdCopyProgress, Transfer };
   enum class SdCopyState : uint8_t { Idle = 0, Confirm, Running };
   enum class SdCopyOutcome : uint8_t { None = 0, Success, Error, Aborted };
   enum class CopyFileType : uint8_t { Bootlogo = 0, Config, Font, Lua, Jpg };
@@ -63,10 +63,13 @@ class SystemUI {
   };
 
   bool handleSetupButtons_(uint8_t index, BtnEvent e);
+  bool handleLanguageButtons_(uint8_t index, BtnEvent e);
   bool handleSdCopyConfirmButtons_(uint8_t index, BtnEvent e);
   bool handleSdCopyProgressButtons_(uint8_t index, BtnEvent e);
   bool handleTransferButtons_(uint8_t index, BtnEvent e);
   void handleSetupSelection_();
+  void showLanguageSelection_();
+  void drawLanguageSelection_();
   void showSdCopyConfirm_();
   void showSdCopyProgress_();
   void drawSdCopyConfirm_();
@@ -97,6 +100,8 @@ class SystemUI {
   Screen activeScreen_ = Screen::None;
   Callbacks callbacks_;
   SetupMenu setupMenu_;
+  uint8_t languageSelection_ = 0;
+  bool languageDirty_ = true;
   uint8_t sdCopySelection_ = 1;
   bool sdCopyDirty_ = true;
   String sdCopyStatusText_;

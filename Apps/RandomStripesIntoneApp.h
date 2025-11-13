@@ -1,11 +1,12 @@
 #pragma once
 
 #include "Core/App.h"
+#include "Core/I18n.h"
 #include <Arduino.h>
 
 class RandomStripesIntoneApp : public App {
 public:
-  const char* name() const override { return "Streifen-Töne"; }
+  const char* name() const override { return i18n.t("apps.stripe_tones"); }
 
   void init() override;
   void tick(uint32_t delta_ms) override;

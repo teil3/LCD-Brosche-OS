@@ -1,0 +1,155 @@
+{
+  "meta": {
+    "version": "1.0",
+    "languages": ["de", "en", "fr", "it"],
+    "default": "de",
+    "description": "ESP32-BoardOS Internationalization strings"
+  },
+
+  "apps": {
+    "slideshow": ["Diashow", "Slideshow", "Diaporama", "Presentazione"],
+    "lua": ["Lua", "Lua", "Lua", "Lua"],
+    "text": ["Text", "Text", "Texte", "Testo"],
+    "pixel_tones": ["Pixel-Töne", "Pixel Tones", "Tons de pixels", "Toni pixel"],
+    "stripe_tones": ["Streifen-Töne", "Stripe Tones", "Tons de rayures", "Toni righe"],
+    "chaos_lines": ["Chaos-Linien", "Chaos Lines", "Lignes chaos", "Linee caos"],
+    "random_drawer": ["Zufallszeichner", "Random Drawer", "Dessinateur aléatoire", "Disegnatore casuale"],
+    "square_tones": ["Rechteck-Töne", "Square Tones", "Tons de carrés", "Toni quadrati"]
+  },
+
+  "menu": {
+    "setup": ["Setup", "Setup", "Configuration", "Configurazione"],
+    "language": ["Sprache", "Language", "Langue", "Lingua"],
+    "exit": ["Exit", "Exit", "Sortir", "Esci"],
+    "usb_ble_transfer": ["USB/BLE-Transfer", "USB/BLE Transfer", "Transfert USB/BLE", "Trasferimento USB/BLE"],
+    "sd_transfer": ["SD-Transfer", "SD Transfer", "Transfert SD", "Trasferimento SD"],
+    "slideshow_menu": ["Slideshow-Menü", "Slideshow Menu", "Menu diaporama", "Menu presentazione"],
+    "source_select": ["Quellen-Wahl", "Source Selection", "Sélection source", "Selezione sorgente"],
+    "delete_menu": ["Lösch-Menü", "Delete Menu", "Menu suppression", "Menu eliminazione"],
+    "auto_speed": ["Autogeschwindigkeit", "Auto Speed", "Vitesse auto", "Velocità auto"],
+    "back": ["Zurück", "Back", "Retour", "Indietro"],
+    "all_delete": ["Alle löschen", "Delete all", "Tout supprimer", "Elimina tutto"],
+    "single_delete": ["Einzeln", "Single", "Unique", "Singolo"]
+  },
+
+  "slideshow": {
+    "no_images": ["Keine Bilder", "No images", "Aucune image", "Nessuna immagine"],
+    "found": ["gefunden", "found", "trouvée", "trovata"],
+    "source": ["Quelle:", "Source:", "Source:", "Sorgente:"],
+    "source_label": ["Quelle: {0}", "Source: {0}", "Source: {0}", "Sorgente: {0}"],
+    "no_images_source": ["Keine Bilder: {0}", "No images: {0}", "Aucune image: {0}", "Nessuna immagine: {0}"],
+    "delete_image": ["Bild löschen?", "Delete image?", "Supprimer l'image?", "Eliminare immagine?"],
+    "delete_flash": ["Flash", "Flash", "Flash", "Flash"],
+    "delete_flash_question": ["löschen?", "delete?", "supprimer?", "eliminare?"],
+    "deleted": ["Gelöscht", "Deleted", "Supprimé", "Eliminato"],
+    "aborted": ["Abgebrochen", "Aborted", "Annulé", "Annullato"],
+    "sd_card": ["SD-Karte", "SD Card", "Carte SD", "Scheda SD"],
+    "flash": ["Flash", "Flash", "Flash", "Flash"],
+    "mode_auto": ["AUTO {0}", "AUTO {0}", "AUTO {0}", "AUTO {0}"],
+    "mode_manual": ["MANUELL", "MANUAL", "MANUEL", "MANUALE"],
+    "mode_delete": ["LÖSCHEN", "DELETE", "SUPPRIMER", "ELIMINA"],
+    "no_more_images": ["Keine Bilder mehr", "No more images", "Plus d'images", "Nessun'altra immagine"],
+    "duration": ["Dauer {0}", "Duration {0}", "Durée {0}", "Durata {0}"],
+    "transfer_done": ["Transfer fertig: {0}", "Transfer complete: {0}", "Transfert terminé: {0}", "Trasferimento completato: {0}"],
+    "images_deleted": ["{0} Bilder gelöscht", "{0} images deleted", "{0} images supprimées", "{0} immagini eliminate"],
+    "option_1s": ["1s", "1s", "1s", "1s"],
+    "option_5s": ["5s", "5s", "5s", "5s"],
+    "option_10s": ["10s", "10s", "10s", "10s"],
+    "option_30s": ["30s", "30s", "30s", "30s"],
+    "option_5m": ["5m", "5m", "5m", "5m"]
+  },
+
+  "system": {
+    "sd_copy": ["SD-Kopieren", "SD Copy", "Copie SD", "Copia SD"],
+    "yes": ["Ja", "Yes", "Oui", "Sì"],
+    "no": ["Nein", "No", "Non", "No"],
+    "copying": ["Kopiere {0}/{1}", "Copying {0}/{1}", "Copie {0}/{1}", "Copia {0}/{1}"],
+    "preparing": ["Vorbereitung...", "Preparing...", "Préparation...", "Preparazione..."],
+    "done": ["Fertig", "Done", "Terminé", "Fatto"],
+    "error": ["Fehler", "Error", "Erreur", "Errore"],
+    "no_files_found": ["Keine Dateien gefunden", "No files found", "Aucun fichier trouvé", "Nessun file trovato"],
+    "read_error": ["Lesefehler", "Read error", "Erreur de lecture", "Errore di lettura"],
+    "write_error": ["Schreibfehler", "Write error", "Erreur d'écriture", "Errore di scrittura"],
+    "abort_requested": ["Abbruch angefordert", "Abort requested", "Annulation demandée", "Annullamento richiesto"],
+    "copy_running": ["Kopie läuft", "Copy running", "Copie en cours", "Copia in corso"],
+    "slideshow_unavailable": ["Diashow nicht verfügbar", "Slideshow unavailable", "Diaporama indisponible", "Presentazione non disponibile"],
+    "transfer_impossible": ["Transfer nicht möglich", "Transfer not possible", "Transfert impossible", "Trasferimento impossibile"],
+    "error_at": ["Fehler bei {0}", "Error at {0}", "Erreur à {0}", "Errore in {0}"]
+  },
+
+  "transfer": {
+    "usb": ["USB", "USB", "USB", "USB"],
+    "bluetooth": ["Bluetooth", "Bluetooth", "Bluetooth", "Bluetooth"],
+    "transfer": ["Transfer", "Transfer", "Transfert", "Trasferimento"],
+    "usb_ble": ["USB/BLE", "USB/BLE", "USB/BLE", "USB/BLE"],
+    "receiving": ["Empfang läuft", "Receiving", "Réception en cours", "Ricezione in corso"],
+    "receiving_label": ["Empfang: {0} ({1} B)", "Receiving: {0} ({1} B)", "Réception: {0} ({1} B)", "Ricezione: {0} ({1} B)"],
+    "usb_receiving": ["USB Empfang: {0} ({1} B)", "USB receiving: {0} ({1} B)", "Réception USB: {0} ({1} B)", "Ricezione USB: {0} ({1} B)"],
+    "ble_receiving": ["Empfange {0} ({1} B)", "Receiving {0} ({1} B)", "Réception {0} ({1} B)", "Ricezione {0} ({1} B)"],
+    "completed": ["Empfang abgeschlossen", "Completed", "Terminé", "Completato"],
+    "file_saved": ["Datei gespeichert", "File saved", "Fichier enregistré", "File salvato"],
+    "failed": ["Übertragung fehlgeschlagen", "Transfer failed", "Transfert échoué", "Trasferimento fallito"],
+    "aborted": ["Übertragung abgebrochen", "Transfer aborted", "Transfert annulé", "Trasferimento annullato"],
+    "transmission": ["Übertragung", "Transmission", "Transmission", "Trasmissione"],
+    "start_at_host": ["Im Webtool starten", "Start in web tool", "Démarrer dans l'outil web", "Avvia nello strumento web"],
+    "start_transfer": ["Starte Übertragung am Host", "Start transfer at host", "Démarrer le transfert sur l'hôte", "Avvia trasferimento sull'host"],
+    "flash_update_failed": ["Flash-Update fehlgeschlagen", "Flash update failed", "Mise à jour Flash échouée", "Aggiornamento Flash fallito"],
+    "reception_completed": ["Empfang abgeschlossen", "Reception completed", "Réception terminée", "Ricezione completata"]
+  },
+
+  "buttons": {
+    "short_switch": ["BTN2 kurz: Wechseln", "BTN2 short: Switch", "BTN2 court: Changer", "BTN2 breve: Cambia"],
+    "long_open": ["BTN2 lang: Öffnen", "BTN2 long: Open", "BTN2 long: Ouvrir", "BTN2 lungo: Apri"],
+    "long_confirm": ["BTN2 lang: Bestätigen", "BTN2 long: Confirm", "BTN2 long: Confirmer", "BTN2 lungo: Conferma"],
+    "long_delete": ["BTN2 lang: Löschen", "BTN2 long: Delete", "BTN2 long: Supprimer", "BTN2 lungo: Elimina"],
+    "short_next": ["BTN2 kurz: Nächstes Bild", "BTN2 short: Next image", "BTN2 court: Image suivante", "BTN2 breve: Prossima immagine"],
+    "double_exit": ["BTN2 doppelt: Exit", "BTN2 double: Exit", "BTN2 double: Sortir", "BTN2 doppio: Esci"],
+    "long_abort": ["BTN2 lang: Abbrechen", "BTN2 long: Abort", "BTN2 long: Annuler", "BTN2 lungo: Annulla"],
+    "short_menu": ["BTN2 kurz/lang: Menü", "BTN2 short/long: Menu", "BTN2 court/long: Menu", "BTN2 breve/lungo: Menu"],
+    "long_set": ["BTN2 lang: Setzen", "BTN2 long: Set", "BTN2 long: Définir", "BTN2 lungo: Imposta"],
+    "long_select": ["BTN2 lang: Wählen", "BTN2 long: Select", "BTN2 long: Sélectionner", "BTN2 lungo: Seleziona"],
+    "btn1_actions": ["BTN1 kurz: Setup  BTN1 doppelt: Exit", "BTN1 short: Setup  BTN1 double: Exit", "BTN1 court: Config  BTN1 double: Sortir", "BTN1 breve: Config  BTN1 doppio: Esci"],
+    "long_auto": ["Lang: Auto", "Long: Auto", "Long: Auto", "Lungo: Auto"]
+  },
+
+  "errors": {
+    "flash_error": ["Flash-Fehler", "Flash error", "Erreur Flash", "Errore Flash"],
+    "no_flash_images": ["Keine Flash-Bilder", "No flash images", "Aucune image Flash", "Nessuna immagine Flash"],
+    "sd_init_failed": ["SD init failed", "SD init failed", "Échec init SD", "Inizializzazione SD fallita"],
+    "littlefs_mount_failed": ["LittleFS mount failed", "LittleFS mount failed", "Montage LittleFS échoué", "Montaggio LittleFS fallito"],
+    "littlefs_format_failed": ["LittleFS format+mount failed", "LittleFS format+mount failed", "Format+montage LittleFS échoué", "Formato+montaggio LittleFS fallito"]
+  },
+
+  "lua": {
+    "initializing": ["Lua initialisieren", "Initializing Lua", "Initialisation Lua", "Inizializzazione Lua"],
+    "status": ["Lua Status", "Lua Status", "État Lua", "Stato Lua"],
+    "label": ["Lua:", "Lua:", "Lua:", "Lua:"]
+  },
+
+  "language": {
+    "select": ["Sprache wählen", "Select Language", "Choisir la langue", "Seleziona lingua"],
+    "german": ["Deutsch", "German", "Allemand", "Tedesco"],
+    "english": ["English", "English", "Anglais", "Inglese"],
+    "french": ["Français", "French", "Français", "Francese"],
+    "italian": ["Italiano", "Italian", "Italien", "Italiano"],
+    "current": ["Aktuelle Sprache: {0}", "Current language: {0}", "Langue actuelle: {0}", "Lingua attuale: {0}"]
+  },
+
+  "common": {
+    "loading": ["Lade...", "Loading...", "Chargement...", "Caricamento..."],
+    "saving": ["Speichern...", "Saving...", "Enregistrement...", "Salvataggio..."],
+    "cancel": ["Abbrechen", "Cancel", "Annuler", "Annulla"],
+    "ok": ["OK", "OK", "OK", "OK"],
+    "confirm": ["Bestätigen", "Confirm", "Confirmer", "Conferma"],
+    "delete": ["Löschen", "Delete", "Supprimer", "Elimina"],
+    "select": ["Wählen", "Select", "Sélectionner", "Seleziona"],
+    "change": ["Wechseln", "Change", "Changer", "Cambia"],
+    "open": ["Öffnen", "Open", "Ouvrir", "Apri"],
+    "close": ["Schließen", "Close", "Fermer", "Chiudi"],
+    "next": ["Nächstes", "Next", "Suivant", "Prossimo"],
+    "previous": ["Vorheriges", "Previous", "Précédent", "Precedente"],
+    "auto": ["Auto", "Auto", "Auto", "Auto"],
+    "manual": ["Manuell", "Manual", "Manuel", "Manuale"],
+    "speed": ["Geschwindigkeit", "Speed", "Vitesse", "Velocità"]
+  }
+}

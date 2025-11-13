@@ -10,6 +10,7 @@
 #include "Core/TextRenderer.h"
 #include "Core/BleImageTransfer.h"
 #include "Core/SerialImageTransfer.h"
+#include "Core/I18n.h"
 
 namespace {
 constexpr uint32_t kSdCopyTickBudgetMs = 25;
@@ -51,6 +52,9 @@ bool SystemUI::handleButton(uint8_t index, BtnEvent e) {
   switch (activeScreen_) {
     case Screen::Setup:
       handled = handleSetupButtons_(index, e);
+      break;
+    case Screen::Language:
+      handled = handleLanguageButtons_(index, e);
       break;
     case Screen::SdCopyConfirm:
       handled = handleSdCopyConfirmButtons_(index, e);
@@ -105,23 +109,27 @@ void SystemUI::handleSetupSelection_() {
       (item == SetupMenu::Item::UsbBleTransfer || item == SetupMenu::Item::SdTransfer);
   if (requiresSlideshow) {
     if (!callbacks_.ensureSlideshowActive || !callbacks_.ensureSlideshowActive()) {
-      setupMenu_.showStatus("Diashow nicht verfügbar", 1500);
+      setupMenu_.showStatus(i18n.t("system.slideshow_unavailable"), 1500);
       return;
     }
   }
 
   bool shouldHide = true;
   switch (item) {
+    case SetupMenu::Item::Language:
+      shouldHide = false;
+      showLanguageSelection_();
+      break;
     case SetupMenu::Item::UsbBleTransfer:
       shouldHide = false;
       if (!showTransferScreen_()) {
-        setupMenu_.showStatus("Transfer nicht möglich", 1500);
+        setupMenu_.showStatus(i18n.t("system.transfer_impossible"), 1500);
       }
       break;
     case SetupMenu::Item::SdTransfer:
       shouldHide = false;
       if (!sdCopyStartConfirm_()) {
-        setupMenu_.showStatus("Kopie läuft", 1500);
+        setupMenu_.showStatus(i18n.t("system.copy_running"), 1500);
         break;
       }
       showSdCopyConfirm_();
@@ -140,6 +148,9 @@ void SystemUI::draw() {
   switch (activeScreen_) {
     case Screen::Setup:
       setupMenu_.draw();
+      break;
+    case Screen::Language:
+      drawLanguageSelection_();
       break;
     case Screen::SdCopyConfirm:
       drawSdCopyConfirm_();
@@ -187,7 +198,7 @@ bool SystemUI::handleSdCopyConfirmButtons_(uint8_t index, BtnEvent e) {
     if (e == BtnEvent::Single) {
       sdCopyCancel_();
       showSetup();
-      setupMenu_.showStatus("Abgebrochen", 1000);
+      setupMenu_.showStatus(i18n.t("slideshow.aborted"), 1000);
       return true;
     }
     if (e == BtnEvent::Double) {
@@ -210,11 +221,11 @@ bool SystemUI::handleSdCopyConfirmButtons_(uint8_t index, BtnEvent e) {
       if (sdCopySelection_ == 0) {
         sdCopyCancel_();
         showSetup();
-        setupMenu_.showStatus("Abgebrochen", 1000);
+        setupMenu_.showStatus(i18n.t("slideshow.aborted"), 1000);
         return true;
       }
       if (!sdCopyBegin_()) {
-        showSdCopyStatus_("Kopie nicht möglich", 1500, TFT_RED);
+        showSdCopyStatus_(i18n.t("system.copy_running"), 1500, TFT_RED);
         return true;
       }
       showSdCopyProgress_();
@@ -232,7 +243,7 @@ bool SystemUI::handleSdCopyProgressButtons_(uint8_t index, BtnEvent e) {
   }
   if (e == BtnEvent::Long) {
     sdCopyAbort_();
-    showSdCopyStatus_("Abbruch angefordert", 1500, TFT_WHITE);
+    showSdCopyStatus_(i18n.t("system.abort_requested"), 1500, TFT_WHITE);
     return true;
   }
   return false;
@@ -255,14 +266,14 @@ void SystemUI::drawSdCopyConfirm_() {
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 10;
   const int16_t top = 24;
-  TextRenderer::drawCentered(top, "SD-Kopieren", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("system.sd_copy"), TFT_WHITE, TFT_BLACK);
 
-  const char* labels[2] = {"Nein", "Ja"};
+  const char* labelKeys[2] = {"system.no", "system.yes"};
   for (uint8_t i = 0; i < 2; ++i) {
     int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
     bool selected = (sdCopySelection_ == i);
     uint16_t color = selected ? TFT_WHITE : TFT_DARKGREY;
-    String text = labels[i];
+    String text = String(i18n.t(labelKeys[i]));
     if (selected) {
       text = String("> ") + text;
     }
@@ -274,8 +285,8 @@ void SystemUI::drawSdCopyConfirm_() {
   if (!sdCopyStatusText_.isEmpty()) {
     TextRenderer::drawHelperCentered(hintY, sdCopyStatusText_, sdCopyStatusColor_, TFT_BLACK);
   } else {
-    TextRenderer::drawHelperCentered(hintY, "BTN2 kurz: Wechseln", TFT_WHITE, TFT_BLACK);
-    TextRenderer::drawHelperCentered(hintY + helperLine + 2, "BTN2 lang: Bestätigen", TFT_WHITE, TFT_BLACK);
+    TextRenderer::drawHelperCentered(hintY, i18n.t("buttons.short_switch"), TFT_WHITE, TFT_BLACK);
+    TextRenderer::drawHelperCentered(hintY + helperLine + 2, i18n.t("buttons.long_confirm"), TFT_WHITE, TFT_BLACK);
   }
 }
 
@@ -308,13 +319,13 @@ void SystemUI::drawSdCopyProgress_() {
     if (message.isEmpty()) {
       switch (sdCopyOutcome_) {
         case SdCopyOutcome::Success:
-          message = "Fertig";
+          message = String(i18n.t("system.done"));
           break;
         case SdCopyOutcome::Error:
-          message = "Fehler";
+          message = String(i18n.t("system.error"));
           break;
         case SdCopyOutcome::Aborted:
-          message = "Abgebrochen";
+          message = String(i18n.t("slideshow.aborted"));
           break;
         default:
           break;
@@ -364,8 +375,8 @@ void SystemUI::drawSdCopyProgress_() {
   }
 
   String header = (status.fileCount > 0 && status.running)
-                      ? String("Kopiere ") + String(status.filesProcessed) + "/" + String(status.fileCount)
-                      : String("Vorbereitung...");
+                      ? i18n.t("system.copying", String(status.filesProcessed), String(status.fileCount))
+                      : String(i18n.t("system.preparing"));
   if (header != sdCopyHeader_) {
     sdCopyHeader_ = header;
     tft.fillRect(0, top - 6, TFT_W, line + 12, TFT_BLACK);
@@ -390,7 +401,7 @@ void SystemUI::drawSdCopyProgress_() {
     }
   }
 
-  String helperText = sdCopyStatusText_.isEmpty() ? String("BTN2 lang: Abbrechen") : sdCopyStatusText_;
+  String helperText = sdCopyStatusText_.isEmpty() ? String(i18n.t("buttons.long_abort")) : sdCopyStatusText_;
   uint16_t helperColor = sdCopyStatusText_.isEmpty() ? TFT_WHITE : sdCopyStatusColor_;
   if (helperText != sdCopyHelperText_ || helperColor != sdCopyHelperColor_) {
     sdCopyHelperText_ = helperText;
@@ -459,7 +470,7 @@ bool SystemUI::sdCopyBegin_() {
   }
   sdCopyResetResult_();
   if (!sdCopyPrepareQueue_()) {
-    sdCopyFinalize_(SdCopyOutcome::Error, "Keine Dateien gefunden");
+    sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.no_files_found"));
     return false;
   }
 
@@ -490,7 +501,7 @@ void SystemUI::sdCopyAbort_() {
     sdCopyAbortRequest_ = true;
     sdCopyTick_();
     if (sdCopyState_ == SdCopyState::Running) {
-      sdCopyFinalize_(SdCopyOutcome::Aborted, "Abgebrochen");
+      sdCopyFinalize_(SdCopyOutcome::Aborted, i18n.t("slideshow.aborted"));
     }
   }
 }
@@ -502,7 +513,7 @@ void SystemUI::sdCopyTick_() {
   const uint32_t start = millis();
   while (sdCopyState_ == SdCopyState::Running && (millis() - start) < kSdCopyTickBudgetMs) {
     if (sdCopyAbortRequest_) {
-      sdCopyFinalize_(SdCopyOutcome::Aborted, "Abgebrochen");
+      sdCopyFinalize_(SdCopyOutcome::Aborted, i18n.t("slideshow.aborted"));
       return;
     }
 
@@ -518,7 +529,7 @@ void SystemUI::sdCopyTick_() {
       sdCopyFileBytesDone_ = 0;
 
       if (!sdCopySrc_ || !sdCopyDst_) {
-        sdCopyFinalize_(SdCopyOutcome::Error, String("Fehler bei ") + item.name);
+        sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.error_at", item.name));
         return;
       }
     }
@@ -535,11 +546,11 @@ void SystemUI::sdCopyTick_() {
     size_t toRead = std::min(chunkSize, available);
     size_t n = sdCopySrc_.read(sdCopyBuffer_.data(), toRead);
     if (n == 0) {
-      sdCopyFinalize_(SdCopyOutcome::Error, "Lesefehler");
+      sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.read_error"));
       return;
     }
     if (sdCopyDst_.write(sdCopyBuffer_.data(), n) != n) {
-      sdCopyFinalize_(SdCopyOutcome::Error, "Schreibfehler");
+      sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.write_error"));
       return;
     }
 
@@ -742,7 +753,7 @@ bool SystemUI::showTransferScreen_() {
   if (activeScreen_ != Screen::Transfer) {
     resetTransferUi_();
     enableTransfer_(true);
-    transferFooter_ = "BTN1 kurz: Setup  BTN1 doppelt: Exit";
+    transferFooter_ = String(i18n.t("buttons.btn1_actions"));
     activeScreen_ = Screen::Transfer;
   }
   return true;
@@ -810,7 +821,7 @@ void SystemUI::onTransferCompleted(TransferSource src, const char* filename, siz
                      ? callbacks_.focusTransferredFile(filename ? filename : "", size)
                      : true;
   if (!focusOk) {
-    onTransferError(src, "Flash-Update fehlgeschlagen");
+    onTransferError(src, i18n.t("transfer.flash_update_failed"));
     return;
   }
   transferSource_ = src;
@@ -819,7 +830,7 @@ void SystemUI::onTransferCompleted(TransferSource src, const char* filename, siz
   transferBytesExpected_ = size;
   transferBytesReceived_ = size;
   transferDirty_ = true;
-  showTransferStatus_("Empfang abgeschlossen", 1500, TFT_WHITE);
+  showTransferStatus_(i18n.t("transfer.reception_completed"), 1500, TFT_WHITE);
 }
 
 void SystemUI::onTransferError(TransferSource src, const char* message) {
@@ -828,7 +839,7 @@ void SystemUI::onTransferError(TransferSource src, const char* message) {
   }
   transferSource_ = src;
   transferState_ = TransferState::Error;
-  transferMessage_ = message ? String(message) : String("Übertragung fehlgeschlagen");
+  transferMessage_ = message ? String(message) : String(i18n.t("transfer.failed"));
   transferDirty_ = true;
   showTransferStatus_(transferMessage_, 1800, TFT_RED);
 }
@@ -839,7 +850,7 @@ void SystemUI::onTransferAborted(TransferSource src, const char* message) {
   }
   transferSource_ = src;
   transferState_ = TransferState::Aborted;
-  transferMessage_ = message ? String(message) : String("Übertragung abgebrochen");
+  transferMessage_ = message ? String(message) : String(i18n.t("transfer.aborted"));
   transferBytesReceived_ = 0;
   transferDirty_ = true;
   showTransferStatus_(transferMessage_, 1500, TFT_WHITE);
@@ -883,11 +894,11 @@ void SystemUI::updateTransferProgress_() {
 const char* SystemUI::transferSourceLabel_(TransferSource src) const {
   switch (src) {
     case TransferSource::Usb:
-      return "USB";
+      return i18n.t("transfer.usb");
     case TransferSource::Ble:
-      return "Bluetooth";
+      return i18n.t("transfer.bluetooth");
     default:
-      return "Transfer";
+      return i18n.t("transfer.transfer");
   }
 }
 
@@ -944,24 +955,24 @@ void SystemUI::drawTransfer_() {
   String headerTertiary;
   if (transferState_ == TransferState::Receiving) {
     header = transferSourceLabel_(transferSource_);
-    headerSub = "Empfang läuft";
+    headerSub = String(i18n.t("transfer.receiving"));
     headerTertiary = transferFilename_.isEmpty() ? String() : transferFilename_;
   } else if (transferState_ == TransferState::Completed) {
     header = transferSourceLabel_(transferSource_);
-    headerSub = "Empfang abgeschlossen";
-    headerTertiary = transferFilename_.isEmpty() ? String("Datei gespeichert") : transferFilename_;
+    headerSub = String(i18n.t("transfer.completed"));
+    headerTertiary = transferFilename_.isEmpty() ? String(i18n.t("transfer.file_saved")) : transferFilename_;
   } else if (transferState_ == TransferState::Error) {
     header = transferSourceLabel_(transferSource_);
-    headerSub = "Übertragung fehlgeschlagen";
+    headerSub = String(i18n.t("transfer.failed"));
     headerTertiary = transferMessage_;
   } else if (transferState_ == TransferState::Aborted) {
     header = transferSourceLabel_(transferSource_);
-    headerSub = "Übertragung abgebrochen";
+    headerSub = String(i18n.t("transfer.aborted"));
     headerTertiary = transferMessage_;
   } else {
-    header = "USB/BLE";
-    headerSub = "Übertragung";
-    headerTertiary = "Im Webtool starten";
+    header = String(i18n.t("transfer.usb_ble"));
+    headerSub = String(i18n.t("transfer.transmission"));
+    headerTertiary = String(i18n.t("transfer.start_at_host"));
   }
   int headerLines = 0;
   if (!header.isEmpty()) headerLines++;
@@ -1025,15 +1036,15 @@ void SystemUI::drawTransfer_() {
       break;
     }
     case TransferState::Completed:
-      primary = "Empfang abgeschlossen";
-      secondary = transferFilename_.isEmpty() ? String("Datei gespeichert") : String();
+      primary = String(i18n.t("transfer.completed"));
+      secondary = transferFilename_.isEmpty() ? String(i18n.t("transfer.file_saved")) : String();
       break;
     case TransferState::Error:
-      primary = "Übertragung fehlgeschlagen";
+      primary = String(i18n.t("transfer.failed"));
       secondary.clear();
       break;
     case TransferState::Aborted:
-      primary = "Übertragung abgebrochen";
+      primary = String(i18n.t("transfer.aborted"));
       secondary.clear();
       break;
   }
@@ -1079,11 +1090,116 @@ void SystemUI::drawTransfer_() {
     TextRenderer::drawCentered(statusY, transferStatusText_, transferStatusColor_, TFT_BLACK);
   } else if (transferState_ == TransferState::Idle) {
     tft.fillRect(0, statusY - 6, TFT_W, line + 12, TFT_BLACK);
-    TextRenderer::drawCentered(statusY, "Starte Übertragung am Host", TFT_DARKGREY, TFT_BLACK);
+    TextRenderer::drawCentered(statusY, i18n.t("transfer.start_transfer"), TFT_DARKGREY, TFT_BLACK);
   }
 
   if (!transferFooter_.isEmpty()) {
     tft.fillRect(0, footerY - 6, TFT_W, line + 12, TFT_BLACK);
     TextRenderer::drawCentered(footerY, transferFooter_, TFT_WHITE, TFT_BLACK);
   }
+}
+
+// ============================================================================
+// Language Selection
+// ============================================================================
+
+void SystemUI::showLanguageSelection_() {
+  languageSelection_ = i18n.currentLanguageIndex();
+  languageDirty_ = true;
+  activeScreen_ = Screen::Language;
+}
+
+bool SystemUI::handleLanguageButtons_(uint8_t index, BtnEvent e) {
+  if (index == 1) {
+    // BTN1: Exit back to Setup
+    if (e == BtnEvent::Single || e == BtnEvent::Double) {
+      showSetup();
+      setupMenu_.draw(true);  // Force redraw with new language
+      return true;
+    }
+    return false;
+  }
+
+  if (index != 2) {
+    return false;
+  }
+
+  switch (e) {
+    case BtnEvent::Single: {
+      // Cycle through languages
+      uint8_t langCount = i18n.languageCount();
+      languageSelection_ = (languageSelection_ + 1) % langCount;
+      languageDirty_ = true;
+      return true;
+    }
+    case BtnEvent::Long: {
+      // Confirm language selection
+      const char* const* langs = i18n.availableLanguages();
+      if (langs[languageSelection_]) {
+        i18n.setLanguage(langs[languageSelection_]);
+        // Redraw to show new language
+        languageDirty_ = true;
+      }
+      return true;
+    }
+    case BtnEvent::Double:
+      // Exit back to Setup
+      showSetup();
+      setupMenu_.draw(true);  // Force redraw with new language
+      return true;
+    default:
+      break;
+  }
+
+  return false;
+}
+
+void SystemUI::drawLanguageSelection_() {
+  if (!languageDirty_) return;
+  languageDirty_ = false;
+
+  tft.fillScreen(TFT_BLACK);
+
+  const int16_t line = TextRenderer::lineHeight();
+  const int16_t spacing = 10;
+  int16_t top = 24;
+
+  // Title
+  TextRenderer::drawCentered(top, i18n.t("language.select"), TFT_WHITE, TFT_BLACK);
+
+  // Language options
+  const char* const* langs = i18n.availableLanguages();
+  uint8_t langCount = i18n.languageCount();
+
+  const char* langNameKeys[] = {
+    "language.german",
+    "language.english",
+    "language.french",
+    "language.italian"
+  };
+
+  for (uint8_t i = 0; i < langCount && i < 4; ++i) {
+    int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
+    String label = String(i18n.t(langNameKeys[i]));
+    uint16_t color = TFT_DARKGREY;
+
+    if (i == languageSelection_) {
+      label = String("> ") + label;
+      color = TFT_WHITE;
+    }
+
+    // Show current language indicator
+    if (i == i18n.currentLanguageIndex()) {
+      label += " *";
+    }
+
+    TextRenderer::drawCentered(y, label, color, TFT_BLACK);
+  }
+
+  // Button hints at bottom
+  const int16_t helperLine = TextRenderer::helperLineHeight();
+  const int16_t hintY = TFT_H - (helperLine * 2) - 8 - 20;
+  TextRenderer::drawHelperCentered(hintY, i18n.t("buttons.short_switch"), TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawHelperCentered(hintY + helperLine + 2,
+                                  i18n.t("buttons.long_confirm"), TFT_WHITE, TFT_BLACK);
 }

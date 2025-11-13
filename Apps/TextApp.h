@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/App.h"
+#include "Core/I18n.h"
 #include <Arduino.h>
 #include <vector>
 
@@ -8,7 +9,7 @@ class TFT_eSprite;
 
 class TextApp : public App {
 public:
-  const char* name() const override { return "Text"; }
+  const char* name() const override { return i18n.t("apps.text"); }
   void init() override;
   void tick(uint32_t delta_ms) override;
   void onButton(uint8_t index, BtnEvent e) override;

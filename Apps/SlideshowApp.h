@@ -5,6 +5,7 @@
 
 #include "Core/App.h"
 #include "Core/Storage.h"
+#include "Core/I18n.h"
 
 class SlideshowApp : public App {
 public:
@@ -13,7 +14,7 @@ public:
   bool show_filename = false;
   bool auto_mode = true;  // true = Auto-Slideshow, false = Manuell/Delete
 
-  const char* name() const override { return "Diashow"; }
+  const char* name() const override { return i18n.t("apps.slideshow"); }
   void init() override;
   void tick(uint32_t delta_ms) override;
   void onButton(uint8_t index, BtnEvent e) override;

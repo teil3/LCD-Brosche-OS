@@ -8,6 +8,7 @@
 #include "Core/Gfx.h"
 #include "Core/Storage.h"
 #include "Core/TextRenderer.h"
+#include "Core/I18n.h"
 
 namespace {
 constexpr std::array<uint32_t, 5> kDwellSteps{1000, 5000, 10000, 30000, 300000};
@@ -25,11 +26,11 @@ bool SlideshowApp::isJpeg_(const String& n) {
 
 bool SlideshowApp::focusTransferredFile(const char* filename, size_t size) {
   if (!ensureFlashReady_()) {
-    showToast_("Flash-Fehler", 1800);
+    showToast_(i18n.t("errors.flash_error"), 1800);
     return false;
   }
   if (!rebuildFileListFrom_(SlideSource::Flash)) {
-    showToast_("Keine Flash-Bilder", 1500);
+    showToast_(i18n.t("errors.no_flash_images"), 1500);
     return false;
   }
   source_ = SlideSource::Flash;
@@ -54,7 +55,7 @@ bool SlideshowApp::focusTransferredFile(const char* filename, size_t size) {
   showCurrent_();
 
   if (filename && filename[0]) {
-    String msg = String("Transfer fertig: ") + filename;
+    String msg = i18n.t("slideshow.transfer_done", filename);
     if (size > 0) {
       uint32_t kb = (static_cast<uint32_t>(size) + 1023) / 1024;
       msg += " (";
@@ -117,21 +118,21 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
       tft.fillScreen(TFT_BLACK);
       const int16_t line = TextRenderer::lineHeight();
       const int16_t centerY = (TFT_H - line * 2) / 2;
-      TextRenderer::drawCentered(centerY, "Keine Bilder", TFT_WHITE, TFT_BLACK);
-      TextRenderer::drawCentered(centerY + line, "gefunden", TFT_WHITE, TFT_BLACK);
+      TextRenderer::drawCentered(centerY, i18n.t("slideshow.no_images"), TFT_WHITE, TFT_BLACK);
+      TextRenderer::drawCentered(centerY + line, i18n.t("slideshow.found"), TFT_WHITE, TFT_BLACK);
     }
   }
 }
 
 void SlideshowApp::setSource_(SlideSource src, bool showToast) {
   if (source_ == src && !files_.empty()) {
-    if (showToast) showToast_(String("Quelle: ") + sourceLabel_(), kToastShortMs);
+    if (showToast) showToast_(i18n.t("slideshow.source_label", sourceLabel_()), kToastShortMs);
     return;
   }
 
   source_ = src;
   if (!rebuildFileList_()) {
-    showToast_(String("Keine Bilder: ") + sourceLabel_(), kToastLongMs);
+    showToast_(i18n.t("slideshow.no_images_source", sourceLabel_()), kToastLongMs);
     tft.fillScreen(TFT_BLACK);
     return;
   }
@@ -140,14 +141,14 @@ void SlideshowApp::setSource_(SlideSource src, bool showToast) {
   timeSinceSwitch_ = 0;
   showCurrent_();
   if (showToast) {
-    showToast_(String("Quelle: ") + sourceLabel_(), kToastShortMs);
+    showToast_(i18n.t("slideshow.source_label", sourceLabel_()), kToastShortMs);
   }
 }
 
 bool SlideshowApp::setSlideSource(SlideSource src, bool showToast, bool renderNow) {
   if (source_ == src && !files_.empty()) {
     if (showToast) {
-      showToast_(String("Quelle: ") + sourceLabel_(), kToastShortMs);
+      showToast_(i18n.t("slideshow.source_label", sourceLabel_()), kToastShortMs);
     }
     if (renderNow) {
       showCurrent_();
@@ -157,7 +158,7 @@ bool SlideshowApp::setSlideSource(SlideSource src, bool showToast, bool renderNo
 
   source_ = src;
   if (!rebuildFileList_()) {
-    showToast_(String("Keine Bilder: ") + sourceLabel_(), kToastLongMs);
+    showToast_(i18n.t("slideshow.no_images_source", sourceLabel_()), kToastLongMs);
     tft.fillScreen(TFT_BLACK);
     return false;
   }
@@ -168,7 +169,7 @@ bool SlideshowApp::setSlideSource(SlideSource src, bool showToast, bool renderNo
     showCurrent_();
   }
   if (showToast) {
-    showToast_(String("Quelle: ") + sourceLabel_(), kToastShortMs);
+    showToast_(i18n.t("slideshow.source_label", sourceLabel_()), kToastShortMs);
   }
   return true;
 }
@@ -349,15 +350,15 @@ void SlideshowApp::drawSlideshowMenu_() {
   slideshowMenuDirty_ = false;
 
   tft.fillScreen(TFT_BLACK);
-  static const char* kItems[4] = {"Quellen-Wahl", "Löschmenü", "Autogeschwindigkeit", "Exit"};
+  const char* itemKeys[4] = {"menu.source_select", "menu.delete_menu", "menu.auto_speed", "menu.exit"};
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 12;
   const int16_t top = 24;
-  TextRenderer::drawCentered(top, "Slideshow-Menü", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("menu.slideshow_menu"), TFT_WHITE, TFT_BLACK);
 
   for (uint8_t i = 0; i < 4; ++i) {
     int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
-    String text = kItems[i];
+    String text = String(i18n.t(itemKeys[i]));
     if (slideshowMenuSelection_ == i) {
       text = String("> ") + text;
     }
@@ -367,11 +368,11 @@ void SlideshowApp::drawSlideshowMenu_() {
 
   const int16_t helperBase = TFT_H - TextRenderer::helperLineHeight() - 24;
   TextRenderer::drawHelperCentered(helperBase - (TextRenderer::helperLineHeight() + 4),
-                                   "BTN2 kurz: Wechseln",
+                                   i18n.t("buttons.short_switch"),
                                    TFT_WHITE,
                                    TFT_BLACK);
   TextRenderer::drawHelperCentered(helperBase,
-                                   "BTN2 lang: Öffnen",
+                                   i18n.t("buttons.long_open"),
                                    TFT_WHITE,
                                    TFT_BLACK);
 }
@@ -384,11 +385,11 @@ void SlideshowApp::drawSourceMenu_() {
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 12;
   const int16_t top = 22;
-  TextRenderer::drawCentered(top, "Quellen-Wahl", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("menu.source_select"), TFT_WHITE, TFT_BLACK);
 
-  const char* labels[3] = {"SD-Karte", "Flash", "Zurück"};
+  const char* labelKeys[3] = {"slideshow.sd_card", "slideshow.flash", "menu.back"};
   for (uint8_t i = 0; i < 3; ++i) {
-    String text = labels[i];
+    String text = String(i18n.t(labelKeys[i]));
     if (i < 2) {
       SlideSource current = source_;
       bool isCurrent = (i == 0 && current == SlideSource::SDCard) ||
@@ -406,9 +407,9 @@ void SlideshowApp::drawSourceMenu_() {
   }
 
   const int16_t helperY = TFT_H - (TextRenderer::helperLineHeight() * 2) - 37;
-  TextRenderer::drawHelperCentered(helperY, "BTN2 kurz: Wechseln", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawHelperCentered(helperY, i18n.t("buttons.short_switch"), TFT_WHITE, TFT_BLACK);
   TextRenderer::drawHelperCentered(helperY + TextRenderer::helperLineHeight() + 2,
-                                   "BTN2 lang: Wählen",
+                                   i18n.t("buttons.long_select"),
                                    TFT_WHITE,
                                    TFT_BLACK);
 }
@@ -421,8 +422,8 @@ void SlideshowApp::drawAutoSpeedMenu_() {
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 10;
   int16_t top = 17;
-  TextRenderer::drawCentered(top, "Auto", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(top + line + 4, "Geschwindigkeit", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("common.auto"), TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line + 4, i18n.t("common.speed"), TFT_WHITE, TFT_BLACK);
 
   const uint8_t optionCount = static_cast<uint8_t>(kDwellSteps.size());
   const uint8_t leftCount = (optionCount + 1) / 2;
@@ -444,17 +445,17 @@ void SlideshowApp::drawAutoSpeedMenu_() {
   }
 
   int16_t exitY = top + line*2 + 17 + static_cast<int16_t>(rows) * (line + spacing);
-  String exitLabel = (autoSpeedSelection_ == optionCount) ? String("> Zurück") : String("Zurück");
+  String exitLabel = (autoSpeedSelection_ == optionCount) ? String("> ") + String(i18n.t("menu.back")) : String(i18n.t("menu.back"));
   uint16_t exitColor = (autoSpeedSelection_ == optionCount) ? TFT_WHITE : TFT_DARKGREY;
   TextRenderer::drawCentered(exitY, exitLabel, exitColor, TFT_BLACK);
 
   const int16_t helperBase = exitY + line + 30;
   TextRenderer::drawHelperCentered(helperBase - (TextRenderer::helperLineHeight() + 4),
-                                   "BTN2 kurz: Wechseln",
+                                   i18n.t("buttons.short_switch"),
                                    TFT_WHITE,
                                    TFT_BLACK);
   TextRenderer::drawHelperCentered(helperBase,
-                                   "BTN2 lang: Setzen",
+                                   i18n.t("buttons.long_set"),
                                    TFT_WHITE,
                                    TFT_BLACK);
 }
@@ -517,14 +518,14 @@ void SlideshowApp::confirmDeleteAll_() {
 
 void SlideshowApp::cancelDeleteAll_() {
   deleteState_ = DeleteState::Idle;
-  showToast_("Abgebrochen", kToastShortMs);
+  showToast_(i18n.t("slideshow.aborted"), kToastShortMs);
   markDeleteMenuDirty_();
   clearHelperOverlay_();
 }
 
 void SlideshowApp::startDeleteSingle_() {
   if (!ensureFlashReady_()) {
-    showToast_("Flash-Fehler", kToastLongMs);
+    showToast_(i18n.t("errors.flash_error"), kToastLongMs);
     deleteState_ = DeleteState::Idle;
     markDeleteMenuDirty_();
     clearHelperOverlay_();
@@ -532,7 +533,7 @@ void SlideshowApp::startDeleteSingle_() {
   }
 
   if (!rebuildFileListFrom_(SlideSource::Flash)) {
-    showToast_("Keine Flash-Bilder", kToastLongMs);
+    showToast_(i18n.t("errors.no_flash_images"), kToastLongMs);
     deleteState_ = DeleteState::Idle;
     markDeleteMenuDirty_();
     return;
@@ -544,9 +545,9 @@ void SlideshowApp::startDeleteSingle_() {
   deleteSingleTimer_ = 0;
   showCurrent_();
   showHelperOverlay_(
-      "BTN2 lang: Löschen",
-      "BTN2 kurz: Nächstes Bild",
-      "BTN2 doppelt: Exit",
+      i18n.t("buttons.long_delete"),
+      i18n.t("buttons.short_next"),
+      i18n.t("buttons.double_exit"),
       kDeleteHintDurationMs);
 }
 
@@ -576,7 +577,7 @@ void SlideshowApp::confirmDeleteSingle_() {
     deleteState_ = DeleteState::Idle;
     setControlMode_(ControlMode::Auto);
     clearHelperOverlay_();
-    showToast_("Keine Bilder mehr", kToastLongMs);
+    showToast_(i18n.t("slideshow.no_more_images"), kToastLongMs);
     return;
   }
 
@@ -588,11 +589,11 @@ void SlideshowApp::confirmDeleteSingle_() {
   deleteSingleTimer_ = 0;
   showCurrent_();
   showHelperOverlay_(
-      "BTN2 lang: Löschen",
-      "BTN2 kurz: Nächstes Bild",
-      "BTN2 doppelt: Exit",
+      i18n.t("buttons.long_delete"),
+      i18n.t("buttons.short_next"),
+      i18n.t("buttons.double_exit"),
       kDeleteHintDurationMs);
-  showToast_("Gelöscht", kToastShortMs);
+  showToast_(i18n.t("slideshow.deleted"), kToastShortMs);
 }
 
 void SlideshowApp::cancelDeleteSingle_() {
@@ -626,7 +627,7 @@ void SlideshowApp::setUiLocked(bool locked) {
 void SlideshowApp::performDeleteAll_() {
   if (!ensureFlashReady_()) {
     deleteState_ = DeleteState::Error;
-    showToast_("Flash-Fehler", kToastLongMs);
+    showToast_(i18n.t("errors.flash_error"), kToastLongMs);
     deleteState_ = DeleteState::Idle;
     markDeleteMenuDirty_();
     clearHelperOverlay_();
@@ -635,7 +636,7 @@ void SlideshowApp::performDeleteAll_() {
 
   std::vector<String> flashFiles;
   if (!readDirectoryEntries_(&LittleFS, kFlashSlidesDir, flashFiles)) {
-    showToast_("Keine Bilder", kToastLongMs);
+    showToast_(i18n.t("slideshow.no_images"), kToastLongMs);
     deleteState_ = DeleteState::Idle;
     markDeleteMenuDirty_();
     clearHelperOverlay_();
@@ -657,7 +658,7 @@ void SlideshowApp::performDeleteAll_() {
   }
 
   deleteState_ = DeleteState::Done;
-  String msg = String(deleteCount_) + String(" Bilder gelöscht");
+  String msg = i18n.t("slideshow.images_deleted", String(deleteCount_));
   showToast_(msg, kToastLongMs);
 
   files_.clear();
@@ -668,7 +669,7 @@ void SlideshowApp::performDeleteAll_() {
 
   if (!rebuildFileList_()) {
     tft.fillScreen(TFT_BLACK);
-    showToast_("Keine Bilder", kToastLongMs);
+    showToast_(i18n.t("slideshow.no_images"), kToastLongMs);
   }
 }
 
@@ -828,11 +829,11 @@ String SlideshowApp::dwellLabel_() const {
 String SlideshowApp::modeLabel_() const {
   switch (controlMode_) {
     case ControlMode::Auto:
-      return String("AUTO ") + dwellLabel_();
+      return i18n.t("slideshow.mode_auto", dwellLabel_());
     case ControlMode::Manual:
-      return String("MANUELL");
+      return i18n.t("slideshow.mode_manual");
     case ControlMode::DeleteMenu:
-      return String("LÖSCHEN");
+      return i18n.t("slideshow.mode_delete");
   }
   return String("?");
 }
@@ -842,7 +843,7 @@ String SlideshowApp::sourceLabel_() const {
 }
 
 String SlideshowApp::dwellToastLabel_() const {
-  return String("Dauer ") + dwellLabel_();
+  return i18n.t("slideshow.duration", dwellLabel_());
 }
 
 void SlideshowApp::showToast_(const String& txt, uint32_t duration_ms) {
@@ -997,18 +998,18 @@ void SlideshowApp::drawDeleteMenuOverlay_() {
   const int16_t top = 28;
   const int16_t helperY = TFT_H - (TextRenderer::helperLineHeight() * 2) - 28;
 
-  TextRenderer::drawCentered(top, "Lösch-Menü", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("menu.delete_menu"), TFT_WHITE, TFT_BLACK);
 
-  const char* labels[3] = {"Alle löschen", "Einzeln", "Exit"};
+  const char* labelKeys[3] = {"menu.all_delete", "menu.single_delete", "menu.exit"};
   for (uint8_t i = 0; i < 3; ++i) {
-    String text = (deleteMenuSelection_ == i) ? String("> ") + labels[i] : String(labels[i]);
+    String text = (deleteMenuSelection_ == i) ? String("> ") + String(i18n.t(labelKeys[i])) : String(i18n.t(labelKeys[i]));
     uint16_t color = (deleteMenuSelection_ == i) ? TFT_WHITE : TFT_DARKGREY;
     int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
     TextRenderer::drawCentered(y, text, color, TFT_BLACK);
   }
-  TextRenderer::drawHelperCentered(helperY, "BTN2 kurz: Wechseln", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawHelperCentered(helperY, i18n.t("buttons.short_switch"), TFT_WHITE, TFT_BLACK);
   TextRenderer::drawHelperCentered(helperY + TextRenderer::helperLineHeight() + 2,
-                                   "BTN2 lang: Öffnen",
+                                   i18n.t("buttons.long_open"),
                                    TFT_WHITE,
                                    TFT_BLACK);
 }
@@ -1020,13 +1021,13 @@ void SlideshowApp::drawDeleteAllConfirmOverlay_() {
   tft.fillScreen(TFT_BLACK);
   const int16_t line = TextRenderer::lineHeight();
   const int16_t top = 32;
-  TextRenderer::drawCentered(top, "Flash", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(top + line, "löschen?", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("slideshow.delete_flash"), TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line, i18n.t("slideshow.delete_flash_question"), TFT_WHITE, TFT_BLACK);
 
   const int16_t optionTop = top + line * 2 + 16;
-  const char* confirmLabels[3] = {"Nein", "Ja", "Exit"};
+  const char* confirmKeys[3] = {"system.no", "system.yes", "menu.exit"};
   for (uint8_t i = 0; i < 3; ++i) {
-    String text = confirmLabels[i];
+    String text = String(i18n.t(confirmKeys[i]));
     if (deleteConfirmSelection_ == i) {
       text = String("> ") + text;
     }
@@ -1038,9 +1039,9 @@ void SlideshowApp::drawDeleteAllConfirmOverlay_() {
   const int16_t helperY = TFT_H - (TextRenderer::helperLineHeight() * 2) - 27;
   tft.fillRect(0, helperY - 8, TFT_W,
                TextRenderer::helperLineHeight() * 2 + 24, TFT_BLACK);
-  TextRenderer::drawHelperCentered(helperY, "BTN2 kurz: Wechseln", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawHelperCentered(helperY, i18n.t("buttons.short_switch"), TFT_WHITE, TFT_BLACK);
   TextRenderer::drawHelperCentered(helperY + TextRenderer::helperLineHeight() + 2,
-                                   "BTN2 lang: Bestätigen",
+                                   i18n.t("buttons.long_confirm"),
                                    TFT_WHITE,
                                    TFT_BLACK);
 }
@@ -1053,7 +1054,7 @@ void SlideshowApp::drawDeleteSingleConfirmOverlay_() {
   const int16_t line = TextRenderer::lineHeight();
   const int16_t top = 56;
 
-  TextRenderer::drawCentered(top, "Bild löschen?", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("slideshow.delete_image"), TFT_WHITE, TFT_BLACK);
 
   String filename = deleteCurrentFile_;
   int s = filename.lastIndexOf('/');
@@ -1062,9 +1063,9 @@ void SlideshowApp::drawDeleteSingleConfirmOverlay_() {
   TextRenderer::drawCentered(top + line + 6, filename, TFT_WHITE, TFT_BLACK);
 
   const int16_t singleOptionTop = top + line * 2 + 20;
-  const char* singleLabels[3] = {"Nein", "Ja", "Exit"};
+  const char* singleKeys[3] = {"system.no", "system.yes", "menu.exit"};
   for (uint8_t i = 0; i < 3; ++i) {
-    String text = singleLabels[i];
+    String text = String(i18n.t(singleKeys[i]));
     if (deleteConfirmSelection_ == i) {
       text = String("> ") + text;
     }
@@ -1076,9 +1077,9 @@ void SlideshowApp::drawDeleteSingleConfirmOverlay_() {
   const int16_t helperY = TFT_H - (TextRenderer::helperLineHeight() * 2) - 27;
   tft.fillRect(0, helperY - 8, TFT_W,
                TextRenderer::helperLineHeight() * 2 + 24, TFT_BLACK);
-  TextRenderer::drawHelperCentered(helperY, "BTN2 kurz: Wechseln", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawHelperCentered(helperY, i18n.t("buttons.short_switch"), TFT_WHITE, TFT_BLACK);
   TextRenderer::drawHelperCentered(helperY + TextRenderer::helperLineHeight() + 2,
-                                   "BTN2 lang: Bestätigen",
+                                   i18n.t("buttons.long_confirm"),
                                    TFT_WHITE,
                                    TFT_BLACK);
 }
@@ -1185,8 +1186,8 @@ void SlideshowApp::init() {
     tft.fillScreen(TFT_BLACK);
     const int16_t line = TextRenderer::lineHeight();
     const int16_t centerY = (TFT_H - line * 2) / 2;
-    TextRenderer::drawCentered(centerY, "Keine Bilder", TFT_WHITE, TFT_BLACK);
-    TextRenderer::drawCentered(centerY + line, "gefunden", TFT_WHITE, TFT_BLACK);
+    TextRenderer::drawCentered(centerY, i18n.t("slideshow.no_images"), TFT_WHITE, TFT_BLACK);
+    TextRenderer::drawCentered(centerY + line, i18n.t("slideshow.found"), TFT_WHITE, TFT_BLACK);
     return;
   }
 
@@ -1338,7 +1339,7 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
 
     case BtnEvent::Triple:
       if (controlMode_ == ControlMode::DeleteMenu) {
-        showToast_("Lang: Auto", kToastShortMs);
+        showToast_(i18n.t("buttons.long_auto"), kToastShortMs);
       } else {
         show_filename = !show_filename;
         if (controlMode_ == ControlMode::Manual) {
@@ -1359,7 +1360,7 @@ void SlideshowApp::onButton(uint8_t index, BtnEvent e) {
     case BtnEvent::Long: {
       if (controlMode_ == ControlMode::Auto) {
         if (files_.empty()) {
-          showToast_("Keine Bilder", kToastShortMs);
+          showToast_(i18n.t("slideshow.no_images"), kToastShortMs);
         } else {
           setControlMode_(ControlMode::Manual);
         }

@@ -17,6 +17,7 @@
 #include "Core/BleImageTransfer.h"
 #include "Core/SerialImageTransfer.h"
 #include "Core/SystemUI.h"
+#include "Core/I18n.h"
 
 // Buttons
 ButtonState btn1({(uint8_t)BTN1_PIN, true});
@@ -80,6 +81,9 @@ void setup() {
       Serial.println("[BOOT] LittleFS unavailable");
     #endif
   }
+
+  // Initialize i18n (must be after LittleFS mount)
+  i18n.begin();
 
   gfxBegin();
   #ifdef USB_DEBUG
@@ -293,6 +297,7 @@ void loop() {
 #include "Core/Gfx.cpp"
 #include "Core/Storage.cpp"
 #include "Core/TextRenderer.cpp"
+#include "Core/I18n.cpp"
 #include "Apps/SlideshowApp.cpp"
 #include "Apps/RandomImagerApp.cpp"
 #include "Apps/RandomSquareIntoneApp.cpp"

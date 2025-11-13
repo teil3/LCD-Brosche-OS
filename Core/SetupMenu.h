@@ -9,9 +9,10 @@
 class SetupMenu {
 public:
   enum class Item : uint8_t {
-    UsbBleTransfer = 0,
-    SdTransfer = 1,
-    Exit = 2,
+    Language = 0,
+    UsbBleTransfer = 1,
+    SdTransfer = 2,
+    Exit = 3,
     Count
   };
 

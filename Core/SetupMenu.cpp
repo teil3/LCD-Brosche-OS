@@ -5,14 +5,9 @@
 #include "Config.h"
 #include "Gfx.h"
 #include "TextRenderer.h"
+#include "I18n.h"
 
 namespace {
-constexpr std::array<const char*, static_cast<size_t>(SetupMenu::Item::Count)> kLabels = {
-  "USB/BLE-Transfer",
-  "SD-Transfer",
-  "Exit"
-};
-
 inline uint8_t clampIndex(uint8_t idx) {
   const uint8_t count = static_cast<uint8_t>(SetupMenu::Item::Count);
   return (idx < count) ? idx : (count - 1);
@@ -55,11 +50,19 @@ void SetupMenu::draw(bool force) {
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 10;
   int16_t top = 24;
-  TextRenderer::drawCentered(top, "Setup", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("menu.setup"), TFT_WHITE, TFT_BLACK);
 
-  for (size_t i = 0; i < kLabels.size(); ++i) {
+  // Get labels from i18n
+  const char* labelKeys[] = {
+    "menu.language",
+    "menu.usb_ble_transfer",
+    "menu.sd_transfer",
+    "menu.exit"
+  };
+
+  for (size_t i = 0; i < static_cast<size_t>(Item::Count); ++i) {
     int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
-    String label(kLabels[i]);
+    String label = String(i18n.t(labelKeys[i]));
     uint16_t color = TFT_DARKGREY;
     if (static_cast<uint8_t>(i) == selected_) {
       label = String("> ") + label;
@@ -85,11 +88,11 @@ void SetupMenu::draw(bool force) {
   if (statusActive) {
     TextRenderer::drawHelperCentered(hintY, statusText_, TFT_WHITE, TFT_BLACK);
     TextRenderer::drawHelperCentered(hintY + helperLine + 2,
-                                    "BTN2 kurz/lang: Menü", TFT_WHITE, TFT_BLACK);
+                                    i18n.t("buttons.short_menu"), TFT_WHITE, TFT_BLACK);
   } else {
-    TextRenderer::drawHelperCentered(hintY, "BTN2 kurz: Wechseln", TFT_WHITE, TFT_BLACK);
+    TextRenderer::drawHelperCentered(hintY, i18n.t("buttons.short_switch"), TFT_WHITE, TFT_BLACK);
     TextRenderer::drawHelperCentered(hintY + helperLine + 2,
-                                    "BTN2 lang: Öffnen", TFT_WHITE, TFT_BLACK);
+                                    i18n.t("buttons.long_open"), TFT_WHITE, TFT_BLACK);
   }
 }
 
