@@ -36,4 +36,6 @@ ls -la /dev/tty{ACM,USB}* 2>/dev/null
 ### Diashow Setup
  - Bilder Löschen
  - Anzeige Dauer
+ 
+ ByteBrooch
   

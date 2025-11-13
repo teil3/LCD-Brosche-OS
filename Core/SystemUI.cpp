@@ -642,10 +642,14 @@ bool SystemUI::sdCopyPrepareQueue_() {
         ci.destPath = "/textapp.cfg";
         accepted = true;
       }
-    } else if (lower == "font.vlw") {
+    } else if (lower == "i18n.json") {
+      ci.type = CopyFileType::Config;
+      ci.destPath = "/system/i18n.json";
+      accepted = true;
+    } else if (lower == "font.vlw" || lower == "fontsmall.vlw") {
       if (size <= 18384) {
         ci.type = CopyFileType::Font;
-        ci.destPath = "/system/font.vlw";
+        ci.destPath = (lower == "fontsmall.vlw") ? "/system/fontsmall.vlw" : "/system/font.vlw";
         accepted = true;
       }
     } else if (lower.endsWith(".vlw")) {

@@ -11,7 +11,7 @@
 /**
  * Internationalization (i18n) support for multi-language UI.
  *
- * Loads translations from /i18n.json in LittleFS and provides
+ * Loads translations from /system/i18n.json in LittleFS and provides
  * fast lookup with RAM caching of the active language.
  *
  * Supported languages are defined in the JSON file.
@@ -97,7 +97,7 @@ public:
 private:
   static constexpr size_t kMaxLanguages = 4;  // DE, EN, FR, IT
   static constexpr size_t kJsonBufferSize = 12288;  // 12 KB for JSON document
-  static constexpr const char* kI18nFilePath = "/i18n.json";
+  static constexpr const char* kI18nFilePath = "/system/i18n.json";
   static constexpr const char* kPrefsNamespace = "i18n";
   static constexpr const char* kPrefsKeyLang = "lang";
 

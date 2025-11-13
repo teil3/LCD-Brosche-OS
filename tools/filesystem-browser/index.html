@@ -117,7 +117,7 @@
         </select>
         <button type="submit" id="upload-btn" class="primary" disabled>Upload starten</button>
       </div>
-      <p class="notice">Wähle ein existierendes Verzeichnis als Ziel. <code>textapp.cfg</code>, <code>/system/font.vlw</code> und Standard-Fonts in <code>/system/fonts/</code> sind schreibgeschützt. Eigene Fonts können hinzugefügt und entfernt werden.</p>
+      <p class="notice">Wähle ein existierendes Verzeichnis als Ziel. <code>textapp.cfg</code>, <code>/system/font.vlw</code>, <code>/system/fontsmall.vlw</code>, <code>/system/i18n.json</code> und Standard-Fonts in <code>/system/fonts/</code> sind schreibgeschützt. Eigene Fonts können hinzugefügt und entfernt werden.</p>
     </form>
   </section>
 
@@ -162,6 +162,8 @@
       const lower = path.toLowerCase();
       return lower === '/textapp.cfg' ||
              lower === '/system/font.vlw' ||
+             lower === '/system/fontsmall.vlw' ||
+             lower === '/system/i18n.json' ||
              protectedFonts.has(lower);
     }
 
@@ -403,12 +405,19 @@
       rootOption.textContent = '/';
       uploadDirSelect.appendChild(rootOption);
 
+      // Ensure /system option is always available
+      const systemOption = document.createElement('option');
+      systemOption.value = '/system';
+      systemOption.textContent = '/system';
+      uploadDirSelect.appendChild(systemOption);
+
       // Add all directories
       const directories = entries
         .filter(e => e.isDir && !isHidden(e.path))
         .sort((a, b) => a.path.localeCompare(b.path));
 
       for (const dir of directories) {
+        if (dir.path === '/system') continue;
         const option = document.createElement('option');
         option.value = dir.path;
         option.textContent = dir.path;
@@ -544,7 +553,10 @@
         alert('Keine Datei ausgewählt.');
         return;
       }
-      const dir = normalizePath(uploadDirSelect.value || '/');
+      let dir = normalizePath(uploadDirSelect.value || '/');
+      if (file.name.toLowerCase() === 'i18n.json') {
+        dir = '/system';
+      }
       try {
         setStatus('Starte Upload...');
         await uploadFile(file, dir);

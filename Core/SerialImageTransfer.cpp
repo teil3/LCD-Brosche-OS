@@ -60,7 +60,11 @@ bool isProtectedPath(const String& path) {
     return true;
   }
 
-  if (lower == "/system/font.vlw") {
+  if (lower == "/system/font.vlw" || lower == "/system/fontsmall.vlw") {
+    return true;
+  }
+
+  if (lower == "/system/i18n.json") {
     return true;
   }
 
@@ -509,6 +513,8 @@ bool beginTransfer(size_t size, const char* requestedName, const char* targetDir
   filename[0] = '\0';
   sanitizeFilename(requestedName, filename, sizeof(filename));
   String filenameStr(filename);
+  String filenameLower = filenameStr;
+  filenameLower.toLowerCase();
   String resolvedDir = (targetDir && targetDir[0]) ? String(targetDir) : String(kFlashSlidesDir);
   resolvedDir = normalizePath(resolvedDir.c_str());
   if (resolvedDir.isEmpty()) {
@@ -521,6 +527,10 @@ bool beginTransfer(size_t size, const char* requestedName, const char* targetDir
     resolvedDir = "/";
   } else if (endsWithIgnoreCase(filenameStr, ".lua")) {
     resolvedDir = kLuaScriptsDir;
+  }
+
+  if (filenameLower == "i18n.json") {
+    resolvedDir = "/system";
   }
 
   const char* dirC = resolvedDir.c_str();
