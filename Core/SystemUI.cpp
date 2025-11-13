@@ -643,7 +643,7 @@ bool SystemUI::sdCopyPrepareQueue_() {
         accepted = true;
       }
     } else if (lower == "font.vlw") {
-      if (size <= 16384) {
+      if (size <= 18384) {
         ci.type = CopyFileType::Font;
         ci.destPath = "/system/font.vlw";
         accepted = true;
