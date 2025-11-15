@@ -86,6 +86,10 @@ void SlideshowApp::setControlMode_(ControlMode mode, bool showToast) {
   switch (controlMode_) {
     case ControlMode::Auto:
       auto_mode = true;
+      // When switching to Auto mode from menu, redraw current image immediately
+      if (previous != ControlMode::Auto && !files_.empty()) {
+        showCurrent_(true, true);
+      }
       if (showToast) {
         showToast_(modeLabel_(), kToastShortMs);
       }
@@ -358,12 +362,15 @@ void SlideshowApp::drawSlideshowMenu_() {
 
   for (uint8_t i = 0; i < 4; ++i) {
     int16_t y = top + line + spacing + 15 + static_cast<int16_t>(i) * (line + spacing);
-    String text = String(i18n.t(itemKeys[i]));
+    char buf[64];
+    const char* label = i18n.t(itemKeys[i]);
     if (slideshowMenuSelection_ == i) {
-      text = String("> ") + text;
+      snprintf(buf, sizeof(buf), "> %s", label);
+    } else {
+      snprintf(buf, sizeof(buf), "%s", label);
     }
     uint16_t color = (slideshowMenuSelection_ == i) ? TFT_WHITE : TFT_DARKGREY;
-    TextRenderer::drawCentered(y, text, color, TFT_BLACK);
+    TextRenderer::drawCentered(y, buf, color, TFT_BLACK);
   }
 
   const int16_t helperBase = TFT_H - TextRenderer::helperLineHeight() - 24;
@@ -389,21 +396,22 @@ void SlideshowApp::drawSourceMenu_() {
 
   const char* labelKeys[3] = {"slideshow.sd_card", "slideshow.flash", "slideshow.back"};
   for (uint8_t i = 0; i < 3; ++i) {
-    String text = String(i18n.t(labelKeys[i]));
+    char buf[64];
+    const char* label = i18n.t(labelKeys[i]);
+    bool isCurrent = false;
     if (i < 2) {
       SlideSource current = source_;
-      bool isCurrent = (i == 0 && current == SlideSource::SDCard) ||
-                       (i == 1 && current == SlideSource::Flash);
-      if (isCurrent) {
-        text += " *";
-      }
+      isCurrent = (i == 0 && current == SlideSource::SDCard) ||
+                  (i == 1 && current == SlideSource::Flash);
     }
     if (sourceMenuSelection_ == i) {
-      text = String("> ") + text;
+      snprintf(buf, sizeof(buf), "> %s%s", label, isCurrent ? " *" : "");
+    } else {
+      snprintf(buf, sizeof(buf), "%s%s", label, isCurrent ? " *" : "");
     }
     uint16_t color = (sourceMenuSelection_ == i) ? TFT_WHITE : TFT_DARKGREY;
     int16_t y = top + line + spacing + 15 + static_cast<int16_t>(i) * (line + spacing);
-    TextRenderer::drawCentered(y, text, color, TFT_BLACK);
+    TextRenderer::drawCentered(y, buf, color, TFT_BLACK);
   }
 
   const int16_t helperY = TFT_H - (TextRenderer::helperLineHeight() * 2) - 37;
@@ -461,16 +469,19 @@ void SlideshowApp::drawAutoSpeedMenu_() {
 }
 
 String SlideshowApp::dwellOptionLabel_(uint8_t idx) const {
+  static char buf[16];
   if (idx >= kDwellSteps.size()) {
     return String();
   }
   uint32_t ms = kDwellSteps[idx];
   if (ms % 60000 == 0) {
     uint32_t minutes = ms / 60000;
-    return String(minutes) + " min";
+    snprintf(buf, sizeof(buf), "%lu min", minutes);
+  } else {
+    uint32_t seconds = (ms + 500) / 1000;
+    snprintf(buf, sizeof(buf), "%lu s", seconds);
   }
-  uint32_t seconds = (ms + 500) / 1000;
-  return String(seconds) + " s";
+  return buf;
 }
 
 
@@ -820,10 +831,13 @@ void SlideshowApp::applyDwell_() {
 }
 
 String SlideshowApp::dwellLabel_() const {
+  static char buf[12];
   if (dwell_ms % 60000 == 0) {
-    return String(dwell_ms / 60000) + "m";
+    snprintf(buf, sizeof(buf), "%lum", dwell_ms / 60000);
+  } else {
+    snprintf(buf, sizeof(buf), "%lus", (dwell_ms + 500) / 1000);
   }
-  return String((dwell_ms + 500) / 1000) + "s";
+  return buf;
 }
 
 String SlideshowApp::modeLabel_() const {
@@ -1417,4 +1431,13 @@ void SlideshowApp::draw() {
 
 void SlideshowApp::shutdown() {
   files_.clear();
+}
+
+void SlideshowApp::resume() {
+  // Called when returning from system setup menu
+  // SystemUI already cleared the screen with fillScreen(BLACK)
+  // so we need to redraw the current image
+  if (!files_.empty()) {
+    showCurrent_(true, true);
+  }
 }

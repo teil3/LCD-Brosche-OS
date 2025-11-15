@@ -501,6 +501,15 @@ bool SystemUI::sdCopyBegin_() {
     LittleFS.mkdir("/system/fonts");
   }
 
+  // Allocate copy buffer dynamically (saves 2KB when not copying)
+  if (sdCopyBuffer_ == nullptr) {
+    sdCopyBuffer_ = (uint8_t*)malloc(2048);
+    if (sdCopyBuffer_ == nullptr) {
+      sdCopyFinalize_(SdCopyOutcome::Error, "Out of memory");
+      return false;
+    }
+  }
+
   sdCopyState_ = SdCopyState::Running;
   sdCopyAbortRequest_ = false;
   sdCopyDirty_ = true;
@@ -554,7 +563,7 @@ void SystemUI::sdCopyTick_() {
       }
     }
 
-    const size_t chunkSize = sdCopyBuffer_.size();
+    const size_t chunkSize = 2048;
     size_t available = sdCopySrc_.available();
     if (available == 0) {
       sdCopySrc_.close();
@@ -564,12 +573,12 @@ void SystemUI::sdCopyTick_() {
     }
 
     size_t toRead = std::min(chunkSize, available);
-    size_t n = sdCopySrc_.read(sdCopyBuffer_.data(), toRead);
+    size_t n = sdCopySrc_.read(sdCopyBuffer_, toRead);
     if (n == 0) {
       sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.read_error"));
       return;
     }
-    if (sdCopyDst_.write(sdCopyBuffer_.data(), n) != n) {
+    if (sdCopyDst_.write(sdCopyBuffer_, n) != n) {
       sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.write_error"));
       return;
     }
@@ -594,6 +603,12 @@ void SystemUI::sdCopyFinalize_(SdCopyOutcome outcome, const String& message) {
   sdCopyAbortRequest_ = false;
   sdCopyState_ = SdCopyState::Idle;
   sdCopyDirty_ = true;
+
+  // Free copy buffer (saves 2KB when not copying)
+  if (sdCopyBuffer_ != nullptr) {
+    free(sdCopyBuffer_);
+    sdCopyBuffer_ = nullptr;
+  }
 
   sdCopyOutcome_ = outcome;
   sdCopyOutcomeMessage_ = message;

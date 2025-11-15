@@ -290,28 +290,15 @@ void I18n::clearTranslations_() {
 
 const char* I18n::lookupTranslation_(const char* key) {
   if (!key) {
-    Serial.printf("[I18n] lookupTranslation_: key is NULL\n");
     return nullptr;
   }
 
-  Serial.printf("[I18n] lookupTranslation_: searching for '%s' (len=%u) in %u translations\n",
-                key, strlen(key), translations_.size());
   for (size_t i = 0; i < translations_.size(); i++) {
-    bool match = translations_[i].key.equals(key);
-    if (i < 3) {  // Debug first 3 comparisons
-      Serial.printf("  [%u] comparing '%s' (len=%u) with '%s' (len=%u): %s\n",
-                    i, key, strlen(key),
-                    translations_[i].key.c_str(), translations_[i].key.length(),
-                    match ? "MATCH" : "no match");
-    }
-    if (match) {
-      Serial.printf("[I18n] lookupTranslation_: FOUND at index %u: '%s' -> '%s'\n",
-                    i, translations_[i].key.c_str(), translations_[i].value.c_str());
+    if (translations_[i].key.equals(key)) {
       return translations_[i].value.c_str();
     }
   }
 
-  Serial.printf("[I18n] lookupTranslation_: NOT FOUND '%s'\n", key);
   return nullptr;
 }
 

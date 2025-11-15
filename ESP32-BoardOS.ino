@@ -48,8 +48,8 @@ LuaApp app_lua;
 SystemUI systemUi;
 
 void setup() {
-  Serial.setRxBufferSize(8192);
-  Serial.setTxBufferSize(8192);
+  Serial.setRxBufferSize(4096);  // Reduced from 8192 to save 4KB RAM
+  Serial.setTxBufferSize(4096);  // Reduced from 8192 to save 4KB RAM
   Serial.begin(115200);
   Serial.setTimeout(5);
   delay(100);

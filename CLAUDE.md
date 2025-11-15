@@ -17,6 +17,7 @@ arduino-cli lib install "TFT_eSPI" "TJpg_Decoder"
 arduino-cli compile -b esp32:esp32:esp32 \
   --build-property build.flash_size=16MB \
   --build-property build.partitions=partitions.csv \
+  --build-property upload.maximum_size=3670016 \
   --build-property compiler.cpp.extra_flags="-DSMOOTH_FONT" \
   --build-property compiler.c.extra_flags="-DSMOOTH_FONT" \
   --build-path build-16m .
@@ -28,7 +29,10 @@ arduino-cli upload -b esp32:esp32:esp32 --input-dir build-16m -p /dev/ttyACM0
 arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 ```
 
-**Critical:** Always run the full compile command with `--build-path build-16m` before upload to ensure the custom 8MB LittleFS partition table is applied. The upload command uses the last built artifact from `build-16m/`.
+**Critical:**
+- Always run the full compile command with ALL parameters shown above, especially `--build-property upload.maximum_size=3670016` which is required to use the full app0 partition (3.5MB).
+- Without this parameter, the compiler will incorrectly assume only 1.31MB is available and fail with "Sketch too big" error.
+- The `--build-path build-16m` ensures the custom 8MB LittleFS partition table is applied. The upload command uses the last built artifact from `build-16m/`.
 
 ## Display Specifications
 

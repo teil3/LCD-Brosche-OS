@@ -20,6 +20,7 @@ public:
   void onButton(uint8_t index, BtnEvent e) override;
   void draw() override;
   void shutdown() override;
+  void resume() override;
 
   bool setSlideSource(SlideSource src, bool showToast = true, bool renderNow = true);
   SlideSource slideSource() const { return source_; }

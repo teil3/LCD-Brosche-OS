@@ -119,7 +119,7 @@ class SystemUI {
   File sdCopySrc_;
   File sdCopyDst_;
   size_t sdCopyFileBytesDone_ = 0;
-  std::array<uint8_t, 2048> sdCopyBuffer_{};
+  uint8_t* sdCopyBuffer_ = nullptr;  // Dynamic allocation to save 2KB when not copying
   SdCopyDisplayStatus sdCopyLastStatus_;
   bool sdCopyProgressNeedsClear_ = true;
   String sdCopyHeader_;

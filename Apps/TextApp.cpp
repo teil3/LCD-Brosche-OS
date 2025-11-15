@@ -813,7 +813,9 @@ void TextApp::cycleSpeed_() {
     speedIndex_ = (speedIndex_ + 1) % kCycleSpeedCount;
     letterSpeed_ = kCycleSpeeds[speedIndex_];
     timeAccum_ = 0;
-    showStatus_(String("Tempo: ") + String(letterSpeed_) + "ms");
+    char buf[32];
+    snprintf(buf, sizeof(buf), "Tempo: %dms", letterSpeed_);
+    showStatus_(buf);
   }
 }
 

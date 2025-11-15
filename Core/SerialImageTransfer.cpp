@@ -156,7 +156,7 @@ void deleteFileAtPath(const char* rawPath) {
 
 void ensureQueue() {
   if (!gEventQueue) {
-    gEventQueue = xQueueCreate(8, sizeof(SerialImageTransfer::Event));
+    gEventQueue = xQueueCreate(4, sizeof(SerialImageTransfer::Event));  // Reduced from 8 to save 672 bytes
   }
 }
 
