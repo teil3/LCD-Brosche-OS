@@ -50,6 +50,9 @@ void LuaApp::init() {
     Serial.printf("[LuaApp] init() start, free heap: %u bytes\n", ESP.getFreeHeap());
   #endif
 
+  // Clear screen immediately to prevent overlay issues when returning from other apps
+  tft.fillScreen(TFT_BLACK);
+
   ensureScriptsDir_();
 
   #ifdef USB_DEBUG
@@ -122,6 +125,10 @@ void LuaApp::draw() {
 void LuaApp::shutdown() {
   restoreDefaultFont_();
   destroyVm_();
+}
+
+void LuaApp::resume() {
+  refresh();
 }
 
 void LuaApp::onButton(uint8_t index, BtnEvent e) {
@@ -385,6 +392,13 @@ bool LuaApp::handleSystemNextRequest() {
   }
   ++scriptIndex_;
   return loadCurrentScript_();
+}
+
+void LuaApp::refresh() {
+  if (!vmReady_ || !scriptLoaded_) return;
+  // Clear screen and re-run setup to redraw everything
+  tft.fillScreen(TFT_BLACK);
+  runSetup_();
 }
 
 void LuaApp::handleLuaError_() {

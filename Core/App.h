@@ -14,6 +14,7 @@ public:
   virtual void onButton(uint8_t index, BtnEvent e) = 0; // 1=BTN1, 2=BTN2
   virtual void draw() = 0;
   virtual void shutdown() = 0;
+  virtual void resume() {}  // Called when app resumes after overlay (e.g. setup menu)
 };
 
 #endif // CORE_APP_H

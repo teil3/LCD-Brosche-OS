@@ -238,7 +238,7 @@ void loop() {
           break;
         }
         case BtnEvent::Double:
-          systemUi.showSetup();
+          systemUi.showSetup(appman.activeApp());
           break;
         case BtnEvent::Triple:
           break;

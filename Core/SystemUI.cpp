@@ -24,7 +24,7 @@ void SystemUI::begin(const Callbacks& cb) {
   resetTransferUi_();
 }
 
-void SystemUI::showSetup() {
+void SystemUI::showSetup(App* activeApp) {
   resetSdCopyUi_();
   resetTransferUi_();
 
@@ -33,12 +33,18 @@ void SystemUI::showSetup() {
   TextRenderer::ensureLoaded();
 
   activeScreen_ = Screen::Setup;
+  activeApp_ = activeApp;
   setupMenu_.show();
 }
 
 void SystemUI::hide() {
   if (activeScreen_ == Screen::Setup) {
     setupMenu_.hide();
+    // Clear screen and resume app to redraw after setup menu
+    if (activeApp_) {
+      tft.fillScreen(TFT_BLACK);
+      activeApp_->resume();
+    }
   } else if (activeScreen_ == Screen::SdCopyConfirm) {
     sdCopyCancel_();
     resetSdCopyUi_();
@@ -49,6 +55,7 @@ void SystemUI::hide() {
     resetTransferUi_();
   }
   activeScreen_ = Screen::None;
+  activeApp_ = nullptr;
 }
 
 bool SystemUI::handleButton(uint8_t index, BtnEvent e) {

@@ -350,11 +350,11 @@ void SlideshowApp::drawSlideshowMenu_() {
   slideshowMenuDirty_ = false;
 
   tft.fillScreen(TFT_BLACK);
-  const char* itemKeys[4] = {"menu.source_select", "menu.delete_menu", "menu.auto_speed", "menu.exit"};
+  const char* itemKeys[4] = {"slideshow.source_select", "slideshow.delete_menu", "slideshow.auto_speed", "menu.exit"};
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 12;
   const int16_t top = 24;
-  TextRenderer::drawCentered(top, i18n.t("menu.slideshow_menu"), TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("slideshow.menu_title"), TFT_WHITE, TFT_BLACK);
 
   for (uint8_t i = 0; i < 4; ++i) {
     int16_t y = top + line + spacing + 15 + static_cast<int16_t>(i) * (line + spacing);
@@ -385,9 +385,9 @@ void SlideshowApp::drawSourceMenu_() {
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 12;
   const int16_t top = 22;
-  TextRenderer::drawCentered(top, i18n.t("menu.source_select"), TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("slideshow.source_select"), TFT_WHITE, TFT_BLACK);
 
-  const char* labelKeys[3] = {"slideshow.sd_card", "slideshow.flash", "menu.back"};
+  const char* labelKeys[3] = {"slideshow.sd_card", "slideshow.flash", "slideshow.back"};
   for (uint8_t i = 0; i < 3; ++i) {
     String text = String(i18n.t(labelKeys[i]));
     if (i < 2) {
@@ -422,8 +422,8 @@ void SlideshowApp::drawAutoSpeedMenu_() {
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 10;
   int16_t top = 17;
-  TextRenderer::drawCentered(top, i18n.t("common.auto"), TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(top + line + 4, i18n.t("common.speed"), TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("slideshow.auto"), TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line + 4, i18n.t("slideshow.speed"), TFT_WHITE, TFT_BLACK);
 
   const uint8_t optionCount = static_cast<uint8_t>(kDwellSteps.size());
   const uint8_t leftCount = (optionCount + 1) / 2;
@@ -445,7 +445,7 @@ void SlideshowApp::drawAutoSpeedMenu_() {
   }
 
   int16_t exitY = top + line*2 + 27 + static_cast<int16_t>(rows) * (line + spacing);
-  String exitLabel = (autoSpeedSelection_ == optionCount) ? String("> ") + String(i18n.t("menu.back")) : String(i18n.t("menu.back"));
+  String exitLabel = (autoSpeedSelection_ == optionCount) ? String("> ") + String(i18n.t("slideshow.back")) : String(i18n.t("slideshow.back"));
   uint16_t exitColor = (autoSpeedSelection_ == optionCount) ? TFT_WHITE : TFT_DARKGREY;
   TextRenderer::drawCentered(exitY, exitLabel, exitColor, TFT_BLACK);
 
@@ -998,9 +998,9 @@ void SlideshowApp::drawDeleteMenuOverlay_() {
   const int16_t top = 28;
   const int16_t helperY = TFT_H - (TextRenderer::helperLineHeight() * 2) - 28;
 
-  TextRenderer::drawCentered(top, i18n.t("menu.delete_menu"), TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top, i18n.t("slideshow.delete_menu"), TFT_WHITE, TFT_BLACK);
 
-  const char* labelKeys[3] = {"menu.all_delete", "menu.single_delete", "menu.exit"};
+  const char* labelKeys[3] = {"slideshow.all_delete", "slideshow.single_delete", "menu.exit"};
   for (uint8_t i = 0; i < 3; ++i) {
     String text = (deleteMenuSelection_ == i) ? String("> ") + String(i18n.t(labelKeys[i])) : String(i18n.t(labelKeys[i]));
     uint16_t color = (deleteMenuSelection_ == i) ? TFT_WHITE : TFT_DARKGREY;

@@ -14,14 +14,7 @@
     "language": "Language",
     "exit": "Exit",
     "usb_ble_transfer": "USB/BLE Transfer",
-    "sd_transfer": "SD Transfer",
-    "slideshow_menu": "Slideshow Menu",
-    "source_select": "Source Selection",
-    "delete_menu": "Delete Menu",
-    "auto_speed": "Auto Speed",
-    "back": "Back",
-    "all_delete": "Delete all",
-    "single_delete": "Single"
+    "sd_transfer": "SD Transfer"
   },
   "slideshow": {
     "no_images": "No images",
@@ -47,7 +40,16 @@
     "option_5s": "5s",
     "option_10s": "10s",
     "option_30s": "30s",
-    "option_5m": "5m"
+    "option_5m": "5m",
+    "menu_title": "Slideshow Menu",
+    "source_select": "Source Selection",
+    "delete_menu": "Delete Menu",
+    "auto_speed": "Auto Speed",
+    "back": "Back",
+    "all_delete": "Delete all",
+    "single_delete": "Single",
+    "auto": "Auto",
+    "speed": "Speed"
   },
   "system": {
     "sd_copy": "SD Copy",
@@ -120,23 +122,5 @@
     "italian": "Italian",
     "current": "Current language: {0}",
     "exit": "Exit"
-    
-  },
-  "common": {
-    "loading": "Loading...",
-    "saving": "Saving...",
-    "cancel": "Cancel",
-    "ok": "OK",
-    "confirm": "Confirm",
-    "delete": "Delete",
-    "select": "Select",
-    "change": "Change",
-    "open": "Open",
-    "close": "Close",
-    "next": "Next",
-    "previous": "Previous",
-    "auto": "Auto",
-    "manual": "Manual",
-    "speed": "Speed"
   }
 }

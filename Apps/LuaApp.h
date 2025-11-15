@@ -21,8 +21,10 @@ public:
   void tick(uint32_t delta_ms) override;
   void draw() override;
   void shutdown() override;
+  void resume() override;  // Called when resuming after overlay
   void onButton(uint8_t index, BtnEvent e) override;
   bool handleSystemNextRequest();
+  void refresh();  // Call to redraw after screen was cleared externally
 
 private:
   bool customFontActive_ = false;

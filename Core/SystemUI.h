@@ -24,7 +24,7 @@ class SystemUI {
 
   void begin(const Callbacks& cb);
 
-  void showSetup();
+  void showSetup(App* activeApp = nullptr);
   void hide();
   bool isActive() const { return activeScreen_ != Screen::None; }
   bool shouldPauseApps() const { return isActive(); }
@@ -148,4 +148,6 @@ class SystemUI {
   uint32_t transferStatusUntil_ = 0;
   uint16_t transferStatusColor_ = TFT_WHITE;
   uint32_t transferAutoExitAt_ = 0;
+
+  App* activeApp_ = nullptr;  // Active app when overlay is shown
 };

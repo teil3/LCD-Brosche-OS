@@ -14,14 +14,7 @@
     "language": "Langue",
     "exit": "Sortir",
     "usb_ble_transfer": "Transfert USB/BLE",
-    "sd_transfer": "Transfert SD",
-    "slideshow_menu": "Menu diaporama",
-    "source_select": "Sélection source",
-    "delete_menu": "Menu suppression",
-    "auto_speed": "Vitesse auto",
-    "back": "Retour",
-    "all_delete": "Tout supprimer",
-    "single_delete": "Unique"
+    "sd_transfer": "Transfert SD"
   },
   "slideshow": {
     "no_images": "Aucune image",
@@ -47,7 +40,16 @@
     "option_5s": "5s",
     "option_10s": "10s",
     "option_30s": "30s",
-    "option_5m": "5m"
+    "option_5m": "5m",
+    "menu_title": "Menu diaporama",
+    "source_select": "Sélection source",
+    "delete_menu": "Menu suppression",
+    "auto_speed": "Vitesse auto",
+    "back": "Retour",
+    "all_delete": "Tout supprimer",
+    "single_delete": "Unique",
+    "auto": "Auto",
+    "speed": "Vitesse"
   },
   "system": {
     "sd_copy": "Copie SD",
@@ -120,22 +122,5 @@
     "italian": "Italien",
     "current": "Langue actuelle: {0}",
     "exit": "Sortir"
-  },
-  "common": {
-    "loading": "Chargement...",
-    "saving": "Enregistrement...",
-    "cancel": "Annuler",
-    "ok": "OK",
-    "confirm": "Confirmer",
-    "delete": "Supprimer",
-    "select": "Sélectionner",
-    "change": "Changer",
-    "open": "Ouvrir",
-    "close": "Fermer",
-    "next": "Suivant",
-    "previous": "Précédent",
-    "auto": "Auto",
-    "manual": "Manuel",
-    "speed": "Vitesse"
   }
 }
