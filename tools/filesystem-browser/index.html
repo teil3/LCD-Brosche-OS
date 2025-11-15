@@ -66,6 +66,10 @@
       <button id="connect-btn" class="primary">Verbinden</button>
       <button id="disconnect-btn" class="hidden">Trennen</button>
       <button id="refresh-btn" disabled>Aktualisieren</button>
+      <label style="display: flex; align-items: center; gap: 0.4rem; margin-left: auto;">
+        <input type="checkbox" id="expert-mode" style="width: auto; margin: 0;">
+        <span style="font-size: 0.9rem;">Expert-Modus (Löschschutz deaktivieren)</span>
+      </label>
     </div>
     <p id="status" class="status muted">Bereit.</p>
   </section>
@@ -117,7 +121,7 @@
         </select>
         <button type="submit" id="upload-btn" class="primary" disabled>Upload starten</button>
       </div>
-      <p class="notice">Wähle ein existierendes Verzeichnis als Ziel. <code>textapp.cfg</code>, <code>/system/font.vlw</code>, <code>/system/fontsmall.vlw</code>, <code>/system/i18n.json</code> und Standard-Fonts in <code>/system/fonts/</code> sind schreibgeschützt. Eigene Fonts können hinzugefügt und entfernt werden.</p>
+      <p class="notice">Wähle ein existierendes Verzeichnis als Ziel. <code>textapp.cfg</code>, <code>/system/font.vlw</code>, <code>/system/fontsmall.vlw</code>, <code>/system/i18n*.json</code> und Standard-Fonts in <code>/system/fonts/</code> sind schreibgeschützt. Eigene Fonts können hinzugefügt und entfernt werden. Der Expert-Modus deaktiviert alle Löschschutzmechanismen.</p>
     </form>
   </section>
 
@@ -159,11 +163,16 @@
     ]);
 
     function isProtected(path) {
+      // Expert mode bypasses all protection
+      const expertMode = document.getElementById('expert-mode')?.checked || false;
+      if (expertMode) return false;
+
       const lower = path.toLowerCase();
       return lower === '/textapp.cfg' ||
              lower === '/system/font.vlw' ||
              lower === '/system/fontsmall.vlw' ||
              lower === '/system/i18n.json' ||
+             lower.startsWith('/system/i18n_') ||
              protectedFonts.has(lower);
     }
 
@@ -301,6 +310,13 @@
     async function disconnectDevice() {
       refreshBtn.disabled = true;
       uploadBtn.disabled = true;
+
+      // Reset expert mode checkbox
+      const expertCheckbox = document.getElementById('expert-mode');
+      if (expertCheckbox) {
+        expertCheckbox.checked = false;
+      }
+
       if (writer) {
         try { await writer.releaseLock(); } catch (_) {}
         writer = null;
@@ -459,6 +475,7 @@
         const pathTd = document.createElement('td');
         pathTd.className = 'path-cell';
         pathTd.textContent = entry.path;
+        pathTd.dataset.path = entry.path;  // Store path for easy access
         if (entry.isDir) {
           const tag = document.createElement('span');
           tag.textContent = 'DIR';
@@ -554,7 +571,8 @@
         return;
       }
       let dir = normalizePath(uploadDirSelect.value || '/');
-      if (file.name.toLowerCase() === 'i18n.json') {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName === 'i18n.json' || lowerName.startsWith('i18n_')) {
         dir = '/system';
       }
       try {
@@ -587,6 +605,39 @@
     refreshBtn.addEventListener('click', () => refreshFilesystem());
     connectBtn.addEventListener('click', () => connectDevice());
     disconnectBtn.addEventListener('click', () => disconnectDevice());
+
+    // Re-render table when expert mode is toggled to update delete button states
+    const expertModeCheckbox = document.getElementById('expert-mode');
+    if (expertModeCheckbox) {
+      expertModeCheckbox.addEventListener('change', async () => {
+        const enabled = expertModeCheckbox.checked;
+
+        // Send EXPERT command to firmware
+        if (writer) {
+          try {
+            await writer.write(textEncoder.encode(`EXPERT ${enabled ? '1' : '0'}\n`));
+            await waitForOk('OK EXPERT', 2000);
+            console.log(`Expert mode ${enabled ? 'enabled' : 'disabled'} on device`);
+          } catch (err) {
+            console.error('Failed to set expert mode on device:', err);
+            // Continue anyway - UI will still update
+          }
+        }
+
+        // Update all delete buttons in the current table
+        const deleteButtons = fsTable.querySelectorAll('button');
+        deleteButtons.forEach(btn => {
+          if (btn.textContent === 'Löschen') {
+            // Get the path from the row's data attribute
+            const row = btn.closest('tr');
+            const pathCell = row?.querySelector('.path-cell');
+            if (pathCell && pathCell.dataset.path) {
+              btn.disabled = isProtected(pathCell.dataset.path);
+            }
+          }
+        });
+      });
+    }
     window.addEventListener('beforeunload', () => {
       if (port) {
         disconnectDevice();

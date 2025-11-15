@@ -51,7 +51,8 @@ void TextApp::init() {
   needsRedraw_ = true;
   needsFullRedraw_ = true;
 
-  TextRenderer::end();
+  // DO NOT call TextRenderer::end() - it destroys the system font!
+  // Only manage our own app-specific fonts
   fontExplicit_ = false;
   fontLoaded_ = false;
   fontLoadFailed_ = false;
@@ -146,8 +147,18 @@ void TextApp::draw() {
 }
 
 void TextApp::shutdown() {
+  // Clean up our own fonts
   unloadFont_();
-  TextRenderer::begin();
+
+  // CRITICAL: Reset TFT font state completely
+  // showStatus_() may have set tft.setTextFont(4), which persists
+  // We need to clear this so TextRenderer can load its font properly
+  tft.unloadFont();
+  tft.setTextFont(0);  // Reset to default
+
+  // IMPORTANT: Restore TextRenderer's system font for other apps
+  // This ensures the system font is loaded even if we called showStatus_()
+  TextRenderer::ensureLoaded();
 }
 
 void TextApp::onButton(uint8_t index, BtnEvent e) {
@@ -846,7 +857,15 @@ void TextApp::reloadConfig_() {
 
 void TextApp::showStatus_(const String& msg) {
   tft.fillScreen(bgColor_);
-  unloadFont_();
+
+  // Save current font state
+  bool hadFontLoaded = fontLoaded_;
+
+  // Temporarily use system font for status display
+  if (fontLoaded_) {
+    unloadFont_();
+  }
+
   tft.setTextFont(4);
   tft.setTextSize(1);
   tft.setTextWrap(false);
@@ -861,6 +880,11 @@ void TextApp::showStatus_(const String& msg) {
 
   tft.setCursor(x, baseline);
   tft.print(msg);
+
+  // Restore original font if it was loaded
+  if (hadFontLoaded) {
+    loadFont_(fontName_);
+  }
 
   pauseUntil_ = millis() + 1000;
   needsRedraw_ = true;

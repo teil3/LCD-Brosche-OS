@@ -82,7 +82,9 @@ public:
    *
    * @return Array of language codes
    */
-  const char* const* availableLanguages() const { return availableLangs_; }
+  const char* availableLanguages(uint8_t index) const {
+    return (index < langCount_) ? availableLangs_[index] : nullptr;
+  }
 
   /**
    * Get number of available languages.
@@ -96,23 +98,34 @@ public:
 
 private:
   static constexpr size_t kMaxLanguages = 4;  // DE, EN, FR, IT
-  static constexpr size_t kJsonBufferSize = 12288;  // 12 KB for JSON document
+  static constexpr size_t kMaxTranslations = 117;  // Exact number we need (reduce heap pressure)
   static constexpr const char* kI18nFilePath = "/system/i18n.json";
   static constexpr const char* kPrefsNamespace = "i18n";
   static constexpr const char* kPrefsKeyLang = "lang";
 
-  JsonDocument doc_;
+  // Translation cache: store only strings for current language instead of full JSON
+  // CRITICAL: Use static array instead of dynamic allocation to avoid heap fragmentation
+  struct TranslationEntry {
+    String key;
+    String value;
+  };
+
+  // Static allocation - lives in BSS segment, not heap!
+  static TranslationEntry translations_[kMaxTranslations];
+  uint16_t translationCount_ = 0;
+
   uint8_t langIndex_ = 0;
   bool ready_ = false;
-  const char* availableLangs_[kMaxLanguages] = {nullptr};
+  char availableLangs_[kMaxLanguages][3];  // 2-letter codes + null terminator
   uint8_t langCount_ = 0;
   char currentLang_[3] = "de";  // 2-letter code + null terminator
 
-  bool loadFromFile_();
-  void loadAvailableLanguages_();
+  bool loadLanguage_();
+  void extractTranslations_(JsonDocument& doc);
+  void clearTranslations_();
   void saveLanguagePreference_();
   String loadLanguagePreference_();
-  JsonVariant lookupKey_(const char* key);
+  const char* lookupTranslation_(const char* key);
 };
 
 // Global i18n instance

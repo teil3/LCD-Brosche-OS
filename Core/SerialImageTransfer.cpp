@@ -45,6 +45,7 @@ struct TransferSession {
 QueueHandle_t gEventQueue = nullptr;
 TransferSession gSession;
 bool gTransfersEnabled = false;
+bool gExpertMode = false;
 char gLineBuffer[kLineBufferSize];
 size_t gLineLength = 0;
 
@@ -52,6 +53,9 @@ void sendOk(const char* code, const char* fmt, ...);
 void sendErr(const char* code, const char* fmt, ...);
 
 bool isProtectedPath(const String& path) {
+  // Expert mode bypasses all protection
+  if (gExpertMode) return false;
+
   if (path.isEmpty()) return true;
   String lower = path;
   lower.toLowerCase();
@@ -64,7 +68,7 @@ bool isProtectedPath(const String& path) {
     return true;
   }
 
-  if (lower == "/system/i18n.json") {
+  if (lower == "/system/i18n.json" || lower.startsWith("/system/i18n_")) {
     return true;
   }
 
@@ -529,7 +533,7 @@ bool beginTransfer(size_t size, const char* requestedName, const char* targetDir
     resolvedDir = kLuaScriptsDir;
   }
 
-  if (filenameLower == "i18n.json") {
+  if (filenameLower == "i18n.json" || filenameLower.startsWith("i18n_")) {
     resolvedDir = "/system";
   }
 
@@ -805,6 +809,27 @@ void processLine(const char* line) {
 
   if (std::strcmp(line, "PING") == 0) {
     sendOk("PONG");
+    return;
+  }
+
+  if (std::strncmp(line, "EXPERT", 6) == 0) {
+    const char* ptr = line + 6;
+    while (*ptr == ' ') ++ptr;
+    if (*ptr == '1') {
+      gExpertMode = true;
+      sendOk("EXPERT", "Expert mode enabled");
+      #ifdef USB_DEBUG
+        Serial.println("[USB] Expert mode ENABLED - protection disabled");
+      #endif
+    } else if (*ptr == '0') {
+      gExpertMode = false;
+      sendOk("EXPERT", "Expert mode disabled");
+      #ifdef USB_DEBUG
+        Serial.println("[USB] Expert mode DISABLED - protection active");
+      #endif
+    } else {
+      sendErr("EXPERTFMT", "EXPERT <0|1>");
+    }
     return;
   }
 

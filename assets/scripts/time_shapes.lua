@@ -1,4 +1,5 @@
-APP_NAME = 'Shapes & FS'
+APP_NAME = "Shapes & FS"
+
 
 local angle = 0
 local lastWrite = 0

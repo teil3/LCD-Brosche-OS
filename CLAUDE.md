@@ -30,6 +30,31 @@ arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 
 **Critical:** Always run the full compile command with `--build-path build-16m` before upload to ensure the custom 8MB LittleFS partition table is applied. The upload command uses the last built artifact from `build-16m/`.
 
+## Display Specifications
+
+### Round Display Constraints
+The device uses a **round 240×240 pixel display (GC9A01)**, which creates important layout constraints:
+
+- **Physical shape**: Circular display with 240px diameter
+- **Framebuffer**: 240×240 pixels (square)
+- **Visible area**: Only content within a 240px diameter circle is visible
+- **Safe zone**: A centered **169×169 pixel square** is guaranteed to be fully visible
+- **Corner clipping**: Content in the corners of the 240×240 framebuffer is cut off by the circular display
+
+**Layout Guidelines:**
+- Keep critical UI elements (text, icons, buttons) within the central 169×169 pixel safe zone
+- Long text strings will be clipped at the circle edges - break into multiple lines if needed
+- Example: "USB Empfang abgeschlossen" is too wide - use separate lines: "USB" / "Empfang" / "abgeschlossen"
+- Test all UI on actual hardware to verify visibility
+- Header/footer text near the top/bottom edges may be partially clipped
+
+**Constants:**
+```cpp
+#define TFT_W 240  // Framebuffer width
+#define TFT_H 240  // Framebuffer height
+// Safe zone for text: ~169x169 centered square
+```
+
 ## Architecture Overview
 
 ### App-Based Architecture

@@ -1,4 +1,4 @@
-APP_NAME = 'Farbverlauf'
+APP_NAME = "Farbverlauf"
 local angle = 0
 
 function setup()

@@ -1,4 +1,4 @@
-APP_NAME = 'One Tone'
+APP_NAME = "One Tone"
 local baseColor = {math.random(0, 255), math.random(0, 255), math.random(0, 255)}
 local elapsed = 0
 local interval = 700 -- ms zwischen neuen Mustern

@@ -6,6 +6,7 @@ namespace TextRenderer {
 
 void begin();
 void end();
+void ensureLoaded();  // Ensure font is loaded, reload if needed
 
 int16_t lineHeight();
 int16_t ascent();

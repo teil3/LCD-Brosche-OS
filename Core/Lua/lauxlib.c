@@ -1029,8 +1029,11 @@ static void *l_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
     free(ptr);
     return NULL;
   }
-  else
+  else {
+    /* ESP32: Limit to 64KB to prevent memory exhaustion */
+    if (nsize > 65536) return NULL;
     return realloc(ptr, nsize);
+  }
 }
 
 

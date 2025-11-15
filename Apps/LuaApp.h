@@ -35,8 +35,9 @@ private:
   String lastError_;
   std::vector<String> scripts_;
   size_t scriptIndex_ = 0;
-  uint32_t lastScanMs_ = 0;
-  static constexpr uint32_t kScriptScanIntervalMs = 2000;
+  // Periodic scanning disabled - causes FD leaks
+  // uint32_t lastScanMs_ = 0;
+  // static constexpr uint32_t kScriptScanIntervalMs = 2000;
   uint32_t lastLoopMs_ = 0;
   bool inErrorOverlay_ = false;
 
@@ -77,7 +78,10 @@ private:
   static int lua_unloadFont(lua_State* L);
   static int lua_temperature(lua_State* L);
   static int lua_millis(lua_State* L);
+  static int lua_delay(lua_State* L);
+  static int lua_meminfo(lua_State* L);
   static int lua_fs_read(lua_State* L);
   static int lua_fs_write(lua_State* L);
   static int lua_fs_list(lua_State* L);
+  static int lua_gc(lua_State* L);
 };

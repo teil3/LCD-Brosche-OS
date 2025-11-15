@@ -1,4 +1,4 @@
-APP_NAME = 'API Showcase'
+APP_NAME = "API Showcase"
 
 local lastSwitch = 0
 local colorIndex = 1

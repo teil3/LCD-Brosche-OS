@@ -1,4 +1,4 @@
-APP_NAME = 'Font Demo'
+APP_NAME = "Font"
 
 local fonts = {
   '/system/fonts/RobotoMono18.vlw',

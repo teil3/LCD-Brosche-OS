@@ -5,7 +5,6 @@
 #include <cmath>
 
 #include "Core/Gfx.h"
-#include "Core/TextRenderer.h"
 #include "Core/Storage.h"
 #include "Config.h"
 
@@ -47,13 +46,34 @@ LuaApp* gActiveLuaApp = nullptr;
 }
 
 void LuaApp::init() {
+  #ifdef USB_DEBUG
+    Serial.printf("[LuaApp] init() start, free heap: %u bytes\n", ESP.getFreeHeap());
+  #endif
+
   ensureScriptsDir_();
+
+  #ifdef USB_DEBUG
+    size_t beforeScan = ESP.getFreeHeap();
+  #endif
+
   scanScripts_();
+
+  #ifdef USB_DEBUG
+    Serial.printf("[LuaApp] scanScripts() done, free heap: %u bytes (used: %u bytes)\n",
+                  ESP.getFreeHeap(), beforeScan - ESP.getFreeHeap());
+  #endif
+
   scriptIndex_ = 0;
-  lastScanMs_ = millis();
+  // lastScanMs_ = millis();  // Disabled - periodic scanning causes FD leaks
+
+  // Don't draw anything here - TextRenderer loads font which uses ~9KB!
+  // We'll draw status after successful script load
+
   createVm_();
-  tft.fillScreen(TFT_BLACK);
-  TextRenderer::drawCentered(120, "Lua initialisieren", TFT_WHITE, TFT_BLACK);
+
+  #ifdef USB_DEBUG
+    Serial.printf("[LuaApp] Before loadScript, free heap: %u bytes\n", ESP.getFreeHeap());
+  #endif
 
   bool ok = false;
   if (!scripts_.empty()) {
@@ -81,10 +101,8 @@ void LuaApp::init() {
 void LuaApp::tick(uint32_t delta_ms) {
   if (!vmReady_ || !scriptLoaded_) return;
 
-  if (millis() - lastScanMs_ >= kScriptScanIntervalMs) {
-    lastScanMs_ = millis();
-    scanScripts_();
-  }
+  // Periodic scanning permanently disabled - causes FD leaks in LittleFS
+  // Scripts are only scanned once during init()
 
   if (!pushFunction_("loop")) {
     return;
@@ -132,12 +150,27 @@ void LuaApp::onButton(uint8_t index, BtnEvent e) {
 
 void LuaApp::createVm_() {
   destroyVm_();
+
+  #ifdef USB_DEBUG
+    size_t freeBefore = ESP.getFreeHeap();
+    Serial.printf("[LuaApp] Creating VM, free heap: %u bytes\n", freeBefore);
+  #endif
+
   L_ = luaL_newstate();
   if (!L_) {
+    #ifdef USB_DEBUG
+      Serial.printf("[LuaApp] VM creation FAILED! Free heap: %u bytes\n", ESP.getFreeHeap());
+    #endif
     lastError_ = "Lua: kein Speicher";
     vmReady_ = false;
     return;
   }
+
+  #ifdef USB_DEBUG
+    size_t freeAfter = ESP.getFreeHeap();
+    Serial.printf("[LuaApp] VM created, free heap: %u bytes (used: %u bytes)\n",
+                  freeAfter, freeBefore - freeAfter);
+  #endif
 
   lua_atpanic(L_, [](lua_State* L) -> int {
     const char* msg = lua_tostring(L, -1);
@@ -145,11 +178,24 @@ void LuaApp::createVm_() {
     return 0;
   });
 
+  // Load only essential Lua libraries to save memory
+  // Base library is essential (print, type, pairs, etc.)
   luaL_requiref(L_, LUA_GNAME, luaopen_base, 1); lua_pop(L_, 1);
-  luaL_requiref(L_, LUA_TABLIBNAME, luaopen_table, 1); lua_pop(L_, 1);
+
+  // String library is essential for string operations
   luaL_requiref(L_, LUA_STRLIBNAME, luaopen_string, 1); lua_pop(L_, 1);
+
+  // Math library is essential for calculations
   luaL_requiref(L_, LUA_MATHLIBNAME, luaopen_math, 1); lua_pop(L_, 1);
-  luaL_requiref(L_, LUA_UTF8LIBNAME, luaopen_utf8, 1); lua_pop(L_, 1);
+
+  // Table and UTF8 libraries removed to save memory (~3-5KB)
+  // If needed, they can be re-enabled later
+  // luaL_requiref(L_, LUA_TABLIBNAME, luaopen_table, 1); lua_pop(L_, 1);
+  // luaL_requiref(L_, LUA_UTF8LIBNAME, luaopen_utf8, 1); lua_pop(L_, 1);
+
+  #ifdef USB_DEBUG
+    Serial.printf("[LuaApp] Libraries loaded, free heap: %u bytes\n", ESP.getFreeHeap());
+  #endif
 
   gActiveLuaApp = this;
 
@@ -169,9 +215,12 @@ void LuaApp::createVm_() {
   lua_pushcfunction(L_, lua_unloadFont); lua_setfield(L_, -2, "unloadFont");
   lua_pushcfunction(L_, lua_temperature); lua_setfield(L_, -2, "temperature");
   lua_pushcfunction(L_, lua_millis); lua_setfield(L_, -2, "time");
+  lua_pushcfunction(L_, lua_delay); lua_setfield(L_, -2, "delay");
+  lua_pushcfunction(L_, lua_meminfo); lua_setfield(L_, -2, "meminfo");
   lua_pushcfunction(L_, lua_fs_read); lua_setfield(L_, -2, "readFile");
   lua_pushcfunction(L_, lua_fs_write); lua_setfield(L_, -2, "writeFile");
   lua_pushcfunction(L_, lua_fs_list); lua_setfield(L_, -2, "listFiles");
+  lua_pushcfunction(L_, lua_gc); lua_setfield(L_, -2, "gc");
   lua_setglobal(L_, "brosche");
 
   vmReady_ = true;
@@ -184,6 +233,7 @@ void LuaApp::destroyVm_() {
   }
   vmReady_ = false;
   scriptLoaded_ = false;
+  scriptDisplayName_.clear();  // Clear cached script name
   if (gActiveLuaApp == this) {
     gActiveLuaApp = nullptr;
   }
@@ -208,6 +258,10 @@ bool LuaApp::loadScript_(const char* path) {
 
   std::unique_ptr<char[]> buffer(new (std::nothrow) char[size]);
   if (!buffer) {
+    #ifdef USB_DEBUG
+      Serial.printf("[LuaApp] Failed to allocate %u bytes for script. Free heap: %u bytes\n",
+                    size, ESP.getFreeHeap());
+    #endif
     lastError_ = "Lua: kein Speicher";
     f.close();
     return false;
@@ -260,6 +314,10 @@ bool LuaApp::pushFunction_(const char* name) {
 
 bool LuaApp::runSetup_() {
   if (!scriptLoaded_) return false;
+
+  // Clear screen before running setup to avoid artifacts from previous script
+  tft.fillScreen(TFT_BLACK);
+
   if (!pushFunction_("setup")) {
     return true;
   }
@@ -276,6 +334,10 @@ bool LuaApp::loadCurrentScript_() {
     drawStatus_();
     return false;
   }
+
+  // Recreate VM to clear all globals from previous script
+  createVm_();
+
   if (!loadScript_(scripts_[scriptIndex_].c_str())) {
     drawStatus_();
     return false;
@@ -371,12 +433,12 @@ bool LuaApp::loadTftFont_(const String& path) {
     return false;
   }
 
-  bool defaultActive = !customFontActive_;
-  if (defaultActive) {
-    TextRenderer::end();
-  } else {
+  // If we already have a custom font loaded, unload it first
+  if (customFontActive_) {
     tft.unloadFont();
   }
+  // Note: If no custom font was active, TFT still has system font - that's OK!
+  // We load our custom font on top of it
 
   tft.loadFont(chosen.c_str(), LittleFS);
   customFontActive_ = true;
@@ -388,9 +450,8 @@ void LuaApp::restoreDefaultFont_() {
   if (!customFontActive_) {
     return;
   }
+  // Only unload our custom font - don't touch system font!
   tft.unloadFont();
-  TextRenderer::end();
-  TextRenderer::begin();
   customFontActive_ = false;
   currentFontPath_.clear();
 }
@@ -414,7 +475,14 @@ String LuaApp::sanitizeFontPath_(const char* raw) const {
 
 void LuaApp::drawStatus_() {
   tft.fillScreen(TFT_BLACK);
-  TextRenderer::drawCentered(120, lastError_.isEmpty() ? String("Lua Status") : lastError_, TFT_WHITE, TFT_BLACK);
+  // Don't use TextRenderer here - it loads font which uses ~9KB memory!
+  // Use simple TFT text drawing instead
+  tft.setTextFont(2);
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextDatum(MC_DATUM);
+  String msg = lastError_.isEmpty() ? String("Lua Status") : lastError_;
+  tft.drawString(msg, TFT_W / 2, TFT_H / 2);
 }
 
 void LuaApp::ensureScriptsDir_() {
@@ -425,28 +493,42 @@ void LuaApp::ensureScriptsDir_() {
 
 void LuaApp::scanScripts_() {
   std::vector<String> found;
+
   File dir = LittleFS.open(kScriptsDir);
-  if (!dir || !dir.isDirectory()) {
+  if (!dir) {
     lastError_ = "scripts-Verz. fehlt";
     return;
   }
-  const String scriptsPrefix = String(kScriptsDir) + "/";
-  for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
-    if (f.isDirectory()) continue;
-    String name = f.name();
-    if (!name.endsWith(".lua")) continue;
-
-    if (!name.startsWith("/")) {
-      name = "/" + name;
-    }
-    if (!name.startsWith(scriptsPrefix)) {
-      int slash = name.lastIndexOf('/');
-      String basename = (slash >= 0) ? name.substring(slash + 1) : name;
-      name = scriptsPrefix + basename;
-    }
-
-    found.push_back(name);
+  if (!dir.isDirectory()) {
+    dir.close();
+    lastError_ = "scripts-Verz. fehlt";
+    return;
   }
+
+  const String scriptsPrefix = String(kScriptsDir) + "/";
+
+  // Iterate through directory - close each file immediately
+  File f = dir.openNextFile();
+  while (f) {
+    bool isDir = f.isDirectory();
+    String name = f.name();
+    f.close();  // Close IMMEDIATELY after reading properties
+
+    if (!isDir && name.endsWith(".lua")) {
+      if (!name.startsWith("/")) {
+        name = "/" + name;
+      }
+      if (!name.startsWith(scriptsPrefix)) {
+        int slash = name.lastIndexOf('/');
+        String basename = (slash >= 0) ? name.substring(slash + 1) : name;
+        name = scriptsPrefix + basename;
+      }
+      found.push_back(name);
+    }
+
+    f = dir.openNextFile();
+  }
+
   dir.close();
   std::sort(found.begin(), found.end());
   if (found.empty()) {
@@ -470,14 +552,21 @@ void LuaApp::showScriptInfo_() {
     display = fallbackNameForPath_(scriptPath_);
   }
 
-  const int lineHeight = TextRenderer::lineHeight();
-  const int totalHeight = lineHeight * 2 + 8;
-  int y = (tft.height() - totalHeight) / 2;
+  tft.fillScreen(TFT_BLACK);
+
+  // Don't use TextRenderer - it loads font which uses ~9KB memory!
+  // Use simple TFT text drawing instead
+  tft.setTextFont(2);
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextDatum(MC_DATUM);
+
+  const int lineHeight = 16;  // Approximate height for font 2
+  int y = (tft.height() - lineHeight * 2) / 2;
   if (y < 0) y = 0;
 
-  tft.fillScreen(TFT_BLACK);
-  TextRenderer::drawCentered(y, "Lua:", TFT_WHITE, TFT_BLACK);
-  TextRenderer::drawCentered(y + lineHeight + 6, display, TFT_WHITE, TFT_BLACK);
+  tft.drawString("Lua:", TFT_W / 2, y);
+  tft.drawString(display, TFT_W / 2, y + lineHeight + 6);
   delay(700);
 }
 
@@ -485,10 +574,17 @@ String LuaApp::determineScriptDisplayName_(const String& path) {
   static const char* kNameKeys[] = {"APP_NAME", "app_name", "AppName"};
   for (const char* key : kNameKeys) {
     lua_getglobal(L_, key);
+    #ifdef USB_DEBUG
+      Serial.printf("[LuaApp] Checking global '%s': type=%d, isstring=%d\n",
+                    key, lua_type(L_, -1), lua_isstring(L_, -1));
+    #endif
     if (lua_isstring(L_, -1)) {
       String value = lua_tostring(L_, -1);
       lua_pop(L_, 1);
       value.trim();
+      #ifdef USB_DEBUG
+        Serial.printf("[LuaApp] Found APP_NAME: '%s'\n", value.c_str());
+      #endif
       if (!value.isEmpty()) {
         return value;
       }
@@ -496,7 +592,11 @@ String LuaApp::determineScriptDisplayName_(const String& path) {
       lua_pop(L_, 1);
     }
   }
-  return fallbackNameForPath_(path);
+  String fallback = fallbackNameForPath_(path);
+  #ifdef USB_DEBUG
+    Serial.printf("[LuaApp] Using fallback name: '%s'\n", fallback.c_str());
+  #endif
+  return fallback;
 }
 
 String LuaApp::fallbackNameForPath_(const String& path) const {
@@ -597,10 +697,34 @@ int LuaApp::lua_text(lua_State* L) {
   int y = luaL_checkinteger(L, 2);
   const char* text = luaL_checkstring(L, 3);
   uint32_t color = luaL_optinteger(L, 4, TFT_WHITE);
-  uint32_t bg = luaL_optinteger(L, 5, TFT_BLACK);
+
   tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(color, bg);
-  tft.drawString(text, x, y);
+
+  // Check if background color was provided (5th parameter)
+  if (lua_gettop(L) >= 5) {
+    // Background color provided - draw clearing rectangle
+    uint32_t bg = luaL_checkinteger(L, 5);
+
+    // Calculate text bounds to draw background rectangle
+    int16_t textWidth = tft.textWidth(text);
+    int16_t textHeight = tft.fontHeight();
+
+    // Draw background rectangle slightly larger than text
+    int16_t rectX = x - textWidth / 2 - 2;
+    int16_t rectY = y - textHeight / 2 - 1;
+    int16_t rectW = textWidth + 4;
+    int16_t rectH = textHeight + 2;
+    tft.fillRect(rectX, rectY, rectW, rectH, bg);
+
+    // Draw text on top with background
+    tft.setTextColor(color, bg);
+    tft.drawString(text, x, y);
+  } else {
+    // No background - draw text only (transparent)
+    tft.setTextColor(color);
+    tft.drawString(text, x, y);
+  }
+
   return 0;
 }
 
@@ -660,6 +784,56 @@ int LuaApp::lua_temperature(lua_State* L) {
 int LuaApp::lua_millis(lua_State* L) {
   lua_pushinteger(L, static_cast<lua_Integer>(millis()));
   return 1;
+}
+
+int LuaApp::lua_delay(lua_State* L) {
+  int ms = luaL_checkinteger(L, 1);
+  if (ms < 0) ms = 0;
+  if (ms > 10000) ms = 10000;  // Safety limit: max 10 seconds
+  delay(ms);
+  return 0;
+}
+
+int LuaApp::lua_meminfo(lua_State* L) {
+  // Returns a table with memory information
+  lua_newtable(L);
+
+  // Free heap
+  size_t freeHeap = ESP.getFreeHeap();
+  lua_pushinteger(L, static_cast<lua_Integer>(freeHeap));
+  lua_setfield(L, -2, "free");
+
+  // Total heap
+  size_t totalHeap = ESP.getHeapSize();
+  lua_pushinteger(L, static_cast<lua_Integer>(totalHeap));
+  lua_setfield(L, -2, "total");
+
+  // Used heap
+  lua_pushinteger(L, static_cast<lua_Integer>(totalHeap - freeHeap));
+  lua_setfield(L, -2, "used");
+
+  // Largest free block
+  size_t largestBlock = ESP.getMaxAllocHeap();
+  lua_pushinteger(L, static_cast<lua_Integer>(largestBlock));
+  lua_setfield(L, -2, "largest_block");
+
+  // PSRAM if available
+  #ifdef BOARD_HAS_PSRAM
+    if (psramFound()) {
+      lua_pushinteger(L, static_cast<lua_Integer>(ESP.getFreePsram()));
+      lua_setfield(L, -2, "psram_free");
+      lua_pushinteger(L, static_cast<lua_Integer>(ESP.getPsramSize()));
+      lua_setfield(L, -2, "psram_total");
+    }
+  #endif
+
+  return 1;
+}
+
+int LuaApp::lua_gc(lua_State* L) {
+  // Force garbage collection using global lua_gc function
+  ::lua_gc(L, LUA_GCCOLLECT, 0);
+  return 0;
 }
 
 namespace {
@@ -751,23 +925,38 @@ int LuaApp::lua_fs_list(lua_State* L) {
     lua_pushstring(L, "Pfad verboten");
     return 2;
   }
+
   File dir = LittleFS.open(path, FILE_READ);
-  if (!dir || !dir.isDirectory()) {
+  if (!dir) {
     lua_pushnil(L);
     lua_pushstring(L, "Kein Verzeichnis");
     return 2;
   }
+  if (!dir.isDirectory()) {
+    dir.close();
+    lua_pushnil(L);
+    lua_pushstring(L, "Kein Verzeichnis");
+    return 2;
+  }
+
   lua_newtable(L);
   int index = 1;
-  for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
+
+  File f = dir.openNextFile();
+  while (f) {
     String entry = f.name();
+    f.close();  // Close IMMEDIATELY after getting name
+
     if (entry.startsWith(path) && path.length() > 1) {
       entry = entry.substring(path.length() + (path.endsWith("/") ? 0 : 1));
     }
     lua_pushinteger(L, index++);
     lua_pushstring(L, entry.c_str());
     lua_settable(L, -3);
+
+    f = dir.openNextFile();
   }
+
   dir.close();
   return 1;
 }

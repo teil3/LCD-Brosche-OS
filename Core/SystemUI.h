@@ -147,4 +147,5 @@ class SystemUI {
   String transferStatusText_;
   uint32_t transferStatusUntil_ = 0;
   uint16_t transferStatusColor_ = TFT_WHITE;
+  uint32_t transferAutoExitAt_ = 0;
 };

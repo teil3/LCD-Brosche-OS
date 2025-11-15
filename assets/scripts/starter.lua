@@ -1,5 +1,5 @@
 -- Minimaler Einstieg für eigene Brosche-Skripte
-APP_NAME = 'Starter'
+APP_NAME = "Starter"
 
 local elapsed = 0
 local flash = false

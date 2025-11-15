@@ -2,3 +2,5 @@ build-16m/
 .DS_Store
 initSD/
 
+/.cproject
+/.project

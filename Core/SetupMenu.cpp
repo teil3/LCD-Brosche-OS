@@ -61,7 +61,7 @@ void SetupMenu::draw(bool force) {
   };
 
   for (size_t i = 0; i < static_cast<size_t>(Item::Count); ++i) {
-    int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
+    int16_t y = top + line + spacing + 15 + static_cast<int16_t>(i) * (line + spacing);
     String label = String(i18n.t(labelKeys[i]));
     uint16_t color = TFT_DARKGREY;
     if (static_cast<uint8_t>(i) == selected_) {

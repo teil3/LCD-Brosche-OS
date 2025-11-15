@@ -27,6 +27,11 @@ void SystemUI::begin(const Callbacks& cb) {
 void SystemUI::showSetup() {
   resetSdCopyUi_();
   resetTransferUi_();
+
+  // IMPORTANT: Ensure system font is loaded before showing menu
+  // Apps like TextApp may have loaded their own fonts
+  TextRenderer::ensureLoaded();
+
   activeScreen_ = Screen::Setup;
   setupMenu_.show();
 }
@@ -105,14 +110,6 @@ bool SystemUI::handleSetupButtons_(uint8_t index, BtnEvent e) {
 
 void SystemUI::handleSetupSelection_() {
   SetupMenu::Item item = setupMenu_.currentItem();
-  bool requiresSlideshow =
-      (item == SetupMenu::Item::UsbBleTransfer || item == SetupMenu::Item::SdTransfer);
-  if (requiresSlideshow) {
-    if (!callbacks_.ensureSlideshowActive || !callbacks_.ensureSlideshowActive()) {
-      setupMenu_.showStatus(i18n.t("system.slideshow_unavailable"), 1500);
-      return;
-    }
-  }
 
   bool shouldHide = true;
   switch (item) {
@@ -120,20 +117,26 @@ void SystemUI::handleSetupSelection_() {
       shouldHide = false;
       showLanguageSelection_();
       break;
-    case SetupMenu::Item::UsbBleTransfer:
+    case SetupMenu::Item::UsbBleTransfer: {
       shouldHide = false;
+      // Transfer screen works independently - no need to activate slideshow
+      // Slideshow will be updated via focusTransferredFile() callback after transfer
       if (!showTransferScreen_()) {
         setupMenu_.showStatus(i18n.t("system.transfer_impossible"), 1500);
       }
       break;
-    case SetupMenu::Item::SdTransfer:
+    }
+    case SetupMenu::Item::SdTransfer: {
       shouldHide = false;
+      // SD copy works independently - no need to activate slideshow
+      // Slideshow will pick up new files when it's next activated
       if (!sdCopyStartConfirm_()) {
         setupMenu_.showStatus(i18n.t("system.copy_running"), 1500);
         break;
       }
       showSdCopyConfirm_();
       break;
+    }
     case SetupMenu::Item::Exit:
     case SetupMenu::Item::Count:
       break;
@@ -175,6 +178,10 @@ void SystemUI::showSdCopyConfirm_() {
   sdCopyStatusColor_ = TFT_WHITE;
   sdCopyPendingExit_ = false;
   sdCopyLastStatus_ = SdCopyDisplayStatus{};
+
+  // Ensure system font is loaded
+  TextRenderer::ensureLoaded();
+
   activeScreen_ = Screen::SdCopyConfirm;
 }
 
@@ -190,6 +197,10 @@ void SystemUI::showSdCopyProgress_() {
   sdCopyBarFill_ = 0;
   sdCopyHelperText_.clear();
   sdCopyHelperColor_ = TFT_WHITE;
+
+  // Ensure system font is loaded
+  TextRenderer::ensureLoaded();
+
   activeScreen_ = Screen::SdCopyProgress;
 }
 
@@ -266,11 +277,13 @@ void SystemUI::drawSdCopyConfirm_() {
   const int16_t line = TextRenderer::lineHeight();
   const int16_t spacing = 10;
   const int16_t top = 24;
-  TextRenderer::drawCentered(top, i18n.t("system.sd_copy"), TFT_WHITE, TFT_BLACK);
+  // Split title into two lines: "SD-" and "Transfer"
+  TextRenderer::drawCentered(top, "SD-", TFT_WHITE, TFT_BLACK);
+  TextRenderer::drawCentered(top + line, i18n.t("transfer.transfer"), TFT_WHITE, TFT_BLACK);
 
   const char* labelKeys[2] = {"system.no", "system.yes"};
   for (uint8_t i = 0; i < 2; ++i) {
-    int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
+    int16_t y = top + line + line + spacing + 15 + static_cast<int16_t>(i) * (line + spacing);
     bool selected = (sdCopySelection_ == i);
     uint16_t color = selected ? TFT_WHITE : TFT_DARKGREY;
     String text = String(i18n.t(labelKeys[i]));
@@ -647,7 +660,7 @@ bool SystemUI::sdCopyPrepareQueue_() {
       ci.destPath = "/system/i18n.json";
       accepted = true;
     } else if (lower == "font.vlw" || lower == "fontsmall.vlw") {
-      if (size <= 18384) {
+      if (size <= 30000) {
         ci.type = CopyFileType::Font;
         ci.destPath = (lower == "fontsmall.vlw") ? "/system/fontsmall.vlw" : "/system/font.vlw";
         accepted = true;
@@ -751,13 +764,20 @@ SystemUI::SdCopyDisplayStatus SystemUI::sdCopyStatus_() const {
 }
 
 bool SystemUI::showTransferScreen_() {
-  if (!callbacks_.ensureSlideshowActive || !callbacks_.ensureSlideshowActive()) {
-    return false;
-  }
+  // Transfer screen works independently - no need to activate slideshow
+  // Slideshow will be updated via focusTransferredFile() callback after transfer
+
   if (activeScreen_ != Screen::Transfer) {
     resetTransferUi_();
     enableTransfer_(true);
-    transferFooter_ = String(i18n.t("buttons.btn1_actions"));
+    transferFooter_ = String(i18n.t("buttons.transfer_actions"));
+
+    // Ensure system font is loaded
+    TextRenderer::ensureLoaded();
+
+    // Clear screen immediately to hide any app content
+    tft.fillScreen(TFT_BLACK);
+
     activeScreen_ = Screen::Transfer;
   }
   return true;
@@ -783,6 +803,7 @@ void SystemUI::resetTransferUi_() {
   transferStatusText_.clear();
   transferStatusUntil_ = 0;
   transferStatusColor_ = TFT_WHITE;
+  transferAutoExitAt_ = 0;
 }
 
 bool SystemUI::handleTransferButtons_(uint8_t index, BtnEvent e) {
@@ -797,9 +818,16 @@ bool SystemUI::handleTransferButtons_(uint8_t index, BtnEvent e) {
     }
     return false;
   }
-  if (index == 2 && e == BtnEvent::Long) {
-    hide();
-    return true;
+  if (index == 2) {
+    if (e == BtnEvent::Single) {
+      showSetup();
+      return true;
+    }
+    if (e == BtnEvent::Long) {
+      hide();
+      return true;
+    }
+    return false;
   }
   return false;
 }
@@ -815,26 +843,27 @@ void SystemUI::onTransferStarted(TransferSource src, const char* filename, size_
   transferBytesExpected_ = size;
   transferBytesReceived_ = 0;
   transferDirty_ = true;
+  transferAutoExitAt_ = 0;  // Cancel any pending auto-exit
+  transferNeedsClear_ = true;  // Clear screen for new transfer
 }
 
 void SystemUI::onTransferCompleted(TransferSource src, const char* filename, size_t size) {
   if (!isTransferActive()) {
     return;
   }
-  bool focusOk = callbacks_.focusTransferredFile
-                     ? callbacks_.focusTransferredFile(filename ? filename : "", size)
-                     : true;
-  if (!focusOk) {
-    onTransferError(src, i18n.t("transfer.flash_update_failed"));
-    return;
-  }
+
+  // Don't call focusTransferredFile callback while Transfer screen is active
+  // The slideshow will be updated when user exits to the app
+  // Calling it here would cause the slideshow to draw immediately, creating a flash
+
   transferSource_ = src;
   transferState_ = TransferState::Completed;
   transferFilename_ = filename ? String(filename) : String();
   transferBytesExpected_ = size;
   transferBytesReceived_ = size;
   transferDirty_ = true;
-  showTransferStatus_(i18n.t("transfer.reception_completed"), 1500, TFT_WHITE);
+  transferNeedsClear_ = true;  // Clear entire screen to remove any slideshow remnants
+  // Don't show status text - "Abgeschlossen" is already in headerTertiary
 }
 
 void SystemUI::onTransferError(TransferSource src, const char* message) {
@@ -845,6 +874,7 @@ void SystemUI::onTransferError(TransferSource src, const char* message) {
   transferState_ = TransferState::Error;
   transferMessage_ = message ? String(message) : String(i18n.t("transfer.failed"));
   transferDirty_ = true;
+  transferNeedsClear_ = true;  // Clear entire screen to remove any slideshow remnants
   showTransferStatus_(transferMessage_, 1800, TFT_RED);
 }
 
@@ -857,6 +887,7 @@ void SystemUI::onTransferAborted(TransferSource src, const char* message) {
   transferMessage_ = message ? String(message) : String(i18n.t("transfer.aborted"));
   transferBytesReceived_ = 0;
   transferDirty_ = true;
+  transferNeedsClear_ = true;  // Clear entire screen to remove any slideshow remnants
   showTransferStatus_(transferMessage_, 1500, TFT_WHITE);
 }
 
@@ -963,8 +994,8 @@ void SystemUI::drawTransfer_() {
     headerTertiary = transferFilename_.isEmpty() ? String() : transferFilename_;
   } else if (transferState_ == TransferState::Completed) {
     header = transferSourceLabel_(transferSource_);
-    headerSub = String(i18n.t("transfer.completed"));
-    headerTertiary = transferFilename_.isEmpty() ? String(i18n.t("transfer.file_saved")) : transferFilename_;
+    headerSub = String(i18n.t("transfer.reception"));  // "Empfang"
+    headerTertiary = String(i18n.t("transfer.completed"));  // "abgeschlossen"
   } else if (transferState_ == TransferState::Error) {
     header = transferSourceLabel_(transferSource_);
     headerSub = String(i18n.t("transfer.failed"));
@@ -1040,8 +1071,8 @@ void SystemUI::drawTransfer_() {
       break;
     }
     case TransferState::Completed:
-      primary = String(i18n.t("transfer.completed"));
-      secondary = transferFilename_.isEmpty() ? String(i18n.t("transfer.file_saved")) : String();
+      primary.clear();  // Don't repeat "Completed" - already shown in header
+      secondary = transferFilename_.isEmpty() ? String() : transferFilename_;
       break;
     case TransferState::Error:
       primary = String(i18n.t("transfer.failed"));
@@ -1092,10 +1123,8 @@ void SystemUI::drawTransfer_() {
   if (!transferStatusText_.isEmpty()) {
     tft.fillRect(0, statusY - 6, TFT_W, line + 12, TFT_BLACK);
     TextRenderer::drawCentered(statusY, transferStatusText_, transferStatusColor_, TFT_BLACK);
-  } else if (transferState_ == TransferState::Idle) {
-    tft.fillRect(0, statusY - 6, TFT_W, line + 12, TFT_BLACK);
-    TextRenderer::drawCentered(statusY, i18n.t("transfer.start_transfer"), TFT_DARKGREY, TFT_BLACK);
   }
+  // Don't show "start_transfer" text in Idle state - header already says "Im Webtool starten"
 
   if (!transferFooter_.isEmpty()) {
     tft.fillRect(0, footerY - 6, TFT_W, line + 12, TFT_BLACK);
@@ -1110,10 +1139,16 @@ void SystemUI::drawTransfer_() {
 void SystemUI::showLanguageSelection_() {
   languageSelection_ = i18n.currentLanguageIndex();
   languageDirty_ = true;
+
+  // Ensure system font is loaded
+  TextRenderer::ensureLoaded();
+
   activeScreen_ = Screen::Language;
 }
 
 bool SystemUI::handleLanguageButtons_(uint8_t index, BtnEvent e) {
+  Serial.printf("[SystemUI] handleLanguageButtons index=%d, event=%d\n", index, (int)e);
+
   if (index == 1) {
     // BTN1: Exit back to Setup
     if (e == BtnEvent::Single || e == BtnEvent::Double) {
@@ -1138,11 +1173,24 @@ bool SystemUI::handleLanguageButtons_(uint8_t index, BtnEvent e) {
     }
     case BtnEvent::Long: {
       // Confirm language selection
-      const char* const* langs = i18n.availableLanguages();
-      if (langs[languageSelection_]) {
-        i18n.setLanguage(langs[languageSelection_]);
-        // Redraw to show new language
-        languageDirty_ = true;
+      uint8_t langCount = i18n.languageCount();
+      Serial.printf("[SystemUI] Language Long press, selection: %d, langCount: %d\n",
+                    languageSelection_, langCount);
+      if (languageSelection_ < langCount) {
+        const char* selectedLang = i18n.availableLanguages(languageSelection_);
+        Serial.printf("[SystemUI] Selected lang pointer: %p\n", selectedLang);
+        if (selectedLang) {
+          Serial.printf("[SystemUI] Calling setLanguage('%s')\n", selectedLang);
+          i18n.setLanguage(selectedLang);
+          // Force immediate redraw to show new language
+          languageDirty_ = true;
+          drawLanguageSelection_();
+        } else {
+          Serial.printf("[SystemUI] Language index %d returned NULL!\n", languageSelection_);
+        }
+      } else {
+        Serial.printf("[SystemUI] Invalid: selection=%d, count=%d\n",
+                      languageSelection_, langCount);
       }
       return true;
     }
@@ -1172,7 +1220,6 @@ void SystemUI::drawLanguageSelection_() {
   TextRenderer::drawCentered(top, i18n.t("language.select"), TFT_WHITE, TFT_BLACK);
 
   // Language options
-  const char* const* langs = i18n.availableLanguages();
   uint8_t langCount = i18n.languageCount();
 
   const char* langNameKeys[] = {

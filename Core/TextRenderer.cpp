@@ -213,6 +213,42 @@ void end() {
   #endif
 }
 
+void ensureLoaded() {
+  #ifdef USB_DEBUG
+    Serial.printf("[TextRenderer] ensureLoaded() called, fontLoaded=%d\n", fontLoaded);
+  #endif
+
+  // Check if we have font data AND TFT is using a loaded font (not a built-in font)
+  // Built-in fonts (1-8) don't use loadedFontData
+  // If TFT is on a built-in font (like Font 4), we need to reload our custom font
+  if (fontLoaded && loadedFontData) {
+    // Verify TFT is actually using our loaded font by checking if a load is active
+    // We do this by calling loadFont again - it's a no-op if already loaded
+    tft.loadFont(loadedFontData);
+    tft.setTextWrap(false);
+    #ifdef USB_DEBUG
+      Serial.println("[TextRenderer] Font data present, reloaded to TFT");
+    #endif
+    return;
+  }
+
+  // Font is not loaded - force reload
+  #ifdef USB_DEBUG
+    Serial.println("[TextRenderer] Font not loaded, forcing reload");
+  #endif
+
+  // Reset state
+  fontLoaded = false;
+  fontAttempted = false;
+  if (loadedFontData) {
+    free(loadedFontData);
+    loadedFontData = nullptr;
+  }
+
+  // Reload
+  begin();
+}
+
 int16_t lineHeight() {
   ensureFont();
   return cachedLineHeight;

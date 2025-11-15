@@ -38,4 +38,5 @@ ls -la /dev/tty{ACM,USB}* 2>/dev/null
  - Anzeige Dauer
  
  ByteBrooch
+ Pixel-Brosche
   

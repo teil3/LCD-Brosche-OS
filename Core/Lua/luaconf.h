@@ -751,15 +751,12 @@
 
 /*
 @@ LUAI_MAXSTACK limits the size of the Lua stack.
-** CHANGE it if you need a different limit. This limit is arbitrary;
-** its only purpose is to stop Lua from consuming unlimited stack
-** space (and to reserve some numbers for pseudo-indices).
-** (It must fit into max(size_t)/32 and max(int)/2.)
+** ESP32: Reduced to 8000 to prevent abort() on memory exhaustion.
 */
 #if LUAI_IS32INT
-#define LUAI_MAXSTACK		1000000
+#define LUAI_MAXSTACK		8000
 #else
-#define LUAI_MAXSTACK		15000
+#define LUAI_MAXSTACK		8000
 #endif
 
 
