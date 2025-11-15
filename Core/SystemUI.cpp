@@ -1165,17 +1165,25 @@ bool SystemUI::handleLanguageButtons_(uint8_t index, BtnEvent e) {
 
   switch (e) {
     case BtnEvent::Single: {
-      // Cycle through languages
+      // Cycle through languages + exit option
       uint8_t langCount = i18n.languageCount();
-      languageSelection_ = (languageSelection_ + 1) % langCount;
+      languageSelection_ = (languageSelection_ + 1) % (langCount + 1);
       languageDirty_ = true;
       return true;
     }
     case BtnEvent::Long: {
-      // Confirm language selection
+      // Confirm selection
       uint8_t langCount = i18n.languageCount();
       Serial.printf("[SystemUI] Language Long press, selection: %d, langCount: %d\n",
                     languageSelection_, langCount);
+
+      if (languageSelection_ == langCount) {
+        // Exit option selected
+        showSetup();
+        setupMenu_.draw(true);
+        return true;
+      }
+
       if (languageSelection_ < langCount) {
         const char* selectedLang = i18n.availableLanguages(languageSelection_);
         Serial.printf("[SystemUI] Selected lang pointer: %p\n", selectedLang);
@@ -1230,7 +1238,7 @@ void SystemUI::drawLanguageSelection_() {
   };
 
   for (uint8_t i = 0; i < langCount && i < 4; ++i) {
-    int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
+    int16_t y = top + line + spacing + 15 + static_cast<int16_t>(i) * (line + spacing);
     String label = String(i18n.t(langNameKeys[i]));
     uint16_t color = TFT_DARKGREY;
 
@@ -1246,6 +1254,18 @@ void SystemUI::drawLanguageSelection_() {
 
     TextRenderer::drawCentered(y, label, color, TFT_BLACK);
   }
+
+  // Exit option
+  int16_t exitY = top + line + spacing + 15 + static_cast<int16_t>(langCount) * (line + spacing);
+  String exitLabel = String(i18n.t("language.exit"));
+  uint16_t exitColor = TFT_DARKGREY;
+
+  if (languageSelection_ == langCount) {
+    exitLabel = String("> ") + exitLabel;
+    exitColor = TFT_WHITE;
+  }
+
+  TextRenderer::drawCentered(exitY, exitLabel, exitColor, TFT_BLACK);
 
   // Button hints at bottom
   const int16_t helperLine = TextRenderer::helperLineHeight();

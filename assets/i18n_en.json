@@ -118,7 +118,9 @@
     "english": "English",
     "french": "French",
     "italian": "Italian",
-    "current": "Current language: {0}"
+    "current": "Current language: {0}",
+    "exit": "Exit"
+    
   },
   "common": {
     "loading": "Loading...",

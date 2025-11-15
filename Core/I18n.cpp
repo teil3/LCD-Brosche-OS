@@ -3,9 +3,6 @@
 // Global instance
 I18n i18n;
 
-// Static member definition
-I18n::TranslationEntry I18n::translations_[I18n::kMaxTranslations];
-
 void I18n::begin() {
   #ifdef USB_DEBUG
     size_t freeBefore = ESP.getFreeHeap();
@@ -89,7 +86,7 @@ void I18n::begin() {
   #ifdef USB_DEBUG
     size_t freeAfter = ESP.getFreeHeap();
     Serial.printf("[I18n] Ready. Language: %s (%d of %d), %u translations cached\n",
-                  currentLang_, langIndex_ + 1, langCount_, translationCount_);
+                  currentLang_, langIndex_ + 1, langCount_, translations_.size());
     Serial.printf("[I18n] Free heap: %u bytes (used: %d bytes)\n",
                   freeAfter, (int)(freeBefore - freeAfter));
   #endif
@@ -180,7 +177,7 @@ bool I18n::setLanguage(const char* lang) {
 
   saveLanguagePreference_();
   Serial.printf("[I18n] Language changed to: %s (index %d), %u translations loaded\n",
-                lang, newIndex, translationCount_);
+                lang, newIndex, translations_.size());
   return true;
 }
 
@@ -235,10 +232,10 @@ bool I18n::loadLanguage_() {
 }
 
 void I18n::extractTranslations_(JsonDocument& doc) {
-  // translations_ is statically allocated - no heap allocation needed!
-  translationCount_ = 0;
+  // Clear existing translations
+  translations_.clear();
 
-  Serial.printf("[I18n] Extracting translations (static array), free heap: %u\n", ESP.getFreeHeap());
+  Serial.printf("[I18n] Extracting translations (dynamic vector), free heap: %u\n", ESP.getFreeHeap());
 
   // NEW SIMPLER STRUCTURE: Each file has direct key-value pairs, no arrays!
   // Example: {"apps": {"slideshow": "Diashow", "lua": "Lua"}, ...}
@@ -253,18 +250,14 @@ void I18n::extractTranslations_(JsonDocument& doc) {
       JsonVariant val = kv.value();
       if (val.is<String>() || val.is<const char*>()) {
         // This is a direct translation value!
-        if (translationCount_ < kMaxTranslations) {
-          const char* jsonValue = val.as<const char*>();
-          if (!jsonValue) jsonValue = "";
+        const char* jsonValue = val.as<const char*>();
+        if (!jsonValue) jsonValue = "";
 
-          // Store the translation
-          translations_[translationCount_].key = String(key.c_str());
-          translations_[translationCount_].value = String(jsonValue);
-          translationCount_++;
-        } else {
-          Serial.printf("[I18n] WARNING: kMaxTranslations (%u) limit reached, skipping key '%s'\n",
-                        kMaxTranslations, key.c_str());
-        }
+        // Store the translation (vector grows dynamically)
+        TranslationEntry entry;
+        entry.key = String(key.c_str());
+        entry.value = String(jsonValue);
+        translations_.push_back(entry);
       } else if (val.is<JsonObject>()) {
         // Recurse into nested object
         self(val, key, self);
@@ -277,22 +270,18 @@ void I18n::extractTranslations_(JsonDocument& doc) {
 
   #ifdef USB_DEBUG
     Serial.printf("[I18n] Extracted %u translations for language %s\n",
-                  translationCount_, currentLang_);
+                  translations_.size(), currentLang_);
   #endif
 }
 
 void I18n::clearTranslations_() {
   #ifdef USB_DEBUG
     Serial.printf("[I18n] clearTranslations_() clearing %u entries, free heap before: %u\n",
-                  translationCount_, ESP.getFreeHeap());
+                  translations_.size(), ESP.getFreeHeap());
   #endif
-  // Clear all String objects to free their memory
-  // translations_ array itself is static, so we don't delete it
-  for (uint16_t i = 0; i < translationCount_; i++) {
-    translations_[i].key = "";
-    translations_[i].value = "";
-  }
-  translationCount_ = 0;
+  // Clear vector and free all memory
+  translations_.clear();
+  translations_.shrink_to_fit();  // Release memory back to heap
   #ifdef USB_DEBUG
     Serial.printf("[I18n] clearTranslations_() done, free heap after: %u\n",
                   ESP.getFreeHeap());
@@ -306,8 +295,8 @@ const char* I18n::lookupTranslation_(const char* key) {
   }
 
   Serial.printf("[I18n] lookupTranslation_: searching for '%s' (len=%u) in %u translations\n",
-                key, strlen(key), translationCount_);
-  for (uint16_t i = 0; i < translationCount_; i++) {
+                key, strlen(key), translations_.size());
+  for (size_t i = 0; i < translations_.size(); i++) {
     bool match = translations_[i].key.equals(key);
     if (i < 3) {  // Debug first 3 comparisons
       Serial.printf("  [%u] comparing '%s' (len=%u) with '%s' (len=%u): %s\n",

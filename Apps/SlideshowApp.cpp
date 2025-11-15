@@ -11,7 +11,7 @@
 #include "Core/I18n.h"
 
 namespace {
-constexpr std::array<uint32_t, 5> kDwellSteps{1000, 5000, 10000, 30000, 300000};
+constexpr std::array<uint32_t, 6> kDwellSteps{1000, 5000, 10000, 30000, 300000, 600000};
 constexpr uint32_t kToastShortMs = 1000;
 constexpr uint32_t kToastLongMs = 1500;
 constexpr uint32_t kManualFilenameDurationMs = 2000;
@@ -357,7 +357,7 @@ void SlideshowApp::drawSlideshowMenu_() {
   TextRenderer::drawCentered(top, i18n.t("menu.slideshow_menu"), TFT_WHITE, TFT_BLACK);
 
   for (uint8_t i = 0; i < 4; ++i) {
-    int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
+    int16_t y = top + line + spacing + 15 + static_cast<int16_t>(i) * (line + spacing);
     String text = String(i18n.t(itemKeys[i]));
     if (slideshowMenuSelection_ == i) {
       text = String("> ") + text;
@@ -402,7 +402,7 @@ void SlideshowApp::drawSourceMenu_() {
       text = String("> ") + text;
     }
     uint16_t color = (sourceMenuSelection_ == i) ? TFT_WHITE : TFT_DARKGREY;
-    int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
+    int16_t y = top + line + spacing + 15 + static_cast<int16_t>(i) * (line + spacing);
     TextRenderer::drawCentered(y, text, color, TFT_BLACK);
   }
 
@@ -433,7 +433,7 @@ void SlideshowApp::drawAutoSpeedMenu_() {
   for (uint8_t i = 0; i < optionCount; ++i) {
     bool leftColumn = (i < leftCount);
     uint8_t row = leftColumn ? i : (i - leftCount);
-    int16_t y = top + line*2 + 17 + static_cast<int16_t>(row) * (line + spacing);
+    int16_t y = top + line*2 + 27 + static_cast<int16_t>(row) * (line + spacing);
     String text = dwellOptionLabel_(i);
     if (autoSpeedSelection_ == i) {
       text = String("> ") + text;
@@ -444,17 +444,17 @@ void SlideshowApp::drawAutoSpeedMenu_() {
     TextRenderer::draw(x, y, text, color, TFT_BLACK);
   }
 
-  int16_t exitY = top + line*2 + 17 + static_cast<int16_t>(rows) * (line + spacing);
+  int16_t exitY = top + line*2 + 27 + static_cast<int16_t>(rows) * (line + spacing);
   String exitLabel = (autoSpeedSelection_ == optionCount) ? String("> ") + String(i18n.t("menu.back")) : String(i18n.t("menu.back"));
   uint16_t exitColor = (autoSpeedSelection_ == optionCount) ? TFT_WHITE : TFT_DARKGREY;
   TextRenderer::drawCentered(exitY, exitLabel, exitColor, TFT_BLACK);
 
-  const int16_t helperBase = exitY + line + 30;
-  TextRenderer::drawHelperCentered(helperBase - (TextRenderer::helperLineHeight() + 4),
+  const int16_t helperY = TFT_H - (TextRenderer::helperLineHeight() * 2) - 30;
+  TextRenderer::drawHelperCentered(helperY,
                                    i18n.t("buttons.short_switch"),
                                    TFT_WHITE,
                                    TFT_BLACK);
-  TextRenderer::drawHelperCentered(helperBase,
+  TextRenderer::drawHelperCentered(helperY + TextRenderer::helperLineHeight() + 2,
                                    i18n.t("buttons.long_set"),
                                    TFT_WHITE,
                                    TFT_BLACK);
@@ -1004,7 +1004,7 @@ void SlideshowApp::drawDeleteMenuOverlay_() {
   for (uint8_t i = 0; i < 3; ++i) {
     String text = (deleteMenuSelection_ == i) ? String("> ") + String(i18n.t(labelKeys[i])) : String(i18n.t(labelKeys[i]));
     uint16_t color = (deleteMenuSelection_ == i) ? TFT_WHITE : TFT_DARKGREY;
-    int16_t y = top + line + spacing + static_cast<int16_t>(i) * (line + spacing);
+    int16_t y = top + line + spacing + 15 + static_cast<int16_t>(i) * (line + spacing);
     TextRenderer::drawCentered(y, text, color, TFT_BLACK);
   }
   TextRenderer::drawHelperCentered(helperY, i18n.t("buttons.short_switch"), TFT_WHITE, TFT_BLACK);

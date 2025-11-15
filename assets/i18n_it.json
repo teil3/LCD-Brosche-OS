@@ -118,7 +118,8 @@
     "english": "Inglese",
     "french": "Francese",
     "italian": "Italiano",
-    "current": "Lingua attuale: {0}"
+    "current": "Lingua attuale: {0}",
+    "exit": "Esci"
   },
   "common": {
     "loading": "Caricamento...",

@@ -118,7 +118,8 @@
     "english": "English",
     "french": "Français",
     "italian": "Italiano",
-    "current": "Aktuelle Sprache: {0}"
+    "current": "Aktuelle Sprache: {0}",
+    "exit": "Exit"
   },
   "common": {
     "loading": "Lade...",

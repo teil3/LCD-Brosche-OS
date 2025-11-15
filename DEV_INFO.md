@@ -39,4 +39,6 @@ ls -la /dev/tty{ACM,USB}* 2>/dev/null
  
  ByteBrooch
  Pixel-Brosche
-  
+ PixelPin
+ PxlPin
+ PixelPerle
