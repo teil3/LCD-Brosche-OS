@@ -212,6 +212,15 @@ bool SlideshowApp::ensureSdReady_() {
     return true;
   }
 
+  // Avoid frequent SD.begin() calls as they block for several seconds
+  // Only try once per 30 seconds when no card is present
+  static uint32_t lastSdInitAttempt = 0;
+  const uint32_t now = millis();
+  if (now - lastSdInitAttempt < 30000) {
+    return false;  // Too soon, don't try again
+  }
+  lastSdInitAttempt = now;
+
   digitalWrite(TFT_CS_PIN, HIGH);
   bool ok = SD.begin(SD_CS_PIN, sdSPI, 5000000);
   if (!ok) {
@@ -1245,7 +1254,8 @@ void SlideshowApp::tick(uint32_t delta_ms) {
   if (files_.empty()) {
     static uint32_t lastCheckTime = 0;
     const uint32_t now = millis();
-    if (now - lastCheckTime >= 1000) {
+    // Only check every 5 seconds to avoid blocking SD.begin() calls
+    if (now - lastCheckTime >= 5000) {
       lastCheckTime = now;
       if (rebuildFileList_()) {
         showCurrent_();
@@ -1424,6 +1434,23 @@ void SlideshowApp::draw() {
     drawDeleteMenuOverlay_();
     return;
   }
+
+  // If no images available, show message (allows BTN1 to work for app switching)
+  static bool emptyMessageShown = false;
+  if (files_.empty() && controlMode_ != ControlMode::DeleteMenu) {
+    // Only redraw if needed (prevents flickering)
+    if (!emptyMessageShown) {
+      tft.fillScreen(TFT_BLACK);
+      const int16_t line = TextRenderer::lineHeight();
+      const int16_t centerY = (TFT_H - line * 2) / 2;
+      TextRenderer::drawCentered(centerY, i18n.t("slideshow.no_images"), TFT_WHITE, TFT_BLACK);
+      TextRenderer::drawCentered(centerY + line, i18n.t("slideshow.found"), TFT_WHITE, TFT_BLACK);
+      emptyMessageShown = true;
+    }
+  } else {
+    emptyMessageShown = false;  // Reset flag when files become available
+  }
+
   drawManualFilenameOverlay_();
   drawToastOverlay_();
   drawHelperOverlay_();
