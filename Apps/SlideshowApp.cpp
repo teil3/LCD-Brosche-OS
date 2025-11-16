@@ -24,6 +24,16 @@ bool SlideshowApp::isJpeg_(const String& n) {
   return l.endsWith(".jpg") || l.endsWith(".jpeg");
 }
 
+bool SlideshowApp::isGif_(const String& n) {
+  String l = n;
+  l.toLowerCase();
+  return l.endsWith(".gif");
+}
+
+bool SlideshowApp::isMediaFile_(const String& n) {
+  return isJpeg_(n) || isGif_(n);
+}
+
 bool SlideshowApp::focusTransferredFile(const char* filename, size_t size) {
   if (!ensureFlashReady_()) {
     showToast_(i18n.t("errors.flash_error"), 1800);
@@ -724,6 +734,13 @@ void SlideshowApp::showCurrent_(bool allowManualOverlay, bool clearScreen) {
   if (files_.empty()) return;
 
   const String& path = files_[idx_];
+
+  // Check if this is a GIF file
+  if (isGif_(path)) {
+    showCurrentGif_(allowManualOverlay, clearScreen);
+    return;
+  }
+
   fs::FS* fs = filesystemFor(source_);
   if (!fs) return;
 
@@ -821,6 +838,9 @@ void SlideshowApp::showCurrent_(bool allowManualOverlay, bool clearScreen) {
 
 void SlideshowApp::advance_(int step) {
   if (files_.empty()) return;
+
+  // Stop any playing GIF when advancing
+  stopGif_();
 
   const size_t total = files_.size();
   int64_t next = static_cast<int64_t>(idx_) + step;
@@ -1121,7 +1141,7 @@ bool SlideshowApp::readDirectoryEntries_(fs::FS* fs, const String& basePath, std
     String base = f.name();
     int s = base.lastIndexOf('/');
     if (s >= 0) base = base.substring(s + 1);
-    if (!isJpeg_(base)) continue;
+    if (!isMediaFile_(base)) continue;
 
     String full = basePath;
     if (!full.endsWith("/")) full += "/";
@@ -1202,6 +1222,9 @@ void SlideshowApp::init() {
   slideshowMenuDirty_ = false;
   sourceMenuDirty_ = false;
   autoSpeedMenuDirty_ = false;
+
+  // Initialize GIF decoder
+  gif_.begin(BIG_ENDIAN_PIXELS);
 
   applyDwell_();
 
@@ -1451,12 +1474,23 @@ void SlideshowApp::draw() {
     emptyMessageShown = false;  // Reset flag when files become available
   }
 
+  // Play GIF frames continuously if a GIF is active
+  if (gifPlaying_) {
+    tft.startWrite();
+    if (!gif_.playFrame(true, NULL)) {
+      // End of GIF reached - loop back to start
+      gif_.reset();
+    }
+    tft.endWrite();
+  }
+
   drawManualFilenameOverlay_();
   drawToastOverlay_();
   drawHelperOverlay_();
 }
 
 void SlideshowApp::shutdown() {
+  stopGif_();
   files_.clear();
 }
 
@@ -1466,5 +1500,246 @@ void SlideshowApp::resume() {
   // so we need to redraw the current image
   if (!files_.empty()) {
     showCurrent_(true, true);
+  }
+}
+
+// ============================================================================
+// GIF Support Implementation
+// ============================================================================
+
+// Static file handle for GIF callbacks
+static File gifFile;
+
+// Static instance pointer for accessing member variables from static callbacks
+static SlideshowApp* currentSlideshowInstance = nullptr;
+
+void* SlideshowApp::gifOpen_(const char* fname, int32_t* pSize) {
+  #ifdef USB_DEBUG
+    Serial.printf("[Slideshow] Opening GIF: %s\n", fname);
+  #endif
+
+  gifFile = LittleFS.open(fname, "r");
+  if (!gifFile) {
+    // Try SD card
+    gifFile = SD.open(fname, FILE_READ);
+  }
+
+  if (gifFile) {
+    *pSize = gifFile.size();
+    #ifdef USB_DEBUG
+      Serial.printf("[Slideshow] GIF size: %d bytes\n", *pSize);
+    #endif
+    return (void*)&gifFile;
+  }
+
+  #ifdef USB_DEBUG
+    Serial.println(F("[Slideshow] Failed to open GIF file"));
+  #endif
+  return NULL;
+}
+
+void SlideshowApp::gifClose_(void* pHandle) {
+  if (gifFile) {
+    gifFile.close();
+  }
+}
+
+int32_t SlideshowApp::gifRead_(GIFFILE* pFile, uint8_t* pBuf, int32_t iLen) {
+  int32_t bytesRead = gifFile.read(pBuf, iLen);
+  pFile->iPos = gifFile.position();
+  return bytesRead;
+}
+
+int32_t SlideshowApp::gifSeek_(GIFFILE* pFile, int32_t iPosition) {
+  gifFile.seek(iPosition);
+  pFile->iPos = iPosition;
+  return iPosition;
+}
+
+void SlideshowApp::gifDraw_(GIFDRAW* pDraw) {
+  if (!currentSlideshowInstance) return;
+
+  uint8_t *s;
+  uint16_t *d, *usPalette;
+  int x, y, iWidth;
+
+  usPalette = pDraw->pPalette;
+
+  // Recalculate offset if canvas size changed or first scanline
+  if (pDraw->y == 0 && (currentSlideshowInstance->gifCanvasW_ != pDraw->iWidth ||
+                        currentSlideshowInstance->gifCanvasH_ != pDraw->iHeight)) {
+    currentSlideshowInstance->gifCanvasW_ = pDraw->iWidth;
+    currentSlideshowInstance->gifCanvasH_ = pDraw->iHeight;
+    currentSlideshowInstance->gifOffsetX_ = (TFT_W - pDraw->iWidth) / 2;
+    currentSlideshowInstance->gifOffsetY_ = (TFT_H - pDraw->iHeight) / 2;
+
+    // Clear the entire GIF area at the start of each frame
+    tft.fillRect(currentSlideshowInstance->gifOffsetX_, currentSlideshowInstance->gifOffsetY_,
+                 pDraw->iWidth, pDraw->iHeight, TFT_BLACK);
+  } else if (pDraw->y == 0) {
+    // Just clear for subsequent frames
+    tft.fillRect(currentSlideshowInstance->gifOffsetX_, currentSlideshowInstance->gifOffsetY_,
+                 currentSlideshowInstance->gifCanvasW_, currentSlideshowInstance->gifCanvasH_, TFT_BLACK);
+  }
+
+  y = pDraw->iY + pDraw->y + currentSlideshowInstance->gifOffsetY_;
+  x = pDraw->iX + currentSlideshowInstance->gifOffsetX_;
+
+  // Clip to display bounds
+  if (y >= TFT_H || y < 0 || x >= TFT_W) return;
+
+  s = pDraw->pPixels;
+  iWidth = pDraw->iWidth;
+
+  // Clip width to display
+  if (iWidth + x > TFT_W) {
+    iWidth = TFT_W - x;
+  }
+  if (x < 0) {
+    s += (-x);
+    iWidth += x;
+    x = 0;
+  }
+  if (iWidth <= 0) return;
+
+  // Set drawing window for this scanline
+  tft.setAddrWindow(x, y, iWidth, 1);
+
+  // Handle disposal method 2 (restore to background)
+  if (pDraw->ucDisposalMethod == 2) {
+    for (x = 0; x < iWidth; x++) {
+      if (s[x] == pDraw->ucTransparent) {
+        s[x] = pDraw->ucBackground;
+      }
+    }
+    pDraw->ucHasTransparency = 0;
+  }
+
+  // Convert palette indices to RGB565 and push to display
+  if (pDraw->ucHasTransparency) {
+    // Slow path: handle transparent pixels
+    uint16_t usTemp[iWidth];
+    int i, count = 0;
+
+    for (i = 0; i < iWidth; i++) {
+      if (s[i] != pDraw->ucTransparent) {
+        usTemp[count++] = usPalette[s[i]];
+      } else {
+        if (count > 0) {
+          tft.pushPixels(usTemp, count);
+          count = 0;
+        }
+      }
+    }
+
+    if (count > 0) {
+      tft.pushPixels(usTemp, count);
+    }
+
+  } else {
+    // Fast path: no transparency
+    uint16_t usTemp[iWidth];
+    for (int i = 0; i < iWidth; i++) {
+      usTemp[i] = usPalette[s[i]];
+    }
+    tft.pushPixels(usTemp, iWidth);
+  }
+}
+
+void SlideshowApp::showCurrentGif_(bool allowManualOverlay, bool clearScreen) {
+  if (files_.empty()) return;
+
+  const String& path = files_[idx_];
+
+  #ifdef USB_DEBUG
+    Serial.printf("[Slideshow] Displaying GIF: %s\n", path.c_str());
+  #endif
+
+  // If already playing this GIF, don't reopen
+  if (gifPlaying_ && currentGifPath_ == path) {
+    return;
+  }
+
+  // Stop any currently playing GIF
+  stopGif_();
+
+  // Step 1: Clear screen
+  tft.fillScreen(TFT_BLACK);
+
+  // Step 2: Show filename for 2 seconds (only in Manual mode)
+  if (controlMode_ == ControlMode::Manual && allowManualOverlay) {
+    String base = path;
+    int sidx = base.lastIndexOf('/');
+    if (sidx >= 0) base = base.substring(sidx + 1);
+    String displayName = base;
+    String lower = base;
+    lower.toLowerCase();
+    if (lower.endsWith(".gif")) {
+      displayName = base.substring(0, base.length() - 4);
+    }
+
+    // Display filename in center
+    TextRenderer::drawCentered(TFT_H / 2, displayName, TFT_WHITE, TFT_BLACK);
+
+    // Wait 2 seconds
+    delay(2000);
+
+    // Step 3: Clear screen again
+    tft.fillScreen(TFT_BLACK);
+  }
+
+  // Reset GIF canvas dimensions to force recalculation
+  gifCanvasW_ = 0;
+  gifCanvasH_ = 0;
+  gifOffsetX_ = 0;
+  gifOffsetY_ = 0;
+
+  // Set the instance pointer for static callbacks
+  currentSlideshowInstance = this;
+
+  // Step 4: Open and start GIF
+  if (!gif_.open(path.c_str(), gifOpen_, gifClose_, gifRead_, gifSeek_, gifDraw_)) {
+    #ifdef USB_DEBUG
+      Serial.println(F("[Slideshow] Failed to open GIF"));
+    #endif
+    return;
+  }
+
+  #ifdef USB_DEBUG
+    Serial.printf("[Slideshow] GIF opened: %dx%d\n",
+                  gif_.getCanvasWidth(), gif_.getCanvasHeight());
+  #endif
+
+  gifPlaying_ = true;
+  currentGifPath_ = path;
+
+  // Don't use the manualFilename overlay system for GIFs
+  manualFilenameActive_ = false;
+  manualFilenameLabel_.clear();
+  manualFilenameUntil_ = 0;
+
+  if (toastUntil_) {
+    toastDirty_ = true;
+  }
+  drawToastOverlay_();
+
+  #ifdef USB_DEBUG
+    Serial.printf("[Slideshow] GIF opened (%s): %s\n", slideSourceLabel(source_), path.c_str());
+  #endif
+}
+
+void SlideshowApp::stopGif_() {
+  if (gifPlaying_) {
+    gif_.close();
+    if (gifFile) {
+      gifFile.close();
+    }
+    gifPlaying_ = false;
+    currentGifPath_.clear();
+
+    // Clear instance pointer
+    if (currentSlideshowInstance == this) {
+      currentSlideshowInstance = nullptr;
+    }
   }
 }

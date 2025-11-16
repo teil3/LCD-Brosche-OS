@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <vector>
+#include <AnimatedGIF.h>
 
 #include "Core/App.h"
 #include "Core/Storage.h"
@@ -79,7 +80,10 @@ private:
   void setControlMode_(ControlMode mode, bool showToast = true);
   void setSource_(SlideSource src, bool showToast = true);
   void showCurrent_(bool allowManualOverlay = true, bool clearScreen = true);
+  void showCurrentGif_(bool allowManualOverlay = true, bool clearScreen = true);
   bool isJpeg_(const String& n);
+  bool isGif_(const String& n);
+  bool isMediaFile_(const String& n);
   void advance_(int step);
   void applyDwell_();
   String dwellLabel_() const;
@@ -128,4 +132,19 @@ private:
   void markDeleteMenuDirty_();
   void markDeleteConfirmDirty_();
   void returnToSlideshowMenu_();
+
+  // GIF support
+  AnimatedGIF gif_;
+  bool gifPlaying_ = false;
+  String currentGifPath_;
+  int gifOffsetX_ = 0;
+  int gifOffsetY_ = 0;
+  int gifCanvasW_ = 0;
+  int gifCanvasH_ = 0;
+  static void* gifOpen_(const char* fname, int32_t* pSize);
+  static void gifClose_(void* pHandle);
+  static int32_t gifRead_(GIFFILE* pFile, uint8_t* pBuf, int32_t iLen);
+  static int32_t gifSeek_(GIFFILE* pFile, int32_t iPosition);
+  static void gifDraw_(GIFDRAW* pDraw);
+  void stopGif_();
 };
