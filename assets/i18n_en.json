@@ -85,7 +85,9 @@
     "transmission": "Transfer",
     "start_at_host": "Start in web tool",
     "start_transfer": "Start transfer at host",
-    "flash_update_failed": "Flash update failed"
+    "flash_update_failed": "Flash update failed",
+    "bytes_received": "B received",
+    "ready_to_receive": "Ready to receive again"
   },
   "buttons": {
     "short_switch": "BTN2 short: Switch",

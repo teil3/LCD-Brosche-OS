@@ -85,7 +85,9 @@
     "transmission": "Transfer",
     "start_at_host": "Im Webtool starten",
     "start_transfer": "Starte Übertragung am Host",
-    "flash_update_failed": "Flash-Update fehlgeschlagen"
+    "flash_update_failed": "Flash-Update fehlgeschlagen",
+    "bytes_received": "B erhalten",
+    "ready_to_receive": "Wieder empfangsbereit"
   },
   "buttons": {
     "short_switch": "BTN2 kurz: Wechseln",

@@ -85,7 +85,9 @@
     "transmission": "Transfert",
     "start_at_host": "Démarrer dans l'outil web",
     "start_transfer": "Démarrer le transfert sur l'hôte",
-    "flash_update_failed": "Mise à jour Flash échouée"
+    "flash_update_failed": "Mise à jour Flash échouée",
+    "bytes_received": "B reçus",
+    "ready_to_receive": "Prêt à recevoir à nouveau"
   },
   "buttons": {
     "short_switch": "BTN2 court: Changer",

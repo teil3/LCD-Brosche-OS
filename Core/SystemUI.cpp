@@ -1068,7 +1068,7 @@ void SystemUI::drawTransfer_() {
 
   int16_t headerBlock = headerLines * (line + 6);
   primaryY = headerY + headerBlock + 6;
-  secondaryY = primaryY + line + 8;
+  secondaryY = primaryY + line + 15;
   barY = secondaryY + line + 18;
   statusY = barY + barHeight + 16;
 
@@ -1080,7 +1080,7 @@ void SystemUI::drawTransfer_() {
       secondary.clear();
       break;
     case TransferState::Receiving: {
-      primary = String(transferSourceLabel_(transferSource_)) + String(": Empfang läuft");
+      primary = String(transferSourceLabel_(transferSource_)) + String(": ") + String(i18n.t("transfer.receiving"));
       if (transferBytesExpected_ > 0) {
         uint32_t pct = static_cast<uint32_t>(
             (transferBytesReceived_ * 100UL) / transferBytesExpected_);
@@ -1088,13 +1088,13 @@ void SystemUI::drawTransfer_() {
         String total = formatKilobytes_(transferBytesExpected_);
         secondary = String(pct) + String("% (") + recv + String("/") + total + String(" KB)");
       } else {
-        secondary = String(transferBytesReceived_) + String(" B erhalten");
+        secondary = String(transferBytesReceived_) + String(" ") + String(i18n.t("transfer.bytes_received"));
       }
       break;
     }
     case TransferState::Completed:
-      primary.clear();  // Don't repeat "Completed" - already shown in header
-      secondary = transferFilename_.isEmpty() ? String() : transferFilename_;
+      primary = transferFilename_.isEmpty() ? String() : transferFilename_;
+      secondary = String(i18n.t("transfer.ready_to_receive"));
       break;
     case TransferState::Error:
       primary = String(i18n.t("transfer.failed"));

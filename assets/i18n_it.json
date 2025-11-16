@@ -85,7 +85,9 @@
     "transmission": "Trasferimento",
     "start_at_host": "Avvia nello strumento web",
     "start_transfer": "Avvia trasferimento sull'host",
-    "flash_update_failed": "Aggiornamento Flash fallito"
+    "flash_update_failed": "Aggiornamento Flash fallito",
+    "bytes_received": "B ricevuti",
+    "ready_to_receive": "Pronto a ricevere di nuovo"
   },
   "buttons": {
     "short_switch": "BTN2 breve: Cambia",
