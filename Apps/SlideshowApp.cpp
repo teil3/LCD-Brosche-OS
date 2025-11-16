@@ -1565,21 +1565,37 @@ void SlideshowApp::gifDraw_(GIFDRAW* pDraw) {
 
   usPalette = pDraw->pPalette;
 
-  // Recalculate offset if canvas size changed or first scanline
-  if (pDraw->y == 0 && (currentSlideshowInstance->gifCanvasW_ != pDraw->iWidth ||
-                        currentSlideshowInstance->gifCanvasH_ != pDraw->iHeight)) {
+  // Lazily initialize canvas bounds if decoder did not provide them earlier
+  if (currentSlideshowInstance->gifCanvasW_ <= 0 || currentSlideshowInstance->gifCanvasH_ <= 0) {
     currentSlideshowInstance->gifCanvasW_ = pDraw->iWidth;
     currentSlideshowInstance->gifCanvasH_ = pDraw->iHeight;
-    currentSlideshowInstance->gifOffsetX_ = (TFT_W - pDraw->iWidth) / 2;
-    currentSlideshowInstance->gifOffsetY_ = (TFT_H - pDraw->iHeight) / 2;
+    currentSlideshowInstance->gifOffsetX_ = (TFT_W - currentSlideshowInstance->gifCanvasW_) / 2;
+    currentSlideshowInstance->gifOffsetY_ = (TFT_H - currentSlideshowInstance->gifCanvasH_) / 2;
+  }
 
-    // Clear the entire GIF area at the start of each frame
-    tft.fillRect(currentSlideshowInstance->gifOffsetX_, currentSlideshowInstance->gifOffsetY_,
-                 pDraw->iWidth, pDraw->iHeight, TFT_BLACK);
-  } else if (pDraw->y == 0) {
-    // Just clear for subsequent frames
-    tft.fillRect(currentSlideshowInstance->gifOffsetX_, currentSlideshowInstance->gifOffsetY_,
-                 currentSlideshowInstance->gifCanvasW_, currentSlideshowInstance->gifCanvasH_, TFT_BLACK);
+  if (pDraw->y == 0) {
+    int clearX = currentSlideshowInstance->gifOffsetX_;
+    int clearY = currentSlideshowInstance->gifOffsetY_;
+    int clearW = currentSlideshowInstance->gifCanvasW_;
+    int clearH = currentSlideshowInstance->gifCanvasH_;
+
+    if (clearW > 0 && clearH > 0) {
+      if (clearX < 0) {
+        clearW += clearX;
+        clearX = 0;
+      }
+      if (clearY < 0) {
+        clearH += clearY;
+        clearY = 0;
+      }
+      if (clearX < TFT_W && clearY < TFT_H) {
+        if (clearX + clearW > TFT_W) clearW = TFT_W - clearX;
+        if (clearY + clearH > TFT_H) clearH = TFT_H - clearY;
+        if (clearW > 0 && clearH > 0) {
+          tft.fillRect(clearX, clearY, clearW, clearH, TFT_BLACK);
+        }
+      }
+    }
   }
 
   y = pDraw->iY + pDraw->y + currentSlideshowInstance->gifOffsetY_;
@@ -1709,6 +1725,20 @@ void SlideshowApp::showCurrentGif_(bool allowManualOverlay, bool clearScreen) {
     Serial.printf("[Slideshow] GIF opened: %dx%d\n",
                   gif_.getCanvasWidth(), gif_.getCanvasHeight());
   #endif
+
+  // Cache the logical GIF canvas dimensions for consistent centering
+  gifCanvasW_ = gif_.getCanvasWidth();
+  gifCanvasH_ = gif_.getCanvasHeight();
+  if (gifCanvasW_ <= 0 || gifCanvasH_ <= 0) {
+    // Fallback: first decoded frame will provide the size
+    gifCanvasW_ = 0;
+    gifCanvasH_ = 0;
+    gifOffsetX_ = 0;
+    gifOffsetY_ = 0;
+  } else {
+    gifOffsetX_ = (TFT_W - gifCanvasW_) / 2;
+    gifOffsetY_ = (TFT_H - gifCanvasH_) / 2;
+  }
 
   gifPlaying_ = true;
   currentGifPath_ = path;
