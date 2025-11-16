@@ -39,17 +39,7 @@ function lzwEncode(pixels, minCodeSize) {
   let bitBuffer = 0;
   let bitCount = 0;
 
-  const resetDictionary = () => {
-    dictionary.clear();
-    for (let i = 0; i < clearCode; i++) {
-      dictionary.set(i.toString(), i);
-    }
-    codeSize = minCodeSize + 1;
-    dictSize = endCode + 1;
-    maxCodeValue = (1 << codeSize);
-  };
-
-  const pushCode = (code) => {
+  const writeCode = (code) => {
     bitBuffer |= code << bitCount;
     bitCount += codeSize;
     while (bitCount >= 8) {
@@ -60,49 +50,54 @@ function lzwEncode(pixels, minCodeSize) {
   };
 
   const dictionary = new Map();
-  let dictSize = 0;
-  let maxCodeValue = 0;
-  resetDictionary();
+  let dictSize;
+  const resetDictionary = () => {
+    dictionary.clear();
+    for (let i = 0; i < clearCode; i++) {
+      dictionary.set(String.fromCharCode(i), i);
+    }
+    dictSize = endCode + 1;
+    codeSize = minCodeSize + 1;
+  };
 
-  pushCode(clearCode);
+  resetDictionary();
+  writeCode(clearCode);
 
   if (!pixels.length) {
-    pushCode(endCode);
+    writeCode(endCode);
     if (bitCount > 0) {
       output.push(bitBuffer & 0xff);
     }
     return output;
   }
 
-  let phrase = pixels[0].toString();
+  let w = String.fromCharCode(pixels[0]);
 
   for (let i = 1; i < pixels.length; i++) {
-    const curr = pixels[i];
-    const key = `${phrase},${curr}`;
-    if (dictionary.has(key)) {
-      phrase = key;
+    const c = String.fromCharCode(pixels[i]);
+    const wc = w + c;
+    if (dictionary.has(wc)) {
+      w = wc;
     } else {
-      pushCode(dictionary.get(phrase));
-      dictionary.set(key, dictSize++);
-
-      if (dictSize === 4096) {
-        pushCode(clearCode);
+      writeCode(dictionary.get(w));
+      if (dictSize < 4096) {
+        dictionary.set(wc, dictSize++);
+        if (dictSize === (1 << codeSize) && codeSize < 12) {
+          codeSize += 1;
+        }
+      } else {
+        writeCode(clearCode);
         resetDictionary();
-        phrase = curr.toString();
-        continue;
       }
-
-      if (dictSize === maxCodeValue && codeSize < 12) {
-        codeSize += 1;
-        maxCodeValue = (1 << codeSize);
-      }
-
-      phrase = curr.toString();
+      w = c;
     }
   }
 
-  pushCode(dictionary.get(phrase));
-  pushCode(endCode);
+  if (w !== '') {
+    writeCode(dictionary.get(w));
+  }
+
+  writeCode(endCode);
 
   if (bitCount > 0) {
     output.push(bitBuffer & 0xff);
