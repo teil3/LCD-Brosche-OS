@@ -141,6 +141,7 @@ private:
   int gifOffsetY_ = 0;
   int gifCanvasW_ = 0;
   int gifCanvasH_ = 0;
+  int gifScale_ = 1;
   static void* gifOpen_(const char* fname, int32_t* pSize);
   static void gifClose_(void* pHandle);
   static int32_t gifRead_(GIFFILE* pFile, uint8_t* pBuf, int32_t iLen);

@@ -1513,6 +1513,16 @@ static File gifFile;
 // Static instance pointer for accessing member variables from static callbacks
 static SlideshowApp* currentSlideshowInstance = nullptr;
 
+// Decide whether we can double the GIF without exceeding the display bounds
+static int determineGifScale(int canvasW, int canvasH) {
+  if (canvasW <= 0 || canvasH <= 0) {
+    return 1;
+  }
+  const bool needsUpscale = (canvasW < TFT_W) || (canvasH < TFT_H);
+  const bool fitsDouble = (canvasW * 2 <= TFT_W) && (canvasH * 2 <= TFT_H);
+  return (needsUpscale && fitsDouble) ? 2 : 1;
+}
+
 void* SlideshowApp::gifOpen_(const char* fname, int32_t* pSize) {
   #ifdef USB_DEBUG
     Serial.printf("[Slideshow] Opening GIF: %s\n", fname);
@@ -1559,25 +1569,27 @@ int32_t SlideshowApp::gifSeek_(GIFFILE* pFile, int32_t iPosition) {
 void SlideshowApp::gifDraw_(GIFDRAW* pDraw) {
   if (!currentSlideshowInstance) return;
 
-  uint8_t *s;
-  uint16_t *d, *usPalette;
-  int x, y, iWidth;
-
-  usPalette = pDraw->pPalette;
+  SlideshowApp* inst = currentSlideshowInstance;
+  uint16_t* usPalette = pDraw->pPalette;
 
   // Lazily initialize canvas bounds if decoder did not provide them earlier
-  if (currentSlideshowInstance->gifCanvasW_ <= 0 || currentSlideshowInstance->gifCanvasH_ <= 0) {
-    currentSlideshowInstance->gifCanvasW_ = pDraw->iWidth;
-    currentSlideshowInstance->gifCanvasH_ = pDraw->iHeight;
-    currentSlideshowInstance->gifOffsetX_ = (TFT_W - currentSlideshowInstance->gifCanvasW_) / 2;
-    currentSlideshowInstance->gifOffsetY_ = (TFT_H - currentSlideshowInstance->gifCanvasH_) / 2;
+  if (inst->gifCanvasW_ <= 0 || inst->gifCanvasH_ <= 0) {
+    int canvasW = (pDraw->iCanvasWidth > 0) ? pDraw->iCanvasWidth : pDraw->iWidth;
+    int canvasH = pDraw->iHeight;
+    inst->gifCanvasW_ = canvasW;
+    inst->gifCanvasH_ = canvasH;
+    inst->gifScale_ = determineGifScale(canvasW, canvasH);
+    inst->gifOffsetX_ = (TFT_W - (canvasW * inst->gifScale_)) / 2;
+    inst->gifOffsetY_ = (TFT_H - (canvasH * inst->gifScale_)) / 2;
   }
 
+  const int scale = inst->gifScale_;
+
   if (pDraw->y == 0) {
-    int clearX = currentSlideshowInstance->gifOffsetX_;
-    int clearY = currentSlideshowInstance->gifOffsetY_;
-    int clearW = currentSlideshowInstance->gifCanvasW_;
-    int clearH = currentSlideshowInstance->gifCanvasH_;
+    int clearX = inst->gifOffsetX_;
+    int clearY = inst->gifOffsetY_;
+    int clearW = inst->gifCanvasW_ * scale;
+    int clearH = inst->gifCanvasH_ * scale;
 
     if (clearW > 0 && clearH > 0) {
       if (clearX < 0) {
@@ -1598,67 +1610,136 @@ void SlideshowApp::gifDraw_(GIFDRAW* pDraw) {
     }
   }
 
-  y = pDraw->iY + pDraw->y + currentSlideshowInstance->gifOffsetY_;
-  x = pDraw->iX + currentSlideshowInstance->gifOffsetX_;
+  if (scale == 1) {
+    uint8_t* s = pDraw->pPixels;
+    int iWidth = pDraw->iWidth;
+    int y = pDraw->iY + pDraw->y + inst->gifOffsetY_;
+    int x = pDraw->iX + inst->gifOffsetX_;
 
-  // Clip to display bounds
-  if (y >= TFT_H || y < 0 || x >= TFT_W) return;
+    if (y >= TFT_H || y < 0 || x >= TFT_W) return;
 
-  s = pDraw->pPixels;
-  iWidth = pDraw->iWidth;
+    if (iWidth + x > TFT_W) {
+      iWidth = TFT_W - x;
+    }
+    if (x < 0) {
+      s += (-x);
+      iWidth += x;
+      x = 0;
+    }
+    if (iWidth <= 0) return;
 
-  // Clip width to display
-  if (iWidth + x > TFT_W) {
-    iWidth = TFT_W - x;
+    tft.setAddrWindow(x, y, iWidth, 1);
+
+    if (pDraw->ucDisposalMethod == 2) {
+      for (int idx = 0; idx < iWidth; idx++) {
+        if (s[idx] == pDraw->ucTransparent) {
+          s[idx] = pDraw->ucBackground;
+        }
+      }
+      pDraw->ucHasTransparency = 0;
+    }
+
+    if (pDraw->ucHasTransparency) {
+      uint16_t usTemp[iWidth];
+      int count = 0;
+
+      for (int i = 0; i < iWidth; i++) {
+        if (s[i] != pDraw->ucTransparent) {
+          usTemp[count++] = usPalette[s[i]];
+        } else {
+          if (count > 0) {
+            tft.pushPixels(usTemp, count);
+            count = 0;
+          }
+        }
+      }
+
+      if (count > 0) {
+        tft.pushPixels(usTemp, count);
+      }
+
+    } else {
+      uint16_t usTemp[iWidth];
+      for (int i = 0; i < iWidth; i++) {
+        usTemp[i] = usPalette[s[i]];
+      }
+      tft.pushPixels(usTemp, iWidth);
+    }
+    return;
   }
-  if (x < 0) {
-    s += (-x);
-    iWidth += x;
-    x = 0;
+
+  // Scale > 1 path (currently only 2x)
+  uint8_t* s = pDraw->pPixels;
+  int iWidth = pDraw->iWidth;
+  int baseX = inst->gifOffsetX_ + (pDraw->iX * scale);
+  int baseY = inst->gifOffsetY_ + (pDraw->iY + pDraw->y) * scale;
+
+  if (baseY >= TFT_H || baseY + scale <= 0 || baseX >= TFT_W) return;
+
+  // Clip left side if needed
+  if (baseX < 0) {
+    const int skipCols = (-baseX + scale - 1) / scale;
+    if (skipCols >= iWidth) return;
+    baseX += skipCols * scale;
+    s += skipCols;
+    iWidth -= skipCols;
   }
+
+  // Clip right side if needed
+  int maxWidthPx = TFT_W - baseX;
+  if (maxWidthPx <= 0) return;
+  int maxCols = maxWidthPx / scale;
+  if (maxCols <= 0) return;
+  if (iWidth > maxCols) {
+    iWidth = maxCols;
+  }
+
   if (iWidth <= 0) return;
 
-  // Set drawing window for this scanline
-  tft.setAddrWindow(x, y, iWidth, 1);
-
-  // Handle disposal method 2 (restore to background)
   if (pDraw->ucDisposalMethod == 2) {
-    for (x = 0; x < iWidth; x++) {
-      if (s[x] == pDraw->ucTransparent) {
-        s[x] = pDraw->ucBackground;
+    for (int idx = 0; idx < iWidth; idx++) {
+      if (s[idx] == pDraw->ucTransparent) {
+        s[idx] = pDraw->ucBackground;
       }
     }
     pDraw->ucHasTransparency = 0;
   }
 
-  // Convert palette indices to RGB565 and push to display
-  if (pDraw->ucHasTransparency) {
-    // Slow path: handle transparent pixels
-    uint16_t usTemp[iWidth];
-    int i, count = 0;
-
-    for (i = 0; i < iWidth; i++) {
-      if (s[i] != pDraw->ucTransparent) {
-        usTemp[count++] = usPalette[s[i]];
-      } else {
-        if (count > 0) {
-          tft.pushPixels(usTemp, count);
-          count = 0;
-        }
+  auto drawScaledRun = [&](int runStart, int runLen) {
+    if (runLen <= 0) return;
+    const int runWidth = runLen * scale;
+    uint16_t runBuf[runWidth];
+    int out = 0;
+    for (int i = 0; i < runLen; i++) {
+      uint16_t color = usPalette[s[runStart + i]];
+      for (int r = 0; r < scale; r++) {
+        runBuf[out++] = color;
       }
     }
-
-    if (count > 0) {
-      tft.pushPixels(usTemp, count);
+    const int runX = baseX + runStart * scale;
+    for (int v = 0; v < scale; v++) {
+      int drawY = baseY + v;
+      if (drawY < 0 || drawY >= TFT_H) continue;
+      tft.setAddrWindow(runX, drawY, runWidth, 1);
+      tft.pushPixels(runBuf, runWidth);
     }
+  };
 
+  if (pDraw->ucHasTransparency) {
+    int idx = 0;
+    while (idx < iWidth) {
+      while (idx < iWidth && s[idx] == pDraw->ucTransparent) {
+        idx++;
+      }
+      if (idx >= iWidth) break;
+      const int runStart = idx;
+      while (idx < iWidth && s[idx] != pDraw->ucTransparent) {
+        idx++;
+      }
+      drawScaledRun(runStart, idx - runStart);
+    }
   } else {
-    // Fast path: no transparency
-    uint16_t usTemp[iWidth];
-    for (int i = 0; i < iWidth; i++) {
-      usTemp[i] = usPalette[s[i]];
-    }
-    tft.pushPixels(usTemp, iWidth);
+    drawScaledRun(0, iWidth);
   }
 }
 
@@ -1709,6 +1790,7 @@ void SlideshowApp::showCurrentGif_(bool allowManualOverlay, bool clearScreen) {
   gifCanvasH_ = 0;
   gifOffsetX_ = 0;
   gifOffsetY_ = 0;
+  gifScale_ = 1;
 
   // Set the instance pointer for static callbacks
   currentSlideshowInstance = this;
@@ -1735,9 +1817,11 @@ void SlideshowApp::showCurrentGif_(bool allowManualOverlay, bool clearScreen) {
     gifCanvasH_ = 0;
     gifOffsetX_ = 0;
     gifOffsetY_ = 0;
+    gifScale_ = 1;
   } else {
-    gifOffsetX_ = (TFT_W - gifCanvasW_) / 2;
-    gifOffsetY_ = (TFT_H - gifCanvasH_) / 2;
+    gifScale_ = determineGifScale(gifCanvasW_, gifCanvasH_);
+    gifOffsetX_ = (TFT_W - (gifCanvasW_ * gifScale_)) / 2;
+    gifOffsetY_ = (TFT_H - (gifCanvasH_ * gifScale_)) / 2;
   }
 
   gifPlaying_ = true;
@@ -1766,6 +1850,11 @@ void SlideshowApp::stopGif_() {
     }
     gifPlaying_ = false;
     currentGifPath_.clear();
+    gifCanvasW_ = 0;
+    gifCanvasH_ = 0;
+    gifOffsetX_ = 0;
+    gifOffsetY_ = 0;
+    gifScale_ = 1;
 
     // Clear instance pointer
     if (currentSlideshowInstance == this) {

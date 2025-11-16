@@ -7,6 +7,9 @@ Kompaktes Firmware-Projekt für eine tragbare LCD-Brosche: Ein ESP32-Devboard mi
 ## Tools
 
 - [Bildaufbereiter](https://teil3.github.io/LCD-Brosche-OS/tools/bildaufbereiter/)
+<!--
+- [GIF-Aufbereiter](https://teil3.github.io/LCD-Brosche-OS/tools/gifaufbereiter/)
+-->
 - [Text App Konfigurator](https://teil3.github.io/LCD-Brosche-OS/tools/textapp-konfigurator/)
 - [Filesystem Browser](https://teil3.github.io/LCD-Brosche-OS/tools/filesystem-browser/)
 - [QR-Code Generator](https://teil3.github.io/LCD-Brosche-OS/tools/qrcode/)
