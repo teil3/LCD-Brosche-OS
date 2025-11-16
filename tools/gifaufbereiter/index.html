@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GIF-Aufbereiter für die LCD-Brosche</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0 auto; max-width: 960px; padding: 1.5rem 1rem 3rem; background: #f6f7fb; color: #1d232f; }
+    header { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; margin-bottom: 1.5rem; }
+    header img { width: 150px; height: auto; }
+    header h1 { margin: 0; font-size: clamp(1.4rem, 2.8vw, 2.1rem); }
+    header p { margin: .25rem 0 0; max-width: 560px; line-height: 1.5; }
+    main { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
+    .panel { background: #fff; border-radius: 1rem; padding: 1.2rem; box-shadow: 0 1px 3px rgba(16,24,40,.12); }
+    h2 { margin: 0 0 .75rem; font-size: 1.05rem; }
+    .input-row { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: .85rem; align-items: center; }
+    .input-row label { font-weight: 500; font-size: .95rem; }
+    .input-row input[type="number"],
+    .input-row input[type="range"],
+    .input-row select,
+    .input-row input[type="color"] { flex: 1; min-width: 120px; }
+    input[type="range"] { width: 100%; }
+    input[type="file"] { border: 1px dashed #cfd5e1; border-radius: .75rem; padding: .85rem; width: 100%; background: #fafbff; }
+    button { border: none; border-radius: .7rem; padding: .65rem 1.1rem; font-weight: 600; cursor: pointer; background: #1f63ff; color: #fff; box-shadow: 0 2px 4px rgba(31,99,255,.25); }
+    button.secondary { background: #eef2ff; color: #1f3b8f; box-shadow: none; }
+    button:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+    .actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.1rem; }
+    .status { margin-top: 1rem; padding: .75rem 1rem; border-radius: .75rem; font-size: .92rem; background: #edf2ff; color: #10214a; min-height: 3rem; }
+    .status.error { background: #ffeef0; color: #7b1120; }
+    .status.success { background: #ecfdf3; color: #0f5132; }
+    .preview { text-align: center; }
+    canvas.preview-canvas { width: 260px; height: 260px; border-radius: 50%; background: #000; box-shadow: inset 0 0 0 2px rgba(0,0,0,.12), 0 8px 24px rgba(15,23,42,.12); }
+    .preview-info { margin-top: .75rem; font-size: .9rem; line-height: 1.4; text-align: left; }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .4rem 1rem; font-size: .92rem; }
+    .info-grid span { display: block; color: #0f172a; }
+    .info-grid small { display: block; color: #6b7280; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+    .drop-overlay { position: fixed; inset: 0; background: rgba(64,99,255,.18); border: 2px dashed rgba(64,99,255,.45); color: #10214a; font-weight: 600; font-size: clamp(1rem, 2vw, 1.4rem); display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity .2s ease; z-index: 900; }
+    body.drop-active .drop-overlay { opacity: 1; }
+    .hint { font-size: .85rem; color: #6b7280; margin-top: -.35rem; margin-bottom: .8rem; }
+    .limit-indicator { font-weight: 600; }
+    .limit-indicator.ok { color: #0f5132; }
+    .limit-indicator.fail { color: #7b1120; }
+    @media (max-width: 640px) {
+      header { text-align: center; justify-content: center; }
+      header img { order: -1; }
+      canvas.preview-canvas { width: 220px; height: 220px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="drop-overlay" aria-hidden="true">Datei hier ablegen, um sie zu laden</div>
+  <header>
+    <div>
+      <h1>GIF-Aufbereiter</h1>
+      <p>Bereite animierte GIFs speziell für die LCD-Brosche auf: Bilder, Videos oder bestehende GIFs laden, auf Zielgröße skalieren, Farben reduzieren und die Dateigröße auf &lt;20&nbsp;kB trimmen – komplett offline im Browser.</p>
+    </div>
+    <img src="../bildaufbereiter/teil3_logo.svg" alt="teil3 Logo" />
+  </header>
+  <main>
+    <section class="panel">
+      <h2>Eingabe &amp; Einstellungen</h2>
+      <div class="hint">Unterstützt JPG/PNG, GIF und MP4/WebM. Für GIF-Parsing wird Chromium mit <code>ImageDecoder</code> empfohlen.</div>
+      <input type="file" id="file" accept="image/png, image/jpeg, image/gif, video/mp4, video/webm" />
+      <div class="input-row">
+        <label for="max-size">Max. Kantenlänge</label>
+        <input type="range" id="max-size" min="48" max="240" step="4" value="240" />
+        <span id="max-size-label">240 px</span>
+      </div>
+      <div class="input-row">
+        <label for="colors">Farben</label>
+        <input type="range" id="colors" min="4" max="128" step="4" value="64" />
+        <span id="colors-label">64</span>
+      </div>
+      <div class="input-row">
+        <label for="fps">FPS / Video</label>
+        <input type="range" id="fps" min="2" max="20" step="1" value="8" />
+        <span id="fps-label">8 fps</span>
+      </div>
+      <div class="input-row">
+        <label for="max-frames">Max. Frames</label>
+        <input type="range" id="max-frames" min="5" max="120" step="5" value="60" />
+        <span id="frames-label">60</span>
+      </div>
+      <div class="input-row">
+        <label for="limit">Größenlimit</label>
+        <input type="number" id="limit" min="1000" max="60000" step="1000" value="20000" />
+        <span>Bytes</span>
+      </div>
+      <div class="input-row">
+        <label for="bg-color">Hintergrund</label>
+        <input type="color" id="bg-color" value="#000000" />
+        <label><input type="checkbox" id="keep-alpha" checked /> Transparenz behalten</label>
+      </div>
+      <div class="input-row">
+        <label><input type="checkbox" id="dither" checked /> Dithering (Floyd-Steinberg)</label>
+      </div>
+      <div class="input-row">
+        <label for="loop">Loop</label>
+        <select id="loop">
+          <option value="0" selected>Endlos</option>
+          <option value="1">1×</option>
+          <option value="2">2×</option>
+        </select>
+        <label for="base-delay">Bild-Delay (ms)</label>
+        <input type="number" id="base-delay" min="10" max="1000" step="10" value="120" />
+      </div>
+      <div class="actions">
+        <button id="process" disabled>GIF erzeugen</button>
+        <button id="download" class="secondary" disabled>Download</button>
+        <button id="reset" class="secondary">Zurücksetzen</button>
+      </div>
+      <div class="status" id="status">Noch keine Datei geladen.</div>
+    </section>
+    <section class="panel preview">
+      <h2>Vorschau</h2>
+      <canvas id="preview" width="240" height="240" class="preview-canvas"></canvas>
+      <div class="preview-info">
+        <div class="info-grid">
+          <div>
+            <small>EINGANG</small>
+            <span id="info-source">–</span>
+          </div>
+          <div>
+            <small>FRAMES</small>
+            <span id="info-frames">–</span>
+          </div>
+          <div>
+            <small>OUTPUT</small>
+            <span id="info-output">–</span>
+          </div>
+          <div>
+            <small>LIMIT</small>
+            <span id="info-limit" class="limit-indicator">20 kB</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
