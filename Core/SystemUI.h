@@ -9,6 +9,7 @@
 #include "Core/SetupMenu.h"
 #include "Core/Storage.h"
 #include "Core/App.h"
+#include "Core/SDCopyEngine.h"
 
 class App;
 
@@ -41,18 +42,8 @@ class SystemUI {
 
  private:
   enum class Screen : uint8_t { None = 0, Setup, Language, SdCopyConfirm, SdCopyProgress, Transfer };
-  enum class SdCopyState : uint8_t { Idle = 0, Confirm, Running };
-  enum class SdCopyOutcome : uint8_t { None = 0, Success, Error, Aborted };
-  enum class CopyFileType : uint8_t { Bootlogo = 0, Config, Font, Lua, Jpg };
+  enum class SdCopyUiState : uint8_t { Idle = 0, Confirm, Running };
   enum class TransferState : uint8_t { Idle = 0, Receiving, Completed, Error, Aborted };
-
-  struct CopyItem {
-    String path;
-    String name;
-    size_t size = 0;
-    CopyFileType type = CopyFileType::Jpg;
-    String destPath;
-  };
 
   struct SdCopyDisplayStatus {
     bool running = false;
@@ -82,11 +73,6 @@ class SystemUI {
   void sdCopyAbort_();
   void sdCopyTick_();
   void sdCopyResetResult_();
-  void sdCopyFinalize_(SdCopyOutcome outcome, const String& message);
-  bool sdCopyPrepareQueue_();
-  bool sdCopyEnsureFlashReady_();
-  bool sdCopyEnsureSdReady_();
-  void sdCopyCloseFiles_();
   SdCopyDisplayStatus sdCopyStatus_() const;
   bool showTransferScreen_();
   void drawTransfer_();
@@ -108,24 +94,16 @@ class SystemUI {
   uint32_t sdCopyStatusUntil_ = 0;
   uint16_t sdCopyStatusColor_ = TFT_WHITE;
   bool sdCopyPendingExit_ = false;
-  SdCopyState sdCopyState_ = SdCopyState::Idle;
-  SdCopyOutcome sdCopyOutcome_ = SdCopyOutcome::None;
-  String sdCopyOutcomeMessage_;
-  bool sdCopyAbortRequest_ = false;
-  std::vector<CopyItem> sdCopyQueue_;
-  size_t sdCopyQueueIndex_ = 0;
-  size_t sdCopyBytesTotal_ = 0;
-  size_t sdCopyBytesDone_ = 0;
-  File sdCopySrc_;
-  File sdCopyDst_;
-  size_t sdCopyFileBytesDone_ = 0;
-  uint8_t* sdCopyBuffer_ = nullptr;  // Dynamic allocation to save 2KB when not copying
+  SdCopyUiState sdCopyUiState_ = SdCopyUiState::Idle;
   SdCopyDisplayStatus sdCopyLastStatus_;
   bool sdCopyProgressNeedsClear_ = true;
   String sdCopyHeader_;
   uint16_t sdCopyBarFill_ = 0;
   String sdCopyHelperText_;
   uint16_t sdCopyHelperColor_ = TFT_WHITE;
+
+  // SD Copy Engine
+  SDCopyEngine copyEngine_;
 
   bool transferEnabled_ = false;
   bool transferDirty_ = true;

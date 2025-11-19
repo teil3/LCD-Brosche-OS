@@ -330,41 +330,43 @@ void SystemUI::drawSdCopyProgress_() {
     sdCopyDirty_ = true;
   }
 
-  if (sdCopyOutcome_ != SdCopyOutcome::None) {
-    bool shouldExitToSetup =
-        (sdCopyOutcome_ == SdCopyOutcome::Success || sdCopyOutcome_ == SdCopyOutcome::Aborted);
-    uint16_t color = (sdCopyOutcome_ == SdCopyOutcome::Error) ? TFT_RED : TFT_WHITE;
-    uint32_t duration = (sdCopyOutcome_ == SdCopyOutcome::Error) ? 1800 : 1500;
-    String message = sdCopyOutcomeMessage_;
-    if (message.isEmpty()) {
-      switch (sdCopyOutcome_) {
-        case SdCopyOutcome::Success:
-          message = String(i18n.t("system.done"));
-          break;
-        case SdCopyOutcome::Error:
-          message = String(i18n.t("system.error"));
-          break;
-        case SdCopyOutcome::Aborted:
-          message = String(i18n.t("slideshow.aborted"));
-          break;
-        default:
-          break;
+  // Handle copy completion from engine
+  if (copyEngine_.getState() == SDCopyEngine::State::Finished) {
+    auto outcome = copyEngine_.getOutcome();
+    if (outcome != SDCopyEngine::Outcome::None) {
+      bool shouldExitToSetup =
+          (outcome == SDCopyEngine::Outcome::Success || outcome == SDCopyEngine::Outcome::Aborted);
+      uint16_t color = (outcome == SDCopyEngine::Outcome::Error) ? TFT_RED : TFT_WHITE;
+      uint32_t duration = (outcome == SDCopyEngine::Outcome::Error) ? 1800 : 1500;
+      String message = copyEngine_.getErrorMessage();
+      if (message.isEmpty()) {
+        switch (outcome) {
+          case SDCopyEngine::Outcome::Success:
+            message = String(i18n.t("system.done"));
+            break;
+          case SDCopyEngine::Outcome::Error:
+            message = String(i18n.t("system.error"));
+            break;
+          case SDCopyEngine::Outcome::Aborted:
+            message = String(i18n.t("slideshow.aborted"));
+            break;
+          default:
+            break;
+        }
       }
-    }
-    if (shouldExitToSetup) {
-      sdCopyOutcome_ = SdCopyOutcome::None;
-      sdCopyOutcomeMessage_.clear();
-      sdCopyPendingExit_ = false;
-      sdCopyStatusText_.clear();
-      sdCopyStatusUntil_ = 0;
-      showSetup();
-      setupMenu_.showStatus(message, duration);
-      return;
-    } else {
-      showSdCopyStatus_(message, duration, color);
-      sdCopyPendingExit_ = true;
-      sdCopyOutcome_ = SdCopyOutcome::None;
-      sdCopyOutcomeMessage_.clear();
+      if (shouldExitToSetup) {
+        copyEngine_.reset();
+        sdCopyPendingExit_ = false;
+        sdCopyStatusText_.clear();
+        sdCopyStatusUntil_ = 0;
+        showSetup();
+        setupMenu_.showStatus(message, duration);
+        return;
+      } else {
+        showSdCopyStatus_(message, duration, color);
+        sdCopyPendingExit_ = true;
+        // Don't reset engine here - will be reset when exiting
+      }
     }
   }
 
@@ -446,16 +448,8 @@ void SystemUI::resetSdCopyUi_() {
   sdCopyStatusColor_ = TFT_WHITE;
   sdCopyPendingExit_ = false;
   sdCopyLastStatus_ = SdCopyDisplayStatus{};
-  sdCopyState_ = SdCopyState::Idle;
-  sdCopyOutcome_ = SdCopyOutcome::None;
-  sdCopyOutcomeMessage_.clear();
-  sdCopyAbortRequest_ = false;
-  sdCopyCloseFiles_();
-  sdCopyQueue_.clear();
-  sdCopyQueueIndex_ = 0;
-  sdCopyBytesTotal_ = 0;
-  sdCopyBytesDone_ = 0;
-  sdCopyFileBytesDone_ = 0;
+  sdCopyUiState_ = SdCopyUiState::Idle;
+  copyEngine_.reset();
   sdCopyProgressNeedsClear_ = true;
   sdCopyHeader_.clear();
   sdCopyBarFill_ = 0;
@@ -464,324 +458,95 @@ void SystemUI::resetSdCopyUi_() {
 }
 
 bool SystemUI::sdCopyStartConfirm_() {
-  if (sdCopyState_ == SdCopyState::Running) {
+  if (sdCopyUiState_ == SdCopyUiState::Running) {
     return false;
   }
-  if (sdCopyState_ != SdCopyState::Confirm) {
-    sdCopyState_ = SdCopyState::Confirm;
-    sdCopyAbortRequest_ = false;
+  if (sdCopyUiState_ != SdCopyUiState::Confirm) {
+    sdCopyUiState_ = SdCopyUiState::Confirm;
     sdCopyResetResult_();
-    sdCopyQueue_.clear();
-    sdCopyQueueIndex_ = 0;
-    sdCopyBytesTotal_ = 0;
-    sdCopyBytesDone_ = 0;
-    sdCopyFileBytesDone_ = 0;
-    sdCopyCloseFiles_();
+    copyEngine_.reset();
   }
   return true;
 }
 
 bool SystemUI::sdCopyBegin_() {
-  if (sdCopyState_ == SdCopyState::Running) {
+  if (sdCopyUiState_ == SdCopyUiState::Running) {
     return true;
   }
-  if (sdCopyState_ != SdCopyState::Confirm) {
+  if (sdCopyUiState_ != SdCopyUiState::Confirm) {
     return false;
   }
+
   sdCopyResetResult_();
-  if (!sdCopyPrepareQueue_()) {
-    sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.no_files_found"));
+
+  // Prepare engine (will create required directories)
+  if (!copyEngine_.prepare()) {
+    // Engine sets outcome/error message internally
+    sdCopyUiState_ = SdCopyUiState::Idle;
     return false;
   }
 
-  if (!LittleFS.exists("/system")) {
-    LittleFS.mkdir("/system");
-  }
-  if (!LittleFS.exists("/system/fonts")) {
-    LittleFS.mkdir("/system/fonts");
-  }
-
-  // Allocate copy buffer dynamically (saves 2KB when not copying)
-  if (sdCopyBuffer_ == nullptr) {
-    sdCopyBuffer_ = (uint8_t*)malloc(2048);
-    if (sdCopyBuffer_ == nullptr) {
-      sdCopyFinalize_(SdCopyOutcome::Error, "Out of memory");
-      return false;
-    }
-  }
-
-  sdCopyState_ = SdCopyState::Running;
-  sdCopyAbortRequest_ = false;
+  sdCopyUiState_ = SdCopyUiState::Running;
   sdCopyDirty_ = true;
   return true;
 }
 
 void SystemUI::sdCopyCancel_() {
-  if (sdCopyState_ == SdCopyState::Confirm) {
-    sdCopyState_ = SdCopyState::Idle;
-    sdCopyAbortRequest_ = false;
-    sdCopyQueue_.clear();
-    sdCopyCloseFiles_();
+  if (sdCopyUiState_ == SdCopyUiState::Confirm) {
+    sdCopyUiState_ = SdCopyUiState::Idle;
+    copyEngine_.reset();
   }
 }
 
 void SystemUI::sdCopyAbort_() {
-  if (sdCopyState_ == SdCopyState::Running) {
-    sdCopyAbortRequest_ = true;
-    sdCopyTick_();
-    if (sdCopyState_ == SdCopyState::Running) {
-      sdCopyFinalize_(SdCopyOutcome::Aborted, i18n.t("slideshow.aborted"));
-    }
+  if (sdCopyUiState_ == SdCopyUiState::Running) {
+    copyEngine_.abort();
   }
 }
 
 void SystemUI::sdCopyTick_() {
-  if (sdCopyState_ != SdCopyState::Running) {
+  if (sdCopyUiState_ != SdCopyUiState::Running) {
     return;
   }
-  const uint32_t start = millis();
-  while (sdCopyState_ == SdCopyState::Running && (millis() - start) < kSdCopyTickBudgetMs) {
-    if (sdCopyAbortRequest_) {
-      sdCopyFinalize_(SdCopyOutcome::Aborted, i18n.t("slideshow.aborted"));
-      return;
-    }
 
-    if (!sdCopySrc_) {
-      if (sdCopyQueueIndex_ >= sdCopyQueue_.size()) {
-        sdCopyFinalize_(SdCopyOutcome::Success, "");
-        return;
-      }
+  // Run engine tick
+  copyEngine_.tick();
 
-      const CopyItem& item = sdCopyQueue_[sdCopyQueueIndex_];
-      sdCopySrc_ = SD.open(item.path.c_str(), FILE_READ);
-      sdCopyDst_ = LittleFS.open(item.destPath.c_str(), FILE_WRITE);
-      sdCopyFileBytesDone_ = 0;
+  // Check if finished
+  if (copyEngine_.getState() == SDCopyEngine::State::Finished) {
+    sdCopyUiState_ = SdCopyUiState::Idle;
+    sdCopyDirty_ = true;
 
-      if (!sdCopySrc_ || !sdCopyDst_) {
-        sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.error_at", item.name));
-        return;
+    // Handle outcome
+    if (copyEngine_.getOutcome() == SDCopyEngine::Outcome::Success) {
+      if (callbacks_.setSource) {
+        callbacks_.setSource(SlideSource::Flash);
       }
     }
-
-    const size_t chunkSize = 2048;
-    size_t available = sdCopySrc_.available();
-    if (available == 0) {
-      sdCopySrc_.close();
-      sdCopyDst_.close();
-      ++sdCopyQueueIndex_;
-      continue;
-    }
-
-    size_t toRead = std::min(chunkSize, available);
-    size_t n = sdCopySrc_.read(sdCopyBuffer_, toRead);
-    if (n == 0) {
-      sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.read_error"));
-      return;
-    }
-    if (sdCopyDst_.write(sdCopyBuffer_, n) != n) {
-      sdCopyFinalize_(SdCopyOutcome::Error, i18n.t("system.write_error"));
-      return;
-    }
-
-    sdCopyBytesDone_ += n;
-    sdCopyFileBytesDone_ += n;
   }
 }
 
 void SystemUI::sdCopyResetResult_() {
-  sdCopyOutcome_ = SdCopyOutcome::None;
-  sdCopyOutcomeMessage_.clear();
-}
-
-void SystemUI::sdCopyFinalize_(SdCopyOutcome outcome, const String& message) {
-  sdCopyCloseFiles_();
-  sdCopyQueue_.clear();
-  sdCopyQueueIndex_ = 0;
-  sdCopyBytesTotal_ = 0;
-  sdCopyBytesDone_ = 0;
-  sdCopyFileBytesDone_ = 0;
-  sdCopyAbortRequest_ = false;
-  sdCopyState_ = SdCopyState::Idle;
-  sdCopyDirty_ = true;
-
-  // Free copy buffer (saves 2KB when not copying)
-  if (sdCopyBuffer_ != nullptr) {
-    free(sdCopyBuffer_);
-    sdCopyBuffer_ = nullptr;
-  }
-
-  sdCopyOutcome_ = outcome;
-  sdCopyOutcomeMessage_ = message;
-
-  if (outcome == SdCopyOutcome::Success && callbacks_.setSource) {
-    callbacks_.setSource(SlideSource::Flash);
-  }
-}
-
-bool SystemUI::sdCopyPrepareQueue_() {
-  sdCopyQueue_.clear();
-  sdCopyQueueIndex_ = 0;
-  sdCopyBytesDone_ = 0;
-  sdCopyBytesTotal_ = 0;
-  sdCopyFileBytesDone_ = 0;
-  sdCopyAbortRequest_ = false;
-  sdCopyCloseFiles_();
-
-  if (!sdCopyEnsureSdReady_()) {
-    return false;
-  }
-  if (!sdCopyEnsureFlashReady_()) {
-    return false;
-  }
-  if (!ensureDirectory("/scripts")) {
-    return false;
-  }
-
-  File root = SD.open("/");
-  if (!root || !root.isDirectory()) {
-    return false;
-  }
-
-  std::vector<CopyItem> items;
-  for (File entry = root.openNextFile(); entry; entry = root.openNextFile()) {
-    if (entry.isDirectory()) {
-      entry.close();
-      continue;
-    }
-    String filename = entry.name();
-    int slash = filename.lastIndexOf('/');
-    if (slash >= 0) {
-      filename = filename.substring(slash + 1);
-    }
-    String lower = filename;
-    lower.toLowerCase();
-    size_t size = entry.size();
-    if (size == 0) {
-      entry.close();
-      continue;
-    }
-
-    CopyItem ci;
-    ci.path = String("/") + filename;
-    ci.name = filename;
-    ci.size = size;
-    bool accepted = false;
-
-    if (lower == "bootlogo.jpg" || lower == "boot.jpg") {
-      ci.type = CopyFileType::Bootlogo;
-      ci.destPath = "/system/bootlogo.jpg";
-      accepted = true;
-    } else if (lower == "textapp.cfg") {
-      if (!LittleFS.exists("/textapp.cfg")) {
-        ci.type = CopyFileType::Config;
-        ci.destPath = "/textapp.cfg";
-        accepted = true;
-      }
-    } else if (lower == "i18n.json") {
-      ci.type = CopyFileType::Config;
-      ci.destPath = "/system/i18n.json";
-      accepted = true;
-    } else if (lower == "font.vlw" || lower == "fontsmall.vlw") {
-      if (size <= 30000) {
-        ci.type = CopyFileType::Font;
-        ci.destPath = (lower == "fontsmall.vlw") ? "/system/fontsmall.vlw" : "/system/font.vlw";
-        accepted = true;
-      }
-    } else if (lower.endsWith(".vlw")) {
-      if (size <= 30720) {
-        ci.type = CopyFileType::Font;
-        ci.destPath = String("/system/fonts/") + lower;
-        accepted = true;
-      }
-    } else if (lower.endsWith(".lua")) {
-      ci.type = CopyFileType::Lua;
-      ci.destPath = String("/scripts/") + filename;
-      accepted = true;
-    } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
-      ci.type = CopyFileType::Jpg;
-      String destName = filename;
-      String ext = ".jpg";
-      int dot = destName.lastIndexOf('.');
-      String base = destName;
-      if (dot >= 0) {
-        ext = destName.substring(dot);
-        base = destName.substring(0, dot);
-      }
-      ci.destPath = String(kFlashSlidesDir) + "/" + destName;
-      int counter = 1;
-      while (LittleFS.exists(ci.destPath) && counter < 1000) {
-        destName = base + "-" + String(counter) + ext;
-        ci.destPath = String(kFlashSlidesDir) + "/" + destName;
-        ++counter;
-      }
-      accepted = true;
-    }
-
-    entry.close();
-    if (accepted) {
-      items.push_back(std::move(ci));
-    }
-  }
-  root.close();
-
-  if (items.empty()) {
-    return false;
-  }
-
-  std::sort(items.begin(), items.end(), [](const CopyItem& a, const CopyItem& b) {
-    if (a.type != b.type) {
-      return static_cast<uint8_t>(a.type) < static_cast<uint8_t>(b.type);
-    }
-    return a.name < b.name;
-  });
-
-  sdCopyQueue_ = std::move(items);
-  for (const auto& item : sdCopyQueue_) {
-    sdCopyBytesTotal_ += item.size;
-  }
-  return true;
-}
-
-bool SystemUI::sdCopyEnsureFlashReady_() {
-  if (!mountLittleFs(false)) {
-    if (!mountLittleFs(true)) {
-      return false;
-    }
-  }
-  if (!ensureFlashSlidesDir()) {
-    return false;
-  }
-  return true;
-}
-
-bool SystemUI::sdCopyEnsureSdReady_() {
-  if (SD.cardType() != CARD_NONE) {
-    return true;
-  }
-  digitalWrite(TFT_CS_PIN, HIGH);
-  bool ok = SD.begin(SD_CS_PIN, sdSPI, 5000000);
-  if (!ok) {
-    ok = SD.begin(SD_CS_PIN, sdSPI, 2000000);
-  }
-  return ok;
-}
-
-void SystemUI::sdCopyCloseFiles_() {
-  if (sdCopySrc_) sdCopySrc_.close();
-  if (sdCopyDst_) sdCopyDst_.close();
+  // Result is now managed by copyEngine_
+  // Nothing to reset here
 }
 
 SystemUI::SdCopyDisplayStatus SystemUI::sdCopyStatus_() const {
   SdCopyDisplayStatus status;
-  status.running = (sdCopyState_ == SdCopyState::Running);
-  status.fileCount = sdCopyQueue_.size();
-  size_t processed = sdCopyQueueIndex_;
-  if (sdCopyState_ == SdCopyState::Running && processed < status.fileCount) {
-    processed += 1;
+
+  // Safety: only query engine if UI state indicates copy is active
+  if (sdCopyUiState_ != SdCopyUiState::Running) {
+    return status;  // Return default/empty status
   }
-  status.filesProcessed = std::min(processed, status.fileCount);
-  status.bytesDone = sdCopyBytesDone_;
-  status.bytesTotal = sdCopyBytesTotal_;
+
+  status.running = (copyEngine_.getState() == SDCopyEngine::State::Running);
+  status.fileCount = copyEngine_.getFileCount();
+  status.filesProcessed = copyEngine_.getCurrentFileIndex();
+  if (status.running && status.filesProcessed < status.fileCount) {
+    status.filesProcessed += 1;  // Show current file as being processed
+  }
+  status.bytesDone = copyEngine_.getBytesDone();
+  status.bytesTotal = copyEngine_.getTotalBytes();
   return status;
 }
 

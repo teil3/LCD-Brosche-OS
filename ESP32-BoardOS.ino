@@ -82,10 +82,75 @@ void setup() {
     #endif
   }
 
+  // Auto-setup: Copy system files from SD if missing
+  bool gfxInitialized = false;
+  if (!LittleFS.exists("/system/font.vlw")) {
+    #ifdef USB_DEBUG
+      Serial.println("[BOOT] System files missing, checking for SD setup...");
+    #endif
+
+    // Initialize display & SD early for auto-setup
+    gfxBegin();
+    gfxInitialized = true;
+
+    // Check if SD has setup files
+    if (SD.exists("/font.vlw") || SD.exists("/i18n.json")) {
+      #ifdef USB_DEBUG
+        Serial.println("[BOOT] SD setup files found, starting auto-copy...");
+      #endif
+
+      // Show simple progress with built-in font
+      tft.fillScreen(TFT_BLACK);
+      tft.setTextFont(2);
+      tft.setTextSize(1);
+      tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+      SDCopyEngine autoSetup;
+      if (autoSetup.prepare()) {
+        tft.setCursor(50, 100);
+        tft.print("Initial Setup...");
+
+        // Blocking copy loop
+        while (autoSetup.getState() == SDCopyEngine::State::Running) {
+          autoSetup.tick();
+
+          // Update progress
+          int percent = autoSetup.getPercentDone();
+          tft.setCursor(50, 120);
+          tft.printf("Progress: %3d%%  ", percent);
+
+          delay(10);
+        }
+
+        // Show result
+        tft.setCursor(50, 140);
+        if (autoSetup.getOutcome() == SDCopyEngine::Outcome::Success) {
+          tft.print("Setup complete!");
+          #ifdef USB_DEBUG
+            Serial.println("[BOOT] Auto-setup successful");
+          #endif
+        } else {
+          tft.print("Setup failed");
+          #ifdef USB_DEBUG
+            Serial.printf("[BOOT] Auto-setup failed: %s\n", autoSetup.getErrorMessage().c_str());
+          #endif
+        }
+        delay(1500);
+      }
+    } else {
+      #ifdef USB_DEBUG
+        Serial.println("[BOOT] No setup files on SD, continuing with defaults...");
+      #endif
+    }
+  }
+
   // Initialize i18n (must be after LittleFS mount)
   i18n.begin();
 
-  gfxBegin();
+  // Initialize display if not already done by auto-setup
+  if (!gfxInitialized) {
+    gfxBegin();
+  }
   #ifdef USB_DEBUG
     Serial.println("[BOOT] gfxBegin done");
     Serial.printf("[BOOT] BOOT_MS=%u\n", BOOT_MS);
@@ -294,6 +359,7 @@ void loop() {
 #include "Core/AppManager.cpp"
 #include "Core/SetupMenu.cpp"
 #include "Core/SystemUI.cpp"
+#include "Core/SDCopyEngine.cpp"
 #include "Core/Gfx.cpp"
 #include "Core/Storage.cpp"
 #include "Core/TextRenderer.cpp"
