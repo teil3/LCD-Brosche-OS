@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LCD Brosche - Pixel Pin OS</title>
+    <title>Pixel Pin</title>
     <style>
         * {
             margin: 0;
@@ -208,12 +208,12 @@
     <div class="container">
         <header>
             <img src="assets/logo.png" alt="Pixel Pin Logo" class="logo">
-            <p class="subtitle">Eine LCD-Brosche die mit eigenen Bilder erweitert werden kann</p>
+            <p class="subtitle">LCD-Schmuck - schmück sich digital.</p>
         </header>
 
         <div class="section">
-            <h2>Was ist die LCD Brosche?</h2>
-            <p>Die LCD Brosche ist eine tragbare, programmierbare LED-Anstecknadel mit einem runden 240×240 Pixel Display. Sie kann Bilder, Text,  Zufallsanimationen und GIFs anzeigen. Das moderne Schmuckstück!</p>
+            <h2>Was ist Pisxel Pin?</h2>
+            <p>PixelPin ist ein tragbares, programmierbares Schmuckstück mit einem runden 240×240 Pixel Display. Er kann Bilder, Text,  Zufallsanimationen und GIFs anzeigen.</p>
 
             <ul class="feature-list">
                 <li><strong>Rundes 1.28" Display:</strong> 240×240 Pixel farbenfrohes TFT-Display</li>
@@ -224,49 +224,77 @@
             </ul>
         </div>
 
-        <div class="section">
-            <h2>Webtools</h2>
-            <p>Nutze diese Browser-basierten Tools, um Bilder für deine Brosche aufzubereiten und zu übertragen:</p>
 
-            <div class="tools-grid">
-                <a href="tools/bildaufbereiter/" class="tool-card">
-                    <h3>📷 Bildaufbereiter</h3>
-                    <p>Schneide und bereite Bilder für die Brosche auf. Übertrage sie direkt per Bluetooth oder USB auf dein Gerät.</p>
-                    <p style="margin-top: 10px; font-size: 0.85em; color: #ff8833;">• Bildbearbeitung • JPEG-Kompression • BLE/USB Upload</p>
-                </a>
-
-                <a href="tools/gifaufbereiter/" class="tool-card">
-                    <h3>🎬 GIF-Aufbereiter</h3>
-                    <p>Wandle animierte GIFs in für die Brosche optimierte Einzelbilder um. Automatische Skalierung und Frame-Extraktion.</p>
-                    <p style="margin-top: 10px; font-size: 0.85em; color: #ff8833;">• GIF-Parsing • Frame-Export • Optimierung</p>
-                </a>
-            </div>
-        </div>
 
         <div class="section">
             <h2>So funktioniert's</h2>
 
-            <h3>1. Bilder vorbereiten</h3>
-            <p>Öffne den <a href="tools/bildaufbereiter/" style="color: #ff6600;">Bildaufbereiter</a> in deinem Browser. Lade ein Bild hoch, schneide es zu und passe es an das runde Display an. Das Tool generiert automatisch ein optimiertes 240×240px JPEG.</p>
-
-            <h3>2. Bilder auf die Brosche übertragen</h3>
-            <p>Du hast zwei Möglichkeiten:</p>
+            <h3>1. Buttons bedienen</h3>
             <ul class="feature-list">
-                <li><strong>Bluetooth (BLE):</strong> Klicke auf "Per Bluetooth senden" im Bildaufbereiter. Funktioniert mit Chrome, Edge, Opera und Brave (nicht Safari/iOS).</li>
-                <li><strong>USB/Serial:</strong> Verbinde die Brosche per USB-Kabel und klicke auf "Per USB senden". Benötigt Chrome/Edge/Brave auf dem Desktop.</li>
+                <li><strong>Einfachklick (kurz):</strong> kurz klicken, <strong>Langklick (lang):</strong>Button halten, <strong>Doppelklick (doppel): </strong>Button zweimal klicken  </li>
+                <li><strong>Button 1 (System):</strong> Einfachklick: zur nächsten App wechseln, Langklick: zur vorherigen App wechseln, Doppelklick: zum  Setup Menu </li>
+                <li><strong>Button Mitte:</strong>Einfachklick: Pixel-Pin ein und ausschalten</li>
+                <li><strong>Button 2 (App):</strong> Funktion abhängig von der aktiven App (z.B. Einfachklick: nächstes Bild in Slideshow)</li>
+            </ul>
+            
+            <h3>2. Bilder vorbereiten</h3>
+            <p>Öffne den <a href="tools/bildaufbereiter/" style="color: #ff6600;">Bildaufbereiter</a> in deinem Browser. Öffne ein Bild, wähle einen Ausschnit und passe es an das runde Display an. Das Tool generiert automatisch ein optimiertes 240×240px JPEG.</p>
+
+            <h3>3. Daten auf Pixel-Pin übertragen</h3>
+            <h4>Pixel Pin transferbereit machen</h4>
+            <ul class="feature-list">
+                <li><strong>Button1 Doppelklick: </strong> öffnet Setup Menu.</li>
+                <li><strong>Button2 Einfachklick: </strong> Wechselt zwischen den Menupunkten</li>
+                <li>zu <strong>USB/BLE-Transfer</strong> wechseln</li>
+                <li><strong>Button2 Langklick</strong> USB/BLE-Transfer öffnen</li>
+                <li><strong>USB/BLE-Transfer</strong> bereit. Pixel Pin ist nun im Transfermodus und wartet auf Transfer von Webtool</li>
+            </ul>
+            <h4>Du hast zwei Möglichkeiten:</h4>
+            <ul class="feature-list">
+                <li><strong>Bluetooth (BLE):</strong> Klicke auf "Per Bluetooth senden". Funktioniert mit Chrome, Edge, Opera und Brave (nicht Safari/iOS).</li>
+                <li><strong>USB/Serial:</strong> Verbinde die Pixel-Pin per USB-Kabel und klicke auf "Per USB senden". Benötigt Chrome/Edge/Brave auf dem Desktop.</li>
             </ul>
 
-            <h3>3. Buttons bedienen</h3>
-            <ul class="feature-list">
-                <li><strong>Button 1 (System):</strong> App wechseln (Einfachklick), zur Hauptapp zurück (Doppelklick)</li>
-                <li><strong>Button 2 (App):</strong> Funktion abhängig von der aktiven App (z.B. nächstes Bild in Slideshow)</li>
-            </ul>
 
-            <h3>4. GIFs anzeigen</h3>
-            <p>Nutze den <a href="tools/gifaufbereiter/" style="color: #ff6600;">GIF-Aufbereiter</a>, um animierte GIFs in Einzelbilder zu zerlegen. Diese werden automatisch in der richtigen Reihenfolge abgespielt.</p>
+
         </div>
 
+        <div class="section">
+            <h2>Webtools</h2>
+            <p>Nutze diese Browser-basierten Tools, um deinen Pixel-Pin zu konfigurieren und zu verwalten:</p>
 
+            <div class="tools-grid">
+                <a href="tools/bildaufbereiter/" class="tool-card">
+                    <h3>📷 Bildaufbereiter</h3>
+                    <p>Schneide und bereite Bilder für den Pixel-Pin auf. Übertrage sie direkt per Bluetooth oder USB auf dein Gerät.</p>
+                    <p style="margin-top: 10px; font-size: 0.85em; color: #ff8833;">• Bildbearbeitung • JPEG-Kompression • BLE/USB Upload</p>
+                </a>
+
+                <a href="tools/text-app/" class="tool-card">
+                    <h3>📝 Text App Konfigurator</h3>
+                    <p>Erstelle scrollende Textnachrichten für die Text-App. Konfiguriere Schriftart, Geschwindigkeit und Effekte.</p>
+                    <p style="margin-top: 10px; font-size: 0.85em; color: #ff8833;">• Text-Editor • Scroll-Effekte • Konfiguration</p>
+                </a>
+
+                <a href="tools/filesystem/" class="tool-card">
+                    <h3>📁 Filesystem Browser</h3>
+                    <p>Durchsuche und verwalte Dateien des Pixel-Pins. Lade Bilder hoch, lösche Dateien und organisiere deinen Speicher.</p>
+                    <p style="margin-top: 10px; font-size: 0.85em; color: #ff8833;">• Datei-Manager • Upload/Download • Speicherverwaltung</p>
+                </a>
+
+                <a href="tools/qrcode/" class="tool-card">
+                    <h3>📱 QR-Code Generator</h3>
+                    <p>Generiere QR-Codes direkt für den Pixel-Pin. Ideal für URLs, Kontaktdaten oder Social-Media-Profile.</p>
+                    <p style="margin-top: 10px; font-size: 0.85em; color: #ff8833;">• QR-Code-Erstellung • URL/Text/vCard • Direct Upload</p>
+                </a>
+
+                <a href="tools/lua-scripts/" class="tool-card">
+                    <h3>⚙️ Lua Script Verwaltung</h3>
+                    <p>Erstelle und verwalte Lua-Scripts für eigene Apps. Erweitere deinen Pixel-Pin mit individuellen Funktionen und Animationen.</p>
+                    <p style="margin-top: 10px; font-size: 0.85em; color: #ff8833;">• Script-Editor • Code-Verwaltung • App-Entwicklung</p>
+                </a>
+            </div>
+        </div>
 
         <div class="section">
             <h2>Browser-Kompatibilität</h2>
@@ -325,16 +353,16 @@
         </div>
         <div class="section">
             <h2>Entwicklung & Dokumentation</h2>
-            <p>Die Brosche ist ein Open-Source-Projekt. Die komplette Firmware kann angepasst und erweitert werden:</p>
+            <p>Pixel-Pin ist ein Open-Source-Projekt. Die komplette Firmware kann angepasst und erweitert werden:</p>
 
-            <a href="https://github.com/Teil3/LCD-Brosche-OS" class="button" target="_blank">📂 GitHub Repository</a>
+            <a href="https://teil3.github.io/Pixel-Pin" class="button" target="_blank">📂 GitHub Repository</a>
             <a href="README.md" class="button button-secondary">📖 Entwickler-Doku</a>
 
             
         </div>
 
         <footer>
-            <p>LCD Brosche - Pixel Pin OS</p>
+            <p>Pixel Pin OS</p>
             <p style="margin-top: 10px; font-size: 0.9em;">Open Source Hardware & Software</p>
         </footer>
     </div>
