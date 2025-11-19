@@ -26,8 +26,8 @@
 
         header {
             text-align: center;
-            padding: 40px 20px;
-            margin-bottom: 40px;
+            padding: 20px 20px 0px;
+            margin-bottom: 0px;
         }
 
         .logo {
@@ -208,45 +208,71 @@
     <div class="container">
         <header>
             <img src="assets/logo.png" alt="Pixel Pin Logo" class="logo">
-            <p class="subtitle">LCD-Schmuck - schmück sich digital.</p>
+            <p class="subtitle">LCD-Schmuck - schmück dich digital!</p>
         </header>
 
-        <div class="section">
+        <div class="section" id="about">
             <h2>Was ist Pisxel Pin?</h2>
             <p>PixelPin ist ein tragbares, programmierbares Schmuckstück mit einem runden 240×240 Pixel Display. Er kann Bilder, Text,  Zufallsanimationen und GIFs anzeigen.</p>
 
             <ul class="feature-list">
                 <li><strong>Rundes 1.28" Display:</strong> 240×240 Pixel farbenfrohes TFT-Display</li>
-                <li><strong>Wireless Bildübertragung:</strong> Bilder per Bluetooth (BLE) oder USB übertragen</li>
+                <li><strong>Eigene Bilder:</strong> per Bluetooth (BLE) oder USB übertragen</li>
                 <li><strong>App-System:</strong> Slideshow, GIF-Player und erweiterbare App-Architektur per LUA-Scripts</li>
                 <li><strong>Zwei Buttons:</strong> Einfache Navigation und App-Steuerung</li>
                 <li><strong>Open Source:</strong> Komplett anpassbare Firmware (Arduino/ESP32)</li>
             </ul>
         </div>
 
-        <div class="section">
+        <div class="section" id="apps">
             <h2>Verfügbare Apps</h2>
             <p>Pixel-Pin kommt mit verschiedenen vorinstallierten Apps. Wechsle zwischen Apps mit Button 1 (Einfachklick = nächste App, Langklick = vorherige App).</p>
 
             <div style="margin-top: 30px;">
                 <h3>📷 Slideshow</h3>
-                <p><strong>Funktion:</strong> Zeigt deine hochgeladenen Bilder als Diashow an. Bilder werden automatisch oder manuell durchgeschaltet.</p>
-                <p style="margin-top: 10px;"><strong>Steuerung mit Button 2 :</strong></p>
+                <p><strong>Funktion:</strong> Zeigt Bilder und GIFs an. Das Bildformat ist JPG, nicht progresive. Bilder sollten 240x240px gross sein. Bilder und GIFs dürfen nicht zu schwer sein, so max. ~25Kb.</p>
+                <p>Die App hat verschiedene Modi: Automatisch (Auto), Manuell und ein Slideshow-Menü zur Konfiguration.</p>
+
+
+                <p style="margin-top: 15px;"><strong>Button 2 Steuerung:</strong></p>
+                <p style="margin-top: 5px; margin-left: 20px; color: #ff8833;"><em>Im Auto-Modus:</em></p>
                 <ul class="feature-list" style="margin-top: 5px;">
-                    <li><strong>Einfachklick (kurz):</strong> Nächstes Bild anzeigen</li>
-                    <li><strong>Langklick (lang):</strong> Weschselt zwischen Automodus, Manuel und Slideshow-Menü</li>
+                    <li><strong>Einfachklick:</strong> Nächstes Bild anzeigen</li>
+                    <li><strong>Langklick:</strong> Zum Manuell Modus wechseln</li>
                 </ul>
+
+                <p style="margin-top: 10px; margin-left: 20px; color: #ff8833;"><em>Im Manual-Modus:</em></p>
+                <ul class="feature-list" style="margin-top: 5px;">
+                    <li><strong>Einfachklick:</strong> Nächstes Bild anzeigen</li>
+                    <li><strong>Langklick:</strong> Slideshow-Menü öffnen</li>
+                </ul>
+
+                <p style="margin-top: 15px;"><strong>Slideshow-Menü:</strong></p>
+                <ul class="feature-list" style="margin-top: 5px;">
+                    <li><strong>Einfachklick:</strong> Zwischen Menüpunkten wechseln</li>
+                    <li><strong>Langklick:</strong> Ausgewählten Menüpunkt öffnen/aktivieren</li>
+                    <li><strong>Doppelklick:</strong> Menü schließen</li>
+                </ul>
+
+                <p style="margin-top: 10px; margin-left: 20px;"><strong>Menüpunkte:</strong></p>
+                <ul class="feature-list" style="margin-top: 5px;">
+                    <li><strong>Quelle wählen:</strong> Zwischen SD-Karte und Flash-Speicher wechseln</li>
+                    <li><strong>Löschmenü:</strong> Bilder einzeln durchgehen und löschen oder alle auf einmal löschen</li>
+                    <li><strong>Auto-Geschwindigkeit:</strong> Wechselzeit einstellen (1s, 5s, 10s, 30s, 5min)</li>
+                    <li><strong>Exit:</strong> Zurück zum Auto-Modus</li>
+                </ul>
+
                 <p style="margin-top: 10px; color: #ff8833;"><strong>Webapp:</strong> ✅ <a href="tools/bildaufbereiter/" style="color: #ff6600;">Bildaufbereiter</a> - Bilder vorbereiten und hochladen</p>
             </div>
 
             <div style="margin-top: 30px;">
                 <h3>📝 Text App</h3>
-                <p><strong>Funktion:</strong> Zeigt scrollende Textnachrichten auf dem Display an. Es gibt den Merhzeilermodus, den Wortmodus oder den Buchstabenmous. Text, Modus, Abspielgeschwindigkeit und Farbe kann über die Webapp konfiguriert werden.</p>
+                <p><strong>Funktion:</strong> Zeigt scrollende Textnachrichten auf dem Display an. Es gibt den Mehrzeilermodus (TextBlock), den Wortmodus (BigWords) oder den Buchstabenmodus (BigLetters). Text, Modus, Abspielgeschwindigkeit und Farbe kann über die Webapp konfiguriert werden.</p>
                 <p style="margin-top: 10px;"><strong>Button 2 Steuerung:</strong></p>
                 <ul class="feature-list" style="margin-top: 5px;">
-                    <li><strong>Einfachklick (kurz):</strong> Scroll-Animation starten/pausieren</li>
-                    <li><strong>Langklick (lang):</strong> Text zurücksetzen</li>
-                    <li><strong>Doppelklick:</strong> Scroll-Geschwindigkeit ändern</li>
+                    <li><strong>Einfachklick (kurz):</strong> Anzeigemodus wechseln (TextBlock → BigWords → BigLetters)</li>
+                    <li><strong>Langklick (lang):</strong> Textausrichtung ändern (nur im TextBlock-Modus: Links/Mitte/Rechts)</li>
+                    <li><strong>Doppelklick:</strong> Anzeigegeschwindigkeit ändern (nur in BigWords/BigLetters Modi)</li>
                 </ul>
                 <p style="margin-top: 10px; color: #ff8833;"><strong>Webapp:</strong> ✅ <a href="tools/text-app/" style="color: #ff6600;">Text App Konfigurator</a> - Text und Einstellungen anpassen</p>
             </div>
@@ -256,9 +282,9 @@
                 <p><strong>Funktion:</strong> Generiert dynamische, farbige Pixel-Muster basierend auf Zufallsalgorithmen. Jeder Pixel wird mit zufälligen Farben eingefärbt.</p>
                 <p style="margin-top: 10px;"><strong>Button 2 Steuerung:</strong></p>
                 <ul class="feature-list" style="margin-top: 5px;">
-                    <li><strong>Einfachklick (kurz):</strong> Neues Muster generieren</li>
-                    <li><strong>Langklick (lang):</strong> Animation pausieren/fortsetzen</li>
-                    <li><strong>Doppelklick:</strong> Farbschema wechseln</li>
+                    <li><strong>Einfachklick (kurz):</strong> Pixelgröße ändern (Display wird neu gestartet)</li>
+                    <li><strong>Langklick (lang):</strong> Farbpalette wechseln (Alle Farben/Rot/Grün/Blau/Graustufen/Bunt)</li>
+                    <li><strong>Doppelklick:</strong> Geschwindigkeit ändern (Animation verlangsamen)</li>
                 </ul>
                 <p style="margin-top: 10px; color: #888;"><strong>Webapp:</strong> ❌ Keine Webapp - App läuft autonom</p>
             </div>
@@ -268,33 +294,33 @@
                 <p><strong>Funktion:</strong> Zeichnet chaotische, farbige Linien über das Display. Organische Bewegungsmuster entstehen zufällig.</p>
                 <p style="margin-top: 10px;"><strong>Button 2 Steuerung:</strong></p>
                 <ul class="feature-list" style="margin-top: 5px;">
-                    <li><strong>Einfachklick (kurz):</strong> Display löschen und neu starten</li>
-                    <li><strong>Langklick (lang):</strong> Liniendicke ändern</li>
-                    <li><strong>Doppelklick:</strong> Geschwindigkeit anpassen</li>
+                    <li><strong>Einfachklick (kurz):</strong> Linienlänge halbieren (Display wird neu gestartet)</li>
+                    <li><strong>Langklick (lang):</strong> Farbpalette wechseln (Alle Farben/Rot/Grün/Blau/Graustufen/Bunt)</li>
+                    <li><strong>Doppelklick:</strong> Linienbreite erhöhen (1px → 2px → 3px → 4px)</li>
                 </ul>
                 <p style="margin-top: 10px; color: #888;"><strong>Webapp:</strong> ❌ Keine Webapp - App läuft autonom</p>
             </div>
 
             <div style="margin-top: 30px;">
                 <h3>🎨 Streifen-Töne</h3>
-                <p><strong>Funktion:</strong> Erzeugt vertikale oder horizontale farbige Streifen, die sich bewegen und ihre Farbe ändern.</p>
+                <p><strong>Funktion:</strong> Erzeugt horizontale farbige Streifen, die sich bewegen und ihre Farbe ändern.</p>
                 <p style="margin-top: 10px;"><strong>Button 2 Steuerung:</strong></p>
                 <ul class="feature-list" style="margin-top: 5px;">
-                    <li><strong>Einfachklick (kurz):</strong> Streifenrichtung wechseln (vertikal/horizontal)</li>
-                    <li><strong>Langklick (lang):</strong> Streifenbreite ändern</li>
-                    <li><strong>Doppelklick:</strong> Farbpalette wechseln</li>
+                    <li><strong>Einfachklick (kurz):</strong> Streifenhöhe ändern (Display wird neu gestartet)</li>
+                    <li><strong>Langklick (lang):</strong> Farbpalette wechseln (Alle Farben/Rot/Grün/Blau/Graustufen/Bunt)</li>
+                    <li><strong>Doppelklick:</strong> Geschwindigkeit ändern (Animation verlangsamen)</li>
                 </ul>
                 <p style="margin-top: 10px; color: #888;"><strong>Webapp:</strong> ❌ Keine Webapp - App läuft autonom</p>
             </div>
 
             <div style="margin-top: 30px;">
                 <h3>✏️ Zufallszeichner</h3>
-                <p><strong>Funktion:</strong> Zeichnet zufällige geometrische Formen (Kreise, Rechtecke, Linien) in verschiedenen Farben auf das Display.</p>
+                <p><strong>Funktion:</strong> Zeichnet animierte Blob-Formen (Ellipsen) mit zufälligen Farben, die sich organisch über das Display bewegen.</p>
                 <p style="margin-top: 10px;"><strong>Button 2 Steuerung:</strong></p>
                 <ul class="feature-list" style="margin-top: 5px;">
-                    <li><strong>Einfachklick (kurz):</strong> Neue Form zeichnen</li>
-                    <li><strong>Langklick (lang):</strong> Display komplett löschen</li>
-                    <li><strong>Doppelklick:</strong> Formentyp wechseln (nur Kreise/nur Rechtecke/gemischt)</li>
+                    <li><strong>Einfachklick (kurz):</strong> Farben der Blobs neu generieren</li>
+                    <li><strong>Langklick (lang):</strong> Farbpalette wechseln (Alle Farben/Rot/Grün/Blau/Graustufen/Bunt)</li>
+                    <li><strong>Doppelklick:</strong> Display löschen und Blobs neu positionieren</li>
                 </ul>
                 <p style="margin-top: 10px; color: #888;"><strong>Webapp:</strong> ❌ Keine Webapp - App läuft autonom</p>
             </div>
@@ -304,9 +330,9 @@
                 <p><strong>Funktion:</strong> Generiert sich bewegende, farbige Rechtecke unterschiedlicher Größe. Hypnotische geometrische Muster entstehen.</p>
                 <p style="margin-top: 10px;"><strong>Button 2 Steuerung:</strong></p>
                 <ul class="feature-list" style="margin-top: 5px;">
-                    <li><strong>Einfachklick (kurz):</strong> Neues Rechteckmuster</li>
-                    <li><strong>Langklick (lang):</strong> Rechteckgröße ändern</li>
-                    <li><strong>Doppelklick:</strong> Füllmodus wechseln (gefüllt/umrandet)</li>
+                    <li><strong>Einfachklick (kurz):</strong> Maximale Rechteckgröße ändern (Display wird neu gestartet)</li>
+                    <li><strong>Langklick (lang):</strong> Farbpalette wechseln (Alle Farben/Rot/Grün/Blau/Graustufen/Bunt)</li>
+                    <li><strong>Doppelklick:</strong> Geschwindigkeit ändern (Animation verlangsamen)</li>
                 </ul>
                 <p style="margin-top: 10px; color: #888;"><strong>Webapp:</strong> ❌ Keine Webapp - App läuft autonom</p>
             </div>
@@ -323,9 +349,68 @@
                 <p style="margin-top: 10px; color: #ff8833;"><strong>Webapp:</strong> ✅ <a href="tools/lua-scripts/" style="color: #ff6600;">Lua Script Verwaltung</a> - Scripts erstellen und hochladen</p>
             </div>
         </div>
-        
 
-        <div class="section">
+        <div class="section" id="setup">
+            <h2>Setup Menü</h2>
+            <p>Das Setup-Menü ist das zentrale Konfigurationsmenü des Pixel-Pins. Es wird über <strong>Button 1 Doppelklick</strong> geöffnet und bietet Zugriff auf Systemeinstellungen und Datenübertragung.</p>
+
+            <p style="margin-top: 15px;"><strong>Zugriff:</strong></p>
+            <ul class="feature-list" style="margin-top: 5px;">
+                <li><strong>Öffnen:</strong> Button 1 Doppelklick (von jeder App aus)</li>
+                <li><strong>Schließen:</strong> Button 1 Einfachklick ODER Button 2 Doppelklick</li>
+            </ul>
+
+            <p style="margin-top: 15px;"><strong>Navigation im Setup-Menü:</strong></p>
+            <ul class="feature-list" style="margin-top: 5px;">
+                <li><strong>Button 2 Einfachklick:</strong> Zum nächsten Menüpunkt wechseln</li>
+                <li><strong>Button 2 Langklick:</strong> Ausgewählten Menüpunkt öffnen/aktivieren</li>
+                <li><strong>Button 2 Doppelklick:</strong> Setup-Menü schließen</li>
+            </ul>
+
+            <p style="margin-top: 15px;"><strong>Menüpunkte:</strong></p>
+
+            <div style="margin-left: 20px; margin-top: 10px;">
+                <h3 style="font-size: 1.1em; color: #ff8833;">🌐 Sprache / Language</h3>
+                <p style="margin-top: 5px;">Ändert die Systemsprache der Benutzeroberfläche.</p>
+                <ul class="feature-list" style="margin-top: 5px;">
+                    <li><strong>Einfachklick:</strong> Zwischen verfügbaren Sprachen wechseln (Deutsch/English/Français/Italiano)</li>
+                    <li><strong>Langklick:</strong> Sprache bestätigen und zum Setup-Menü zurück</li>
+                    <li><strong>Doppelklick:</strong> Abbrechen und zum Setup-Menü zurück</li>
+                </ul>
+            </div>
+
+            <div style="margin-left: 20px; margin-top: 15px;">
+                <h3 style="font-size: 1.1em; color: #ff8833;">📡 USB/BLE-Transfer</h3>
+                <p style="margin-top: 5px;">Aktiviert den Transfermodus für Bildübertragung per Bluetooth oder USB. Der Pixel-Pin wartet dann auf Verbindung vom Webtool.</p>
+                <ul class="feature-list" style="margin-top: 5px;">
+                    <li>Nach Auswahl öffnet sich der Transfer-Bildschirm</li>
+                    <li>Übertragung kann per BLE (Bluetooth) oder USB Serial erfolgen</li>
+                    <li>Fortschrittsanzeige während der Übertragung</li>
+                    <li><strong>Langklick:</strong> Transfer abbrechen und zurück zum Setup-Menü</li>
+                    <li><strong>Doppelklick:</strong> Transfer beenden und Menü schließen</li>
+                </ul>
+            </div>
+
+            <div style="margin-left: 20px; margin-top: 15px;">
+                <h3 style="font-size: 1.1em; color: #ff8833;">💾 SD → Flash kopieren</h3>
+                <p style="margin-top: 5px;">Kopiert alle Bilder von der SD-Karte in den internen Flash-Speicher. Alternativer Transfer wenn kein Bluetooth oder USB Übertragung möglich ist.</p>
+                <ul class="feature-list" style="margin-top: 5px;">
+                    <li>Zeigt Bestätigungsdialog mit Anzahl der Dateien</li>
+                    <li><strong>Einfachklick:</strong> Zwischen "Nein" und "Ja" wechseln</li>
+                    <li><strong>Langklick:</strong> Auswahl bestätigen (Kopiervorgang starten oder abbrechen)</li>
+                    <li><strong>Doppelklick:</strong> Zurück zum Setup-Menü</li>
+                    <li>Während des Kopiervorgangs: Fortschrittsanzeige mit Dateianzahl und Größe</li>
+                </ul>
+            </div>
+
+            <div style="margin-left: 20px; margin-top: 15px;">
+                <h3 style="font-size: 1.1em; color: #ff8833;">🚪 Exit</h3>
+                <p style="margin-top: 5px;">Schließt das Setup-Menü und kehrt zur zuvor aktiven App zurück.</p>
+            </div>
+        </div>
+
+
+        <div class="section" id="howto">
             <h2>So funktioniert's</h2>
 
             <h3>1. Buttons bedienen</h3>
@@ -358,7 +443,7 @@
 
         </div>
 
-        <div class="section">
+        <div class="section" id="webtools">
             <h2>Webtools</h2>
             <p>Nutze diese Browser-basierten Tools, um deinen Pixel-Pin zu konfigurieren und zu verwalten:</p>
 
@@ -397,7 +482,7 @@
 
 
 
-        <div class="section">
+        <div class="section" id="browser-compatibility">
             <h2>Browser-Kompatibilität</h2>
             <p>Die Webtools nutzen moderne Browser-APIs (WebBluetooth, WebSerial). Hier die Kompatibilität:</p>
 
@@ -415,7 +500,7 @@
 
             <p style="margin-top: 15px; color: #cccccc;"><strong>Empfehlung:</strong> Nutze Chrome oder Edge für die beste Kompatibilität. Unter Linux benötigst du Rechte für den seriellen Port (dialout-Gruppe).</p>
         </div>
-        <div class="section">
+        <div class="section" id="specs">
             <h2>Technische Daten</h2>
             <div class="specs-grid">
                 <div class="spec-item">
@@ -452,7 +537,7 @@
                 </div>
             </div>
         </div>
-        <div class="section">
+        <div class="section" id="development">
             <h2>Entwicklung & Dokumentation</h2>
             <p>Pixel-Pin ist ein Open-Source-Projekt. Die komplette Firmware kann angepasst und erweitert werden:</p>
 
