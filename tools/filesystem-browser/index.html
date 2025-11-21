@@ -5,32 +5,32 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dateisystem Browser</title>
   <style>
-    :root { color-scheme: light; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; background: #f8f9fb; color: #1f252d; }
-    header { margin-bottom: 1rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+    :root { color-scheme: dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; background: #000000; color: #ffffff; }
+    header { margin-bottom: 2rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
     .header__text { flex: 1 1 320px; min-width: 0; }
     .header__logo { display: block; flex: 0 0 auto; width: 160px; margin-left: auto; order: 0; }
-    .header__logo img { display: block; width: 100%; max-width: 100%; height: auto; }
+    .header__logo img { display: block; width: 100%; max-width: 100%; height: auto; image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges; }
     h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem; }
     .muted { opacity: .75; }
-    .card { background: #fff; border-radius: .8rem; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 1rem; }
-    button, input, select { font: inherit; border-radius: .6rem; border: 1px solid #c9c9c9; padding: .55rem .8rem; background: #ffffff; color: inherit; }
-    button { cursor: pointer; font-weight: 500; }
-    button:hover:not(:disabled) { background: #f0f2f7; }
-    button.primary { background: #4a90e2; color: #fff; border-color: #4a90e2; }
-    button.primary:hover:not(:disabled) { background: #3d7bc4; }
+    .card { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 102, 0, 0.2); border-radius: .8rem; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 1rem; }
+    button, input, select { font: inherit; border-radius: .6rem; border: 1px solid rgba(255, 102, 0, 0.3); padding: .55rem .8rem; background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+    button { cursor: pointer; font-weight: 500; background: #ff6600; color: white; border: none; transition: all 0.3s ease; }
+    button:hover:not(:disabled) { background: #ff8833; transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 102, 0, 0.4); }
+    button.primary { background: #ff6600; color: #fff; border: none; }
+    button.primary:hover:not(:disabled) { background: #ff8833; }
     button:disabled { opacity: .5; cursor: not-allowed; }
     .controls { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
     .status { min-height: 1.2rem; font-size: 0.9rem; }
     .fs-info { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .fs-info div { flex: 1 1 120px; background: #f0f4ff; border-radius: .6rem; padding: 0.6rem 0.8rem; }
+    .fs-info div { flex: 1 1 120px; background: rgba(255, 102, 0, 0.1); border-radius: .6rem; padding: 0.6rem 0.8rem; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #e5e9f2; text-align: left; }
-    th { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6b778c; }
+    th, td { padding: 0.4rem 0.5rem; border-bottom: 1px solid rgba(255, 102, 0, 0.2); text-align: left; }
+    th { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; color: #ff6600; }
     .path-cell { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92rem; }
-    .tag { font-size: 0.72rem; padding: 0.1rem 0.4rem; border-radius: 999px; background: #e7f1ff; color: #1d4ed8; margin-left: 0.4rem; }
-    .tag.lock { background: #ffe8cc; color: #b45309; }
-    .tag.dir { background: #f1f5f9; color: #0f172a; }
+    .tag { font-size: 0.72rem; padding: 0.1rem 0.4rem; border-radius: 999px; background: rgba(255, 102, 0, 0.3); color: #ffffff; margin-left: 0.4rem; }
+    .tag.lock { background: rgba(255, 165, 0, 0.3); color: #ffa500; }
+    .tag.dir { background: rgba(255, 255, 255, 0.1); color: #cccccc; }
     .actions { display: flex; gap: 0.4rem; }
     .upload-grid { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; }
     .upload-grid label { font-weight: 600; }
@@ -50,14 +50,14 @@
 <body>
   <header>
     <div class="header__text">
-      <h1>Dateisystem Browser für die LCD-Brosche</h1>
-      <p class="muted">Dateien inspizieren, hochladen und entfernen –  über USB.</p>
-      <p class="muted" style="margin-top: .5rem; font-size: .85rem;">
-        <a href="../../#webtools" style="color: #4a90e2; text-decoration: none;">← Zurück zur Dokumentation</a>
+      <h1 style="color: #ff6600; font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem;">Dateisystem Browser</h1>
+      <p style="color: #cccccc; margin-bottom: 1rem;">Dateien inspizieren, hochladen und entfernen – über USB.</p>
+      <p style="margin-top: .5rem; font-size: .85rem;">
+        <a href="../../#webtools" style="color: #ff6600; text-decoration: none;">← Zurück zur Dokumentation</a>
       </p>
     </div>
-    <a class="header__logo" href="https://www.teil3.ch" target="_blank" rel="noopener">
-      <img src="../bildaufbereiter/teil3_logo.svg" alt="Teil3 Logo" width="160" height="95" />
+    <a class="header__logo" href="../../index.html">
+      <img src="../../assets/logo.png" alt="Pixel Pin Logo" width="160" height="95" />
     </a>
   </header>
 
@@ -647,5 +647,12 @@
       }
     });
   </script>
+
+  <footer style="text-align: center; padding: 30px 20px; color: #888; margin-top: 40px; border-top: 1px solid rgba(255, 102, 0, 0.2);">
+    <p style="margin-bottom: 15px; font-size: 0.9em;">Ein Projekt von:</p>
+    <a href="https://www.teil3.ch" target="_blank" rel="noopener" style="display: inline-block; opacity: 0.6; transition: opacity 0.3s ease;">
+      <img src="../teil3_logo.svg" alt="Teil3" style="height: 40px; width: auto;" />
+    </a>
+  </footer>
 </body>
 </html>

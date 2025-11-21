@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>TextApp Konfigurator für die LCD-Brosche</title>
   <style>
-    :root { color-scheme: light; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 920px; margin: 1.5rem auto; padding: 0 1rem; background: #f8f9fb; color: #1f252d; }
-    header { margin-bottom: 1rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+    :root { color-scheme: dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 920px; margin: 1.5rem auto; padding: 0 1rem; background: #000000; color: #ffffff; }
+    header { margin-bottom: 2rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
     .header__text { flex: 1 1 320px; min-width: 0; }
     .header__logo { display: block; flex: 0 0 auto; width: 160px; margin-left: auto; order: 0; }
-    .header__logo img { display: block; width: 100%; max-width: 100%; height: auto; }
+    .header__logo img { display: block; width: 100%; max-width: 100%; height: auto; image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges; }
     @media (max-width: 680px) {
       header { flex-direction: column; align-items: center; text-align: center; }
       .header__text { flex: 1 1 auto; }
@@ -18,6 +18,7 @@
     }
     h1 { font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0; }
     .muted { opacity: .75; }
+    a { color: #ff6600; text-decoration: none; }
     .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin: .75rem 0; }
     .header__title-row { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; margin-bottom: .3rem; }
     .layout { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
@@ -25,7 +26,7 @@
     .layout__side { flex: 0 1 280px; min-width: 240px; display: flex; flex-direction: column; gap: 1rem; }
     .config-flex-row { display: flex; gap: 1rem; flex-wrap: nowrap; }
     .config-flex-item { flex: 1 1 180px; min-width: 0; }
-    .config-section { background: #fff; border-radius: .8rem; padding: 1rem; margin: .85rem 0; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .config-section { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 102, 0, 0.2); border-radius: .8rem; padding: 1rem; margin: .85rem 0; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
     .config-section--compact { padding: .9rem; }
     .config-section--text textarea { min-height: 150px; }
     .config-section h2 { font-size: 1.1rem; margin: 0 0 1rem; }
@@ -37,15 +38,15 @@
     .preview__viewport::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
     canvas { display: block; width: 100%; height: 100%; }
     .preview__mask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; object-fit: cover; transform: translateY(1px); }
-    button, select, input[type="number"], input[type="text"], textarea { padding: .45rem .8rem; border-radius: .55rem; border: 1px solid #c9c9c9; background: #ffffff; color: inherit; font-family: inherit; font-size: .95rem; }
+    button, select, input[type="number"], input[type="text"], textarea { padding: .45rem .8rem; border-radius: .55rem; border: 1px solid rgba(255, 102, 0, 0.3); background: rgba(255, 255, 255, 0.1); color: #ffffff; font-family: inherit; font-size: .95rem; }
     textarea { resize: vertical; min-height: 150px; font-family: ui-monospace, monospace; font-size: .9rem; line-height: 1.4; }
-    button { cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; }
-    button:hover:not(:disabled) { background: #f0f2f7; }
+    button { cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; background: #ff6600; color: white; border: none; transition: all 0.3s ease; }
+    button:hover:not(:disabled) { background: #ff8833; transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 102, 0, 0.4); }
     button[disabled] { opacity: .5; cursor: not-allowed; }
-    button.primary { background: #4a90e2; color: white; border-color: #4a90e2; }
-    button.primary:hover:not(:disabled) { background: #3d7bc4; }
-    .ghost-btn { border-color: #9aa5b5; color: #1f252d; background: rgba(74,144,226,0.08); padding: .4rem .7rem; font-size: .9rem; width: 100%; }
-    .ghost-btn:hover { background: rgba(74,144,226,0.15); }
+    button.primary { background: #ff6600; color: white; border: none; }
+    button.primary:hover:not(:disabled) { background: #ff8833; }
+    .ghost-btn { border: 1px solid rgba(255, 102, 0, 0.3); color: #ffffff; background: rgba(255, 255, 255, 0.1); padding: .4rem .7rem; font-size: .9rem; width: 100%; }
+    .ghost-btn:hover { background: rgba(255, 102, 0, 0.2); transform: scale(1.02); }
     input[type="color"] { height: 2.5rem; padding: .2rem; cursor: pointer; }
     input[type="range"] { flex: 1; min-width: 120px; }
     .actions { margin: .75rem 0 0; display: flex; gap: .6rem; flex-wrap: wrap; }
@@ -53,7 +54,7 @@
     .expert-toggle { margin-top: .5rem; }
     .expert-mode { display: none; margin-top: 1rem; }
     .expert-mode.active { display: block; }
-    .version-tag { font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; color: #4a90e2; }
+    .version-tag { font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; color: #ff6600; }
     code { background: rgba(127,127,127,.15); padding: .1rem .3rem; border-radius: .3rem; font-family: ui-monospace, monospace; font-size: .9em; }
     .speed-value { min-width: 4rem; text-align: right; font-weight: 500; }
     footer { margin-top: 2rem; font-size: .9rem; }
@@ -62,18 +63,18 @@
     .status-line { flex: 1 1 100%; font-size: .85rem; margin-top: .25rem; }
     .text-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
     .tabs { display: flex; gap: .25rem; margin-bottom: 0; flex-wrap: wrap; }
-    .tab { padding: .4rem .75rem; border: 1px solid #c9c9c9; background: #f4f7fc; border-radius: .5rem .5rem 0 0; cursor: pointer; font-size: .9rem; transition: all .15s; }
-    .tab:hover { background: #e8ecf3; }
-    .tab.active { background: #4a90e2; color: white; border-color: #4a90e2; }
-    .tab.add-tab { background: #f0f2f7; font-weight: 600; color: #4a90e2; }
-    .tab.add-tab:hover { background: #e3e7f0; }
+    .tab { padding: .4rem .75rem; border: 1px solid rgba(255, 102, 0, 0.3); background: rgba(255, 255, 255, 0.05); border-radius: .5rem .5rem 0 0; cursor: pointer; font-size: .9rem; transition: all .15s; }
+    .tab:hover { background: rgba(255, 102, 0, 0.1); }
+    .tab.active { background: #ff6600; color: white; border-color: #ff6600; }
+    .tab.add-tab { background: rgba(255, 255, 255, 0.1); font-weight: 600; color: #ff6600; }
+    .tab.add-tab:hover { background: rgba(255, 102, 0, 0.2); }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
     .tab-content textarea { width: 100%; box-sizing: border-box; }
     .tab-close { margin-left: .5rem; opacity: .7; font-weight: 700; }
     .tab-close:hover { opacity: 1; }
     .text-actions__group { display: flex; flex: 1 1 auto; gap: .5rem; flex-wrap: wrap; }
-    .load-card { border: 1px dashed #c9c9c9; border-radius: .65rem; padding: .75rem; background: #f4f7fc; }
+    .load-card { border: 1px dashed rgba(255, 102, 0, 0.3); border-radius: .65rem; padding: .75rem; background: rgba(255, 255, 255, 0.05); }
     .load-card h3 { margin: 0 0 .35rem; font-size: 1rem; }
     .load-card p { margin: 0 0 .5rem; font-size: .85rem; }
     @media (max-width: 720px) {
@@ -88,17 +89,15 @@
 <body>
   <header>
     <div class="header__text">
-      <div class="header__title-row">
-        <h1>TextApp Konfigurator</h1>
-        <span class="version-tag" id="tool-version">V0.5.0</span>
-      </div>
-      <p class="muted">Konfiguriere die TextApp für deine LCD-Brosche. Ändere Text, Farben und Modi und lade die Konfiguration per Bluetooth oder USB auf die Brosche hoch.</p>
-      <p class="muted" style="margin-top: .5rem; font-size: .85rem;">
-        <a href="../../#webtools" style="color: #4a90e2; text-decoration: none;">← Zurück zur Dokumentation</a>
+      <h1 style="color: #ff6600; font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem;">TextApp Konfigurator <span class="version-tag" id="tool-version">V0.5.0</span></h1>
+      <p style="color: #cccccc; margin-bottom: 1rem;">Konfiguriere die TextApp für deine LCD-Brosche. Ändere Text, Farben und Modi und lade die Konfiguration per Bluetooth oder USB auf die Brosche hoch.</p>
+      <p style="margin-top: .5rem; font-size: .85rem;">
+        <a href="../../#webtools" style="color: #ff6600; text-decoration: none;">← Zurück zur Dokumentation</a>
       </p>
+      <p><b>Wichtig: <a href="#usb-ble-transfer">Pixel Pin zuerst in Empfangsmodus versetzen!</a><b/></p>
     </div>
-    <a class="header__logo" href="https://www.teil3.ch" target="_blank" rel="noopener">
-      <img src="../bildaufbereiter/teil3_logo.svg" alt="Teil3 Logo" width="160" height="95" />
+    <a class="header__logo" href="../../index.html">
+      <img src="../../assets/logo.png" alt="Pixel Pin Logo" width="160" height="95" />
     </a>
   </header>
 
@@ -182,7 +181,7 @@
         <div class="preview__viewport">
           <canvas id="cv" width="240" height="240"></canvas>
         </div>
-        <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske.png" alt="Maske der LCD-Brosche" />
+        <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske_dark.png" alt="Maske der LCD-Brosche" />
       </div>
     </div>
   </div>
@@ -198,9 +197,25 @@
     </div>
   </div>
 
-  <footer>
-    <p class="muted">Hinweis: Die Konfiguration wird als <code>/textapp.cfg</code> auf der Brosche gespeichert. Die TextApp liest diese Datei beim Start.</p>
-    <p class="muted">Transfer-Modus aktivieren: In der Diashow-App BTN2 lang halten, bis "TRANSFER" angezeigt wird.</p>
+    <div style="margin-left: 20px; margin-top: 15px;" id="usb-ble-transfer">
+      <h3 style="font-size: 1.1em; color: #ff8833;">📡 USB/BLE-Transfer aktivieren</h3>
+      <ul class="feature-list" style="margin-top: 5px;">
+        <li>Button1 Doppelklick: Setup-Menü öffnen </li>
+        <li>Button 2 Einfachklick: Zum Menüpunkt "USB/BLE-Transfer" wechseln</li>
+        <li>Button 2 Langklick: "USB/BLE-Transfer" auswählen</li>
+        <li>Nach Auswahl öffnet sich der Transfer-Bildschirm</li>
+        <li>Übertragung kann per BLE (Bluetooth) oder USB Serial erfolgen</li>
+        <li>Fortschrittsanzeige während der Übertragung</li>
+        <li><strong>Langklick:</strong> Transfer abbrechen und zurück zum Setup-Menü</li>
+        <li><strong>Doppelklick:</strong> Transfer beenden und Menü schließen</li>
+      </ul>
+    </div>
+    
+  <footer style="text-align: center; padding: 30px 20px; color: #888; margin-top: 40px; border-top: 1px solid rgba(255, 102, 0, 0.2);">
+    <p style="margin-bottom: 15px; font-size: 0.9em;">Ein Projekt von:</p>
+    <a href="https://www.teil3.ch" target="_blank" rel="noopener" style="display: inline-block; opacity: 0.6; transition: opacity 0.3s ease;">
+      <img src="../teil3_logo.svg" alt="Teil3" style="height: 40px; width: auto;" />
+    </a>
   </footer>
 
   <script type="module">

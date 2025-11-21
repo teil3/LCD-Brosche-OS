@@ -8,12 +8,12 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material.css" />
   <style>
-    :root { color-scheme: light; }
+    :root { color-scheme: dark; }
     * { box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: linear-gradient(180deg, #f7f9ff 0%, #ffffff 80%);
-      color: #1f252d;
+      background: #000000;
+      color: #ffffff;
       margin: 0;
       padding: 2rem clamp(1rem, 3vw, 3rem);
       min-height: 100vh;
@@ -25,14 +25,15 @@
       flex-wrap: wrap;
       gap: 1.5rem;
       align-items: flex-start;
+      justify-content: space-between;
     }
-    .header__text { flex: 1 1 360px; min-width: 280px; }
+    .header__text { flex: 1 1 320px; min-width: 0; }
     h1 { font-size: clamp(1.5rem, 3vw, 2.3rem); margin: 0 0 .35rem; }
     p { line-height: 1.5; margin-top: .2rem; }
     .muted { color: rgba(31,37,45,.75); }
-    .header__logo { width: 160px; margin-left: auto; }
-    .header__logo img { width: 100%; height: auto; display: block; }
-    .badge { font-size: .75rem; text-transform: uppercase; letter-spacing: .15em; font-weight: 600; color: #4a90e2; }
+    .header__logo { display: block; flex: 0 0 auto; width: 160px; margin-left: auto; order: 0; }
+    .header__logo img { display: block; width: 100%; max-width: 100%; height: auto; image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges; }
+    .badge { font-size: .75rem; text-transform: uppercase; letter-spacing: .15em; font-weight: 600; color: #ff6600; }
     .layout {
       max-width: 1200px;
       margin: 0 auto 2.5rem;
@@ -50,10 +51,11 @@
       flex: 0 0 320px;
     }
     .panel {
-      background: #fff;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 102, 0, 0.2);
       border-radius: 1.3rem;
       padding: 1.3rem;
-      box-shadow: 0 20px 45px rgba(15,23,42,.08);
+      box-shadow: 0 20px 45px rgba(0,0,0,.3);
       display: flex;
       flex-direction: column;
       gap: 1rem;
@@ -69,11 +71,9 @@
       gap: 1.2rem;
     }
     .preview-card {
-      background: radial-gradient(circle at 30% 20%, #ffffff 0%, #f8fbff 55%, #eef2fb 100%);
       border-radius: 1.4rem;
       padding: 1.5rem 1rem 2rem;
       width: 100%;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.5);
     }
     .chip {
       display: inline-flex;
@@ -85,8 +85,8 @@
       letter-spacing: .08em;
       padding: .35rem .85rem;
       border-radius: 999px;
-      background: rgba(74,144,226,.12);
-      color: #1f4d8f;
+      background: rgba(255, 102, 0, 0.2);
+      color: #ff6600;
     }
     .status-list {
       list-style: none;
@@ -108,52 +108,55 @@
     input[type="text"], input[type="search"], textarea, button, select {
       font: inherit;
       border-radius: .6rem;
-      border: 1px solid #ced4e2;
+      border: 1px solid rgba(255, 102, 0, 0.3);
       padding: .5rem .75rem;
-      background: #fff;
-      color: inherit;
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
     }
     button {
       cursor: pointer;
       font-weight: 600;
-      transition: background .15s ease, transform .15s ease;
+      transition: all 0.3s ease;
+      background: #ff6600;
+      color: white;
+      border: none;
     }
     button:disabled { opacity: .55; cursor: not-allowed; }
     button.primary {
-      background: #4a90e2;
+      background: #ff6600;
       color: #fff;
-      border-color: #4a90e2;
+      border: none;
     }
-    button.secondary { background: rgba(74,144,226,.1); border-color: rgba(74,144,226,.35); }
-    button:hover:not(:disabled) { background: rgba(74,144,226,.15); }
-    button.primary:hover:not(:disabled) { background: #3d7bc4; }
+    button.secondary { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 102, 0, 0.3); }
+    button:hover:not(:disabled) { background: #ff8833; transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 102, 0, 0.4); }
+    button.primary:hover:not(:disabled) { background: #ff8833; }
     .form-group { display: flex; flex-direction: column; gap: .35rem; }
     .form-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-end; }
     .repo-list { display: grid; gap: .55rem; max-height: 420px; overflow: auto; padding-right: .25rem; }
     .repo-card {
-      border: 1px solid #e1e5ef;
+      border: 1px solid rgba(255, 102, 0, 0.2);
       border-radius: .8rem;
       padding: .55rem .75rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: .8rem;
-      background: #fafbfe;
+      background: rgba(255, 255, 255, 0.05);
     }
     .repo-card strong { font-size: .95rem; }
     .repo-card__meta { font-size: .8rem; color: rgba(31,37,45,.55); }
     .repo-card__meta { font-size: .8rem; color: rgba(31,37,45,.55); }
     .repo-card__actions { display: flex; gap: .4rem; flex-wrap: wrap; }
     .dropzone {
-      border: 1.5px dashed #9fb3d9;
+      border: 1.5px dashed rgba(255, 102, 0, 0.3);
       border-radius: .9rem;
       padding: .9rem;
       text-align: center;
       font-size: .9rem;
-      background: rgba(74,144,226,.08);
-      color: #1f4d8f;
+      background: rgba(255, 102, 0, 0.1);
+      color: #ff6600;
     }
-    .dropzone.drag-active { border-color: #4a90e2; background: rgba(74,144,226,.15); }
+    .dropzone.drag-active { border-color: #ff6600; background: rgba(255, 102, 0, 0.2); }
     .editor-head {
       display: flex;
       flex-wrap: wrap;
@@ -195,7 +198,7 @@
     }
     .actions-grid { display: flex; flex-direction: column; gap: .55rem; }
     .actions-grid button { width: 100%; }
-    .status-block { font-size: .86rem; line-height: 1.5; background: #f6f8ff; border-radius: .9rem; padding: .8rem 1rem; }
+    .status-block { font-size: .86rem; line-height: 1.5; background: rgba(255, 102, 0, 0.1); border-radius: .9rem; padding: .8rem 1rem; }
     .status-label { font-weight: 600; }
     .preview {
       position: relative;
@@ -226,8 +229,8 @@
     .preview-log {
       min-height: 110px;
       border-radius: .8rem;
-      border: 1px solid #ecedf4;
-      background: #fdfdff;
+      border: 1px solid rgba(255, 102, 0, 0.2);
+      background: rgba(0, 0, 0, 0.3);
       font-family: ui-monospace, SFMono-Regular, SFMono, Consolas, "Liberation Mono", monospace;
       font-size: .82rem;
       padding: .75rem;
@@ -235,14 +238,15 @@
       max-height: 180px;
     }
     .preview-log__line { margin: 0 0 .25rem; }
-    .preview-log__line--error { color: #b2004d; }
+    .preview-log__line--error { color: #ff6600; }
     footer { max-width: 1200px; margin: 0 auto 2rem; font-size: .84rem; color: rgba(31,37,45,.75); text-align: center; }
     .tiny { font-size: .78rem; }
     @media (max-width: 960px) {
       .layout { flex-direction: column; }
       .column--secondary { width: 100%; }
       header { flex-direction: column; align-items: center; text-align: center; }
-      .header__logo { margin-left: 0; }
+      .header__text { flex: 1 1 auto; }
+      .header__logo { order: -1; margin-left: 0; margin-bottom: .75rem; }
     }
     @media (max-width: 600px) {
       .editor-head { flex-direction: column; align-items: stretch; }
@@ -254,13 +258,15 @@
 <body>
   <header>
     <div class="header__text">
-      <div class="badge">Lua Toolkit · Preview</div>
-      <h1>Lua Script Studio für die LCD-Brosche</h1>
-      <p>Verwalte alle <code>.lua</code>-Apps der Brosche direkt im Browser: Vorlagen aus dem GitHub-Repo laden, editieren mit Syntax-Highlighting, in der Vorschau ausführen und per USB oder BLE auf die Brosche übertragen.</p>
-      <p class="muted">Vor jeder Übertragung bitte wie gewohnt in der Slideshow BTN2 lang halten, bis „TRANSFER“ angezeigt wird.</p>
+      <h1 style="color: #ff6600; font-size: clamp(1.4rem, 2.5vw, 2rem); margin: 0 0 .25rem;">Lua Script Studio</h1>
+      <p style="color: #cccccc; margin-bottom: .5rem;">Verwalte alle <code>.lua</code>-Apps der Brosche direkt im Browser: Vorlagen aus dem GitHub-Repo laden, editieren mit Syntax-Highlighting, in der Vorschau ausführen und per USB oder BLE auf die Brosche übertragen.</p>
+      <p style="margin-top: .5rem; font-size: .85rem;">
+        <a href="../../#webtools" style="color: #ff6600; text-decoration: none;">← Zurück zur Dokumentation</a>
+      </p>
+      <p><b>Wichtig: <a href="#usb-ble-transfer">Pixel Pin zuerst in Empfangsmodus versetzen!</a><b/></p>
     </div>
-    <a class="header__logo" href="https://teil3.de" target="_blank" rel="noreferrer">
-      <img src="../bildaufbereiter/teil3_logo.svg" alt="teil3 Logo" />
+    <a class="header__logo" href="../../index.html">
+      <img src="../../assets/logo.png" alt="Pixel Pin Logo" width="160" height="95" />
     </a>
   </header>
 
@@ -325,7 +331,7 @@
             <div class="preview__viewport">
               <canvas id="preview-canvas" width="240" height="240"></canvas>
             </div>
-            <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske.png" alt="LCD-Brosche Maske" />
+            <img class="preview__mask" src="../bildaufbereiter/LCD-Brosche-maske_dark.png" alt="LCD-Brosche Maske" />
           </div>
         </div>
         <div class="preview-log" id="preview-log"></div>
@@ -345,13 +351,28 @@
             <li><span>BLE</span><span id="ble-status">–</span></li>
           </ul>
         </div>
-        <p class="tiny muted">Vor dem Senden Transfer-Modus aktivieren (Slideshow → BTN2 lang bis „TRANSFER“).</p>
+        <p><b>Wichtig: <a href="#usb-ble-transfer">Pixel Pin zuerst in Empfangsmodus versetzen!</a><b/></p>
       </section>
     </aside>
   </div>
-
-  <footer>
-    <p>Hinweise: <strong>USB</strong> benötigt Chrome/Edge mit WebSerial. <strong>BLE</strong> funktioniert auf Chromium Desktop/Android mit aktiviertem WebBluetooth. Scripts landen automatisch in <code>/scripts</code>; falls das Verzeichnis fehlt, wird es angelegt.</p>
+    <div style="margin-left: 20px; margin-top: 15px;" id="usb-ble-transfer">
+      <h3 style="font-size: 1.1em; color: #ff8833;">📡 USB/BLE-Transfer aktivieren</h3>
+      <ul class="feature-list" style="margin-top: 5px;">
+        <li>Button1 Doppelklick: Setup-Menü öffnen </li>
+        <li>Button 2 Einfachklick: Zum Menüpunkt "USB/BLE-Transfer" wechseln</li>
+        <li>Button 2 Langklick: "USB/BLE-Transfer" auswählen</li>
+        <li>Nach Auswahl öffnet sich der Transfer-Bildschirm</li>
+        <li>Übertragung kann per BLE (Bluetooth) oder USB Serial erfolgen</li>
+        <li>Fortschrittsanzeige während der Übertragung</li>
+        <li><strong>Langklick:</strong> Transfer abbrechen und zurück zum Setup-Menü</li>
+        <li><strong>Doppelklick:</strong> Transfer beenden und Menü schließen</li>
+      </ul>
+    </div>
+  <footer style="text-align: center; padding: 30px 20px; color: #888; margin-top: 40px; border-top: 1px solid rgba(255, 102, 0, 0.2);">
+    <p style="margin-bottom: 15px; font-size: 0.9em;">Ein Projekt von:</p>
+    <a href="https://www.teil3.ch" target="_blank" rel="noopener" style="display: inline-block; opacity: 0.6; transition: opacity 0.3s ease;">
+      <img src="../teil3_logo.svg" alt="Teil3" style="height: 40px; width: auto;" />
+    </a>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.js"></script>
