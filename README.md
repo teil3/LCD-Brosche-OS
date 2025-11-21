@@ -84,11 +84,20 @@ arduino-cli upload  -b esp32:esp32:esp32 --input-dir build-16m -p /dev/ttyACM0
 arduino-cli monitor -p /dev/ttyACM0 -c baudrate=115200
 ```
 
-### Flash komplett löschen (bei Problemen)
-Falls das Board in einem Crash-Loop hängt oder korrupte Dateien im LittleFS vorhanden sind, hilft ein vollständiges Löschen des Flash-Speichers:
+### Flash komplett löschen (Factory Reset)
+Falls das Board in einem Crash-Loop hängt, korrupte Dateien im LittleFS vorhanden sind oder die Brosche in den Ursprungszustand zurückgesetzt werden soll, hilft ein vollständiges Löschen des Flash-Speichers:
 
 ```bash
+# Variante 1: Direkter Aufruf (empfohlen)
+esptool.py --port /dev/ttyACM0 erase_flash
+
+# Variante 2: Als Python-Modul
 python3 -m esptool --chip esp32 --port /dev/ttyACM0 erase_flash
+```
+
+**Installation von esptool.py** (falls noch nicht vorhanden):
+```bash
+pip install esptool
 ```
 
 **Wichtig:** Nach dem Löschen muss die Firmware neu geflasht werden. Beim ersten Boot nach dem Erase wird das LittleFS automatisch formatiert und initialisiert.
