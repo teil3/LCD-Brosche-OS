@@ -184,7 +184,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.17';
+    const TOOL_VERSION = 'V0.18';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -1341,59 +1341,40 @@
     }
 
     async function loadImageBitmap(file) {
-      // Für Handy-Kameras: SEHR aggressiv herunterskalieren
-      // Mobile Browser (besonders Chrome) haben extrem wenig Speicher
-      // 480px ist für 240px Ziel immer noch 2x Überauflösung - absolut ausreichend
-      const MAX_DIMENSION = 480;
-      const FALLBACK_DIMENSION = 360;
+      // Neuer Ansatz: createImageBitmap OHNE resizeWidth (das scheint buggy auf Android)
+      // Stattdessen: Lade das Bild und zeichne es direkt auf den 240x240 Canvas
+      // Das ist speichereffizienter weil wir nie ein großes Bitmap im RAM haben
 
-      let bmp;
       try {
         const sizeMB = (file.size / 1024 / 1024).toFixed(1);
         addDebugLog(`📁 ${sizeMB}MB`);
 
-        // Strategie 1: 480px - ausreichend für 240px Ziel
+        let bmp;
         try {
+          // Lade Bitmap OHNE Größenangabe, aber mit EXIF-Orientierung
           bmp = await createImageBitmap(file, {
-            resizeWidth: MAX_DIMENSION,
-            resizeQuality: 'medium',  // medium statt high spart Speicher
             imageOrientation: 'from-image'
           });
-          addDebugLog(`✅ ${bmp.width}x${bmp.height}`);
-          return bmp;
-        } catch (err1) {
-          addDebugLog(`⚠️ 480px: ${err1.message.substring(0, 20)}`);
-
-          // Strategie 2: 360px
-          try {
-            bmp = await createImageBitmap(file, {
-              resizeWidth: FALLBACK_DIMENSION,
-              resizeQuality: 'low',
-              imageOrientation: 'from-image'
-            });
-            addDebugLog(`✅ ${bmp.width}x${bmp.height} (Fallback)`);
-            return bmp;
-          } catch (err2) {
-            addDebugLog(`⚠️ 360px: ${err2.message.substring(0, 20)}`);
-
-            // Strategie 3: 240px direkt (Zielgröße)
-            try {
-              bmp = await createImageBitmap(file, {
-                resizeWidth: 240,
-                resizeQuality: 'low',
-                imageOrientation: 'from-image'
-              });
-              addDebugLog(`✅ ${bmp.width}x${bmp.height} (minimal)`);
-              return bmp;
-            } catch (err3) {
-              addDebugLog(`❌ Fehler: Zu wenig Speicher`);
-              throw new Error('Zu wenig Speicher. Schließen Sie andere Tabs/Apps und laden Sie die Seite neu (F5).');
-            }
-          }
+          addDebugLog(`✅ Geladen: ${bmp.width}x${bmp.height}`);
+        } catch (err) {
+          addDebugLog(`❌ Laden fehl: ${err.message.substring(0, 30)}`);
+          throw new Error('Bild konnte nicht geladen werden. Versuchen Sie es mit einem kleineren Bild.');
         }
 
+        // Wenn das Bild zu groß ist (>2000px), versuche es erst gar nicht zu verarbeiten
+        // da das zu einem Crash führen würde
+        if (bmp.width > 2000 || bmp.height > 2000) {
+          addDebugLog(`⚠️ Bild zu groß (${bmp.width}x${bmp.height})`);
+          try {
+            bmp.close();
+          } catch (_) {}
+          throw new Error(`Bild zu groß (${bmp.width}x${bmp.height}px). Bitte nutzen Sie ein Bild mit max. 2000px oder reduzieren Sie die Kameraauflösung in den Einstellungen.`);
+        }
+
+        return bmp;
+
       } catch (err) {
-        addDebugLog(`❌ ${err.message}`);
+        addDebugLog(`❌ ${err.message.substring(0, 40)}`);
         throw err;
       }
     }
