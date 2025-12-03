@@ -73,7 +73,7 @@
   <div class="row">
     <div class="file-picker">
       <label class="file-picker__button" for="file">Bild auswählen…</label>
-      <input id="file" type="file" accept="image/*" class="visually-hidden" />
+      <input id="file" type="file" accept="image/*" class="visually-hidden" capture="environment" />
     </div>
     <label>Zuschnitt:
       <select id="mode">
@@ -184,7 +184,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.16';
+    const TOOL_VERSION = 'V0.17';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -1264,26 +1264,12 @@
 
       addDebugLog(`🚀 Start: ${file.type}`);
 
-      // WICHTIG: Altes Bitmap freigeben bevor neues geladen wird
+      // Altes Bitmap nur schließen, nicht aufwändig cleanen
       if (currentBitmap) {
-        addDebugLog(`🗑️ Lösche altes Bitmap`);
         try {
           currentBitmap.close();
-        } catch (_) {
-          // close() nicht unterstützt in manchen Browsern
-        }
+        } catch (_) { }
         currentBitmap = null;
-
-        // Canvas leeren um Speicher freizugeben
-        clearCanvas();
-
-        // Garbage Collection vorschlagen (wird nicht garantiert ausgeführt)
-        if (window.gc) {
-          window.gc();
-        }
-
-        // Kleine Pause um Browser Zeit zum Aufräumen zu geben
-        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       try {
@@ -1355,61 +1341,60 @@
     }
 
     async function loadImageBitmap(file) {
-      // Für sehr große Bilder (z.B. von Handy-Kameras): Aggressiv herunterskalieren
-      // um Out-of-Memory-Fehler zu vermeiden.
-      // Chrome auf Android ist sehr speicherhungrig, daher konservative Limits
-      const MAX_DIMENSION = 800;     // Reduziert von 1200
-      const FALLBACK_DIMENSION = 480; // Reduziert von 600
+      // Für Handy-Kameras: SEHR aggressiv herunterskalieren
+      // Mobile Browser (besonders Chrome) haben extrem wenig Speicher
+      // 480px ist für 240px Ziel immer noch 2x Überauflösung - absolut ausreichend
+      const MAX_DIMENSION = 480;
+      const FALLBACK_DIMENSION = 360;
 
       let bmp;
       try {
-        addDebugLog(`📁 Lade: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+        addDebugLog(`📁 ${sizeMB}MB`);
 
-        // Strategie 1: Versuche mit 800px (Seitenverhältnis erhalten!)
+        // Strategie 1: 480px - ausreichend für 240px Ziel
         try {
-          // WICHTIG: NUR resizeWidth ODER resizeHeight setzen, nicht beide!
-          // createImageBitmap behält so das Seitenverhältnis bei
           bmp = await createImageBitmap(file, {
             resizeWidth: MAX_DIMENSION,
-            resizeQuality: 'high',
-            imageOrientation: 'from-image'  // EXIF-Orientierung berücksichtigen
+            resizeQuality: 'medium',  // medium statt high spart Speicher
+            imageOrientation: 'from-image'
           });
-          addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (${MAX_DIMENSION}px)`);
+          addDebugLog(`✅ ${bmp.width}x${bmp.height}`);
           return bmp;
         } catch (err1) {
-          addDebugLog(`⚠️ ${MAX_DIMENSION}px fehlgeschlagen: ${err1.message}`);
+          addDebugLog(`⚠️ 480px: ${err1.message.substring(0, 20)}`);
 
-          // Strategie 2: Fallback auf 480px
+          // Strategie 2: 360px
           try {
             bmp = await createImageBitmap(file, {
               resizeWidth: FALLBACK_DIMENSION,
-              resizeQuality: 'medium',
+              resizeQuality: 'low',
               imageOrientation: 'from-image'
             });
-            addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (${FALLBACK_DIMENSION}px Fallback)`);
+            addDebugLog(`✅ ${bmp.width}x${bmp.height} (Fallback)`);
             return bmp;
           } catch (err2) {
-            addDebugLog(`⚠️ ${FALLBACK_DIMENSION}px fehlgeschlagen: ${err2.message}`);
+            addDebugLog(`⚠️ 360px: ${err2.message.substring(0, 20)}`);
 
-            // Strategie 3: Ultra-klein (320px) für sehr schwache Geräte
+            // Strategie 3: 240px direkt (Zielgröße)
             try {
               bmp = await createImageBitmap(file, {
-                resizeWidth: 320,
+                resizeWidth: 240,
                 resizeQuality: 'low',
                 imageOrientation: 'from-image'
               });
-              addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (320px Ultra-Fallback)`);
+              addDebugLog(`✅ ${bmp.width}x${bmp.height} (minimal)`);
               return bmp;
             } catch (err3) {
-              addDebugLog(`❌ Alle Strategien fehlgeschlagen: ${err3.message}`);
-              throw new Error('Bild zu groß für verfügbaren Speicher. Browser neu starten und versuchen Sie es mit einem kleineren Bild oder schließen Sie andere Tabs.');
+              addDebugLog(`❌ Fehler: Zu wenig Speicher`);
+              throw new Error('Zu wenig Speicher. Schließen Sie andere Tabs/Apps und laden Sie die Seite neu (F5).');
             }
           }
         }
 
       } catch (err) {
-        addDebugLog(`❌ Fehler: ${err.message}`);
-        throw new Error('Bild konnte nicht geladen werden: ' + (err?.message || err));
+        addDebugLog(`❌ ${err.message}`);
+        throw err;
       }
     }
 
