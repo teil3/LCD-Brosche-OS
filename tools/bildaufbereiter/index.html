@@ -183,7 +183,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.10';
+    const TOOL_VERSION = 'V0.11';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -1290,8 +1290,40 @@
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.src = url;
-      await img.decode();
-      const bmp = await createImageBitmap(img);
+
+      try {
+        await img.decode();
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        throw new Error('Bild konnte nicht dekodiert werden: ' + (err?.message || err));
+      }
+
+      // Für sehr große Bilder (z.B. von Handy-Kameras): Herunterskalieren beim Laden
+      // um Out-of-Memory-Fehler zu vermeiden.
+      // Max 2048px in der längeren Dimension ist mehr als genug für 240x240 Zielgröße.
+      const MAX_DIMENSION = 2048;
+      let resizeWidth = img.naturalWidth;
+      let resizeHeight = img.naturalHeight;
+
+      if (img.naturalWidth > MAX_DIMENSION || img.naturalHeight > MAX_DIMENSION) {
+        const scale = MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight);
+        resizeWidth = Math.round(img.naturalWidth * scale);
+        resizeHeight = Math.round(img.naturalHeight * scale);
+        console.log(`Bild wird herunterskaliert: ${img.naturalWidth}x${img.naturalHeight} → ${resizeWidth}x${resizeHeight}`);
+      }
+
+      let bmp;
+      try {
+        bmp = await createImageBitmap(img, {
+          resizeWidth: resizeWidth,
+          resizeHeight: resizeHeight,
+          resizeQuality: 'high'
+        });
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        throw new Error('ImageBitmap konnte nicht erstellt werden (möglicherweise zu wenig Speicher): ' + (err?.message || err));
+      }
+
       URL.revokeObjectURL(url);
       return bmp;
     }
