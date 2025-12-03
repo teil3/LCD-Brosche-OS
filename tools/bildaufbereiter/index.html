@@ -183,7 +183,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.9';
+    const TOOL_VERSION = 'V0.10';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -219,6 +219,9 @@
     let dragStart = { x: 0, y: 0 };
     let panStart = { x: 0, y: 0 };
     let dropDepth = 0;
+    let touchStartDistance = 0;
+    let touchStartZoom = 1.0;
+    let touchCenter = { x: 0, y: 0 };
     let currentDownloadName = 'image.jpg';
     let bleSending = false;
     let usbSending = false;
@@ -1494,6 +1497,85 @@
 
     cv.addEventListener('pointerup', endDrag);
     cv.addEventListener('pointercancel', endDrag);
+
+    // Touch-Pinch-Zoom für Mobile
+    function getTouchDistance(touches) {
+      if (touches.length < 2) return 0;
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function getTouchCenter(touches) {
+      if (touches.length < 2) return { x: 0, y: 0 };
+      return {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2
+      };
+    }
+
+    cv.addEventListener('touchstart', (e) => {
+      if (!currentBitmap || modeSel.value !== 'cover') return;
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        touchStartDistance = getTouchDistance(e.touches);
+        touchStartZoom = zoomScale;
+        touchCenter = getTouchCenter(e.touches);
+      }
+    }, { passive: false });
+
+    cv.addEventListener('touchmove', (e) => {
+      if (!currentBitmap || modeSel.value !== 'cover') return;
+      if (e.touches.length === 2) {
+        e.preventDefault();
+
+        const currentDistance = getTouchDistance(e.touches);
+        const currentCenter = getTouchCenter(e.touches);
+
+        if (touchStartDistance > 0) {
+          const T = 240;
+          const rect = cv.getBoundingClientRect();
+          const canvasCenterX = rect.left + rect.width / 2;
+          const canvasCenterY = rect.top + rect.height / 2;
+
+          // Aktueller Zoom-Zustand vor der Änderung
+          const oldBaseScale = Math.max(T / currentBitmap.width, T / currentBitmap.height);
+          const oldS = oldBaseScale * zoomScale;
+          const oldW = currentBitmap.width * oldS, oldH = currentBitmap.height * oldS;
+          const oldDx = (T - oldW) / 2 + coverPan.x;
+          const oldDy = (T - oldH) / 2 + coverPan.y;
+
+          // Punkt im Canvas relativ zum Canvas-Center (in Canvas-Koordinaten)
+          const canvasPointX = ((currentCenter.x - canvasCenterX) / rect.width) * T + T/2;
+          const canvasPointY = ((currentCenter.y - canvasCenterY) / rect.height) * T + T/2;
+
+          // Punkt im Bitmap, der unter dem Touch-Center liegt
+          const bitmapX = (canvasPointX - oldDx) / oldS;
+          const bitmapY = (canvasPointY - oldDy) / oldS;
+
+          // Neuer Zoom basierend auf Pinch-Distanz
+          const scale = currentDistance / touchStartDistance;
+          const newZoom = touchStartZoom * scale;
+          zoomScale = Math.max(0.1, Math.min(150.0, newZoom));
+
+          // Nach Zoom: Pan-Position anpassen, damit derselbe Bitmap-Punkt unter dem Touch-Center bleibt
+          const newS = oldBaseScale * zoomScale;
+          const newW = currentBitmap.width * newS, newH = currentBitmap.height * newS;
+          const newDx = canvasPointX - bitmapX * newS;
+          const newDy = canvasPointY - bitmapY * newS;
+          coverPan.x = newDx - (T - newW) / 2;
+          coverPan.y = newDy - (T - newH) / 2;
+
+          drawScaled(currentBitmap);
+        }
+      }
+    }, { passive: false });
+
+    cv.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) {
+        touchStartDistance = 0;
+      }
+    });
 
     btnSave.addEventListener('click', async () => {
       if (bleSending || usbSending) return;
