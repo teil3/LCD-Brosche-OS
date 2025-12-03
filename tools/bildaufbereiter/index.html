@@ -184,7 +184,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.14';
+    const TOOL_VERSION = 'V0.15';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -1321,35 +1321,32 @@
     async function loadImageBitmap(file) {
       // Für sehr große Bilder (z.B. von Handy-Kameras): Aggressiv herunterskalieren
       // um Out-of-Memory-Fehler zu vermeiden.
-      const MAX_DIMENSION = 1200;
-      const FALLBACK_DIMENSION = 600;
+      // Chrome auf Android ist sehr speicherhungrig, daher konservative Limits
+      const MAX_DIMENSION = 800;     // Reduziert von 1200
+      const FALLBACK_DIMENSION = 480; // Reduziert von 600
 
       let bmp;
       try {
-        // WICHTIG: Direkt createImageBitmap vom Blob verwenden, OHNE vorher img.decode()
-        // img.decode() lädt das volle Bild in den Speicher, was bei Handy-Fotos zum Crash führt
-        // createImageBitmap kann direkt vom Blob skalieren ohne das volle Bild zu dekodieren
-
         addDebugLog(`📁 Lade: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
-        // Strategie 1: Versuche mit 1200px und EXIF-Orientierung
+        // Strategie 1: Versuche mit 800px (Seitenverhältnis erhalten!)
         try {
+          // WICHTIG: NUR resizeWidth ODER resizeHeight setzen, nicht beide!
+          // createImageBitmap behält so das Seitenverhältnis bei
           bmp = await createImageBitmap(file, {
             resizeWidth: MAX_DIMENSION,
-            resizeHeight: MAX_DIMENSION,
             resizeQuality: 'high',
             imageOrientation: 'from-image'  // EXIF-Orientierung berücksichtigen
           });
-          addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (${MAX_DIMENSION}px Modus)`);
+          addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (${MAX_DIMENSION}px)`);
           return bmp;
         } catch (err1) {
           addDebugLog(`⚠️ ${MAX_DIMENSION}px fehlgeschlagen: ${err1.message}`);
 
-          // Strategie 2: Fallback auf 600px mit mittlerer Qualität
+          // Strategie 2: Fallback auf 480px
           try {
             bmp = await createImageBitmap(file, {
               resizeWidth: FALLBACK_DIMENSION,
-              resizeHeight: FALLBACK_DIMENSION,
               resizeQuality: 'medium',
               imageOrientation: 'from-image'
             });
@@ -1358,22 +1355,18 @@
           } catch (err2) {
             addDebugLog(`⚠️ ${FALLBACK_DIMENSION}px fehlgeschlagen: ${err2.message}`);
 
-            // Strategie 3: Letzter Versuch ohne Skalierung (browser-default)
-            // aber mit EXIF-Orientierung
+            // Strategie 3: Ultra-klein (320px) für sehr schwache Geräte
             try {
               bmp = await createImageBitmap(file, {
+                resizeWidth: 320,
+                resizeQuality: 'low',
                 imageOrientation: 'from-image'
               });
-              addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (keine Skalierung)`);
-
-              // Wenn das Bild zu groß ist, warnen aber trotzdem verwenden
-              if (bmp.width > 2000 || bmp.height > 2000) {
-                addDebugLog(`⚠️ Sehr großes Bild - könnte zu Problemen führen`);
-              }
+              addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (320px Ultra-Fallback)`);
               return bmp;
             } catch (err3) {
               addDebugLog(`❌ Alle Strategien fehlgeschlagen: ${err3.message}`);
-              throw new Error('Bild konnte nicht geladen werden. Möglicherweise ist die Datei zu groß oder beschädigt. Bitte Browser neu starten und kleineres Bild verwenden.');
+              throw new Error('Bild zu groß für verfügbaren Speicher. Browser neu starten und versuchen Sie es mit einem kleineren Bild oder schließen Sie andere Tabs.');
             }
           }
         }
