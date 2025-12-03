@@ -108,6 +108,7 @@
     <button id="send-ble" disabled>Per Bluetooth senden</button>
     <p id="usb-status" class="muted" aria-live="polite"></p>
     <p id="ble-status" class="muted" aria-live="polite"></p>
+    <p id="debug-status" style="font-family: monospace; font-size: 0.85em; color: #888; margin-top: 10px; white-space: pre-wrap;"></p>
     <div style="margin-left: 20px; margin-top: 15px;" id="usb-ble-transfer">
       <h3 style="font-size: 1.1em; color: #ff8833;">📡 USB/BLE-Transfer aktivieren</h3>
       <ul class="feature-list" style="margin-top: 5px;">
@@ -183,7 +184,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.13';
+    const TOOL_VERSION = 'V0.14';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -198,6 +199,7 @@
     const mozjpegSourceLabel = document.getElementById('mozjpeg-source');
     const usbStatus = document.getElementById('usb-status');
     const bleStatus = document.getElementById('ble-status');
+    const debugStatus = document.getElementById('debug-status');
     const cv        = document.getElementById('cv');
     const ctx       = cv.getContext('2d', { willReadFrequently: true });
     const BLE_UUIDS = {
@@ -377,6 +379,20 @@
     function setBleStatus(text) {
       if (!bleStatus) return;
       bleStatus.textContent = text || '';
+    }
+
+    const debugLog = [];
+    function addDebugLog(msg) {
+      const timestamp = new Date().toLocaleTimeString('de-DE');
+      const entry = `[${timestamp}] ${msg}`;
+      debugLog.push(entry);
+      console.log(entry);
+      if (debugLog.length > 10) {
+        debugLog.shift();
+      }
+      if (debugStatus) {
+        debugStatus.textContent = debugLog.join('\n');
+      }
     }
 
     function updateActionButtons() {
@@ -1232,13 +1248,13 @@
         return;
       }
 
-      console.log('setBitmapFromFile gestartet:', file.name, file.type, `${(file.size / 1024 / 1024).toFixed(2)} MB`);
+      addDebugLog(`🚀 Start: ${file.type}`);
 
       try {
         currentBitmap = await loadImageBitmap(file);
-        console.log('Bitmap erfolgreich geladen');
+        addDebugLog(`✅ Bitmap geladen`);
       } catch (err) {
-        console.error('Fehler in setBitmapFromFile:', err);
+        addDebugLog(`❌ Laden fehlgeschlagen: ${err.message}`);
         const message = err?.message || 'Konnte die Bilddatei nicht laden. Versuche es bitte mit einer anderen Datei.';
         alert(message);
         return;
@@ -1251,9 +1267,9 @@
 
       try {
         drawScaled(currentBitmap);
-        console.log('Bild auf Canvas gezeichnet');
+        addDebugLog(`✅ Canvas gezeichnet`);
       } catch (err) {
-        console.error('Fehler beim Zeichnen:', err);
+        addDebugLog(`❌ Zeichnen fehlgeschlagen: ${err.message}`);
         alert('Fehler beim Anzeigen des Bildes: ' + (err?.message || err));
         return;
       }
@@ -1268,7 +1284,7 @@
       if (!usbSending) {
         setUsbStatus('');
       }
-      console.log('setBitmapFromFile abgeschlossen');
+      addDebugLog(`✅ Fertig`);
     }
 
     // JPEG header scan to verify non-progressive:
@@ -1314,7 +1330,7 @@
         // img.decode() lädt das volle Bild in den Speicher, was bei Handy-Fotos zum Crash führt
         // createImageBitmap kann direkt vom Blob skalieren ohne das volle Bild zu dekodieren
 
-        console.log(`Lade Bild: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+        addDebugLog(`📁 Lade: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
         // Strategie 1: Versuche mit 1200px und EXIF-Orientierung
         try {
@@ -1324,10 +1340,10 @@
             resizeQuality: 'high',
             imageOrientation: 'from-image'  // EXIF-Orientierung berücksichtigen
           });
-          console.log(`Bitmap erstellt (${MAX_DIMENSION}px): ${bmp.width}x${bmp.height}`);
+          addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (${MAX_DIMENSION}px Modus)`);
           return bmp;
         } catch (err1) {
-          console.warn(`Fehler bei ${MAX_DIMENSION}px:`, err1.message);
+          addDebugLog(`⚠️ ${MAX_DIMENSION}px fehlgeschlagen: ${err1.message}`);
 
           // Strategie 2: Fallback auf 600px mit mittlerer Qualität
           try {
@@ -1337,10 +1353,10 @@
               resizeQuality: 'medium',
               imageOrientation: 'from-image'
             });
-            console.log(`Bitmap erstellt (${FALLBACK_DIMENSION}px Fallback): ${bmp.width}x${bmp.height}`);
+            addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (${FALLBACK_DIMENSION}px Fallback)`);
             return bmp;
           } catch (err2) {
-            console.warn(`Fehler bei ${FALLBACK_DIMENSION}px:`, err2.message);
+            addDebugLog(`⚠️ ${FALLBACK_DIMENSION}px fehlgeschlagen: ${err2.message}`);
 
             // Strategie 3: Letzter Versuch ohne Skalierung (browser-default)
             // aber mit EXIF-Orientierung
@@ -1348,22 +1364,22 @@
               bmp = await createImageBitmap(file, {
                 imageOrientation: 'from-image'
               });
-              console.log(`Bitmap erstellt (keine Skalierung): ${bmp.width}x${bmp.height}`);
+              addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height} (keine Skalierung)`);
 
               // Wenn das Bild zu groß ist, warnen aber trotzdem verwenden
               if (bmp.width > 2000 || bmp.height > 2000) {
-                console.warn(`Warnung: Sehr großes Bild ${bmp.width}x${bmp.height} - könnte zu Speicherproblemen führen`);
+                addDebugLog(`⚠️ Sehr großes Bild - könnte zu Problemen führen`);
               }
               return bmp;
             } catch (err3) {
-              console.error('Alle Lade-Strategien fehlgeschlagen:', err3);
+              addDebugLog(`❌ Alle Strategien fehlgeschlagen: ${err3.message}`);
               throw new Error('Bild konnte nicht geladen werden. Möglicherweise ist die Datei zu groß oder beschädigt. Bitte Browser neu starten und kleineres Bild verwenden.');
             }
           }
         }
 
       } catch (err) {
-        console.error('Fehler beim Laden:', err);
+        addDebugLog(`❌ Fehler: ${err.message}`);
         throw new Error('Bild konnte nicht geladen werden: ' + (err?.message || err));
       }
     }
