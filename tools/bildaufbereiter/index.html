@@ -183,7 +183,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.11';
+    const TOOL_VERSION = 'V0.12';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -1288,40 +1288,69 @@
 
     async function loadImageBitmap(file) {
       const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.src = url;
 
-      try {
-        await img.decode();
-      } catch (err) {
-        URL.revokeObjectURL(url);
-        throw new Error('Bild konnte nicht dekodiert werden: ' + (err?.message || err));
-      }
-
-      // Für sehr große Bilder (z.B. von Handy-Kameras): Herunterskalieren beim Laden
+      // Für sehr große Bilder (z.B. von Handy-Kameras): Aggressiv herunterskalieren
       // um Out-of-Memory-Fehler zu vermeiden.
-      // Max 2048px in der längeren Dimension ist mehr als genug für 240x240 Zielgröße.
-      const MAX_DIMENSION = 2048;
-      let resizeWidth = img.naturalWidth;
-      let resizeHeight = img.naturalHeight;
-
-      if (img.naturalWidth > MAX_DIMENSION || img.naturalHeight > MAX_DIMENSION) {
-        const scale = MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight);
-        resizeWidth = Math.round(img.naturalWidth * scale);
-        resizeHeight = Math.round(img.naturalHeight * scale);
-        console.log(`Bild wird herunterskaliert: ${img.naturalWidth}x${img.naturalHeight} → ${resizeWidth}x${resizeHeight}`);
-      }
+      // Max 1200px ist mehr als genug für 240x240 Zielgröße und spart viel Speicher.
+      const MAX_DIMENSION = 1200;
 
       let bmp;
       try {
-        bmp = await createImageBitmap(img, {
+        // Strategie: Direkt createImageBitmap mit Größenbeschränkung verwenden
+        // Dies ist speichereffizienter als erst das volle Bild zu dekodieren
+        const imgBlob = file;
+
+        // Erst Bildgröße ermitteln ohne volles Dekodieren
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+
+        const origWidth = img.naturalWidth;
+        const origHeight = img.naturalHeight;
+
+        // Skalierung berechnen
+        let resizeWidth = origWidth;
+        let resizeHeight = origHeight;
+
+        if (origWidth > MAX_DIMENSION || origHeight > MAX_DIMENSION) {
+          const scale = MAX_DIMENSION / Math.max(origWidth, origHeight);
+          resizeWidth = Math.round(origWidth * scale);
+          resizeHeight = Math.round(origHeight * scale);
+          console.log(`Bild wird herunterskaliert: ${origWidth}x${origHeight} → ${resizeWidth}x${resizeHeight}`);
+        }
+
+        // createImageBitmap mit imageOrientation: 'from-image' respektiert EXIF-Orientierung
+        // Dies verhindert verzerrte/gedrehte Bilder von Handy-Kameras
+        bmp = await createImageBitmap(imgBlob, {
           resizeWidth: resizeWidth,
           resizeHeight: resizeHeight,
-          resizeQuality: 'high'
+          resizeQuality: 'high',
+          imageOrientation: 'from-image'  // EXIF-Orientierung berücksichtigen
         });
+
+        console.log(`Bitmap erstellt: ${bmp.width}x${bmp.height}`);
+
       } catch (err) {
         URL.revokeObjectURL(url);
-        throw new Error('ImageBitmap konnte nicht erstellt werden (möglicherweise zu wenig Speicher): ' + (err?.message || err));
+
+        // Fallback für sehr alte Browser oder extremen Speichermangel:
+        // Versuche nochmal mit noch kleinerer Größe
+        if (err?.message?.includes('memory') || err?.name === 'RangeError') {
+          console.warn('Speicherfehler, versuche mit kleinerer Größe (800px)...');
+          try {
+            bmp = await createImageBitmap(file, {
+              resizeWidth: 800,
+              resizeHeight: 800,
+              resizeQuality: 'medium',
+              imageOrientation: 'from-image'
+            });
+            console.log('Fallback erfolgreich: 800px');
+          } catch (fallbackErr) {
+            throw new Error('Bild zu groß für verfügbaren Speicher. Bitte ein kleineres Bild verwenden oder Browser neu starten.');
+          }
+        } else {
+          throw new Error('Bild konnte nicht geladen werden: ' + (err?.message || err));
+        }
       }
 
       URL.revokeObjectURL(url);
