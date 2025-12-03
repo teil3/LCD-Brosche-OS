@@ -183,7 +183,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.12';
+    const TOOL_VERSION = 'V0.13';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -1231,18 +1231,33 @@
         alert('Bitte eine Bilddatei auswählen oder ablegen.');
         return;
       }
+
+      console.log('setBitmapFromFile gestartet:', file.name, file.type, `${(file.size / 1024 / 1024).toFixed(2)} MB`);
+
       try {
         currentBitmap = await loadImageBitmap(file);
+        console.log('Bitmap erfolgreich geladen');
       } catch (err) {
-        console.error(err);
-        alert('Konnte die Bilddatei nicht laden. Versuche es bitte mit einer anderen Datei.');
+        console.error('Fehler in setBitmapFromFile:', err);
+        const message = err?.message || 'Konnte die Bilddatei nicht laden. Versuche es bitte mit einer anderen Datei.';
+        alert(message);
         return;
       }
+
       const displayName = file.name ? file.name.split(/[\\/]/).pop() : '';
       currentDownloadName = buildDownloadName(displayName);
       resetCoverPan();
       resetZoom();
-      drawScaled(currentBitmap);
+
+      try {
+        drawScaled(currentBitmap);
+        console.log('Bild auf Canvas gezeichnet');
+      } catch (err) {
+        console.error('Fehler beim Zeichnen:', err);
+        alert('Fehler beim Anzeigen des Bildes: ' + (err?.message || err));
+        return;
+      }
+
       updateCanvasCursor();
       fileInput.value = '';
       await initMozIfNeeded();
@@ -1253,6 +1268,7 @@
       if (!usbSending) {
         setUsbStatus('');
       }
+      console.log('setBitmapFromFile abgeschlossen');
     }
 
     // JPEG header scan to verify non-progressive:
@@ -1287,74 +1303,69 @@
     }
 
     async function loadImageBitmap(file) {
-      const url = URL.createObjectURL(file);
-
       // Für sehr große Bilder (z.B. von Handy-Kameras): Aggressiv herunterskalieren
       // um Out-of-Memory-Fehler zu vermeiden.
-      // Max 1200px ist mehr als genug für 240x240 Zielgröße und spart viel Speicher.
       const MAX_DIMENSION = 1200;
+      const FALLBACK_DIMENSION = 600;
 
       let bmp;
       try {
-        // Strategie: Direkt createImageBitmap mit Größenbeschränkung verwenden
-        // Dies ist speichereffizienter als erst das volle Bild zu dekodieren
-        const imgBlob = file;
+        // WICHTIG: Direkt createImageBitmap vom Blob verwenden, OHNE vorher img.decode()
+        // img.decode() lädt das volle Bild in den Speicher, was bei Handy-Fotos zum Crash führt
+        // createImageBitmap kann direkt vom Blob skalieren ohne das volle Bild zu dekodieren
 
-        // Erst Bildgröße ermitteln ohne volles Dekodieren
-        const img = new Image();
-        img.src = url;
-        await img.decode();
+        console.log(`Lade Bild: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
-        const origWidth = img.naturalWidth;
-        const origHeight = img.naturalHeight;
+        // Strategie 1: Versuche mit 1200px und EXIF-Orientierung
+        try {
+          bmp = await createImageBitmap(file, {
+            resizeWidth: MAX_DIMENSION,
+            resizeHeight: MAX_DIMENSION,
+            resizeQuality: 'high',
+            imageOrientation: 'from-image'  // EXIF-Orientierung berücksichtigen
+          });
+          console.log(`Bitmap erstellt (${MAX_DIMENSION}px): ${bmp.width}x${bmp.height}`);
+          return bmp;
+        } catch (err1) {
+          console.warn(`Fehler bei ${MAX_DIMENSION}px:`, err1.message);
 
-        // Skalierung berechnen
-        let resizeWidth = origWidth;
-        let resizeHeight = origHeight;
-
-        if (origWidth > MAX_DIMENSION || origHeight > MAX_DIMENSION) {
-          const scale = MAX_DIMENSION / Math.max(origWidth, origHeight);
-          resizeWidth = Math.round(origWidth * scale);
-          resizeHeight = Math.round(origHeight * scale);
-          console.log(`Bild wird herunterskaliert: ${origWidth}x${origHeight} → ${resizeWidth}x${resizeHeight}`);
-        }
-
-        // createImageBitmap mit imageOrientation: 'from-image' respektiert EXIF-Orientierung
-        // Dies verhindert verzerrte/gedrehte Bilder von Handy-Kameras
-        bmp = await createImageBitmap(imgBlob, {
-          resizeWidth: resizeWidth,
-          resizeHeight: resizeHeight,
-          resizeQuality: 'high',
-          imageOrientation: 'from-image'  // EXIF-Orientierung berücksichtigen
-        });
-
-        console.log(`Bitmap erstellt: ${bmp.width}x${bmp.height}`);
-
-      } catch (err) {
-        URL.revokeObjectURL(url);
-
-        // Fallback für sehr alte Browser oder extremen Speichermangel:
-        // Versuche nochmal mit noch kleinerer Größe
-        if (err?.message?.includes('memory') || err?.name === 'RangeError') {
-          console.warn('Speicherfehler, versuche mit kleinerer Größe (800px)...');
+          // Strategie 2: Fallback auf 600px mit mittlerer Qualität
           try {
             bmp = await createImageBitmap(file, {
-              resizeWidth: 800,
-              resizeHeight: 800,
+              resizeWidth: FALLBACK_DIMENSION,
+              resizeHeight: FALLBACK_DIMENSION,
               resizeQuality: 'medium',
               imageOrientation: 'from-image'
             });
-            console.log('Fallback erfolgreich: 800px');
-          } catch (fallbackErr) {
-            throw new Error('Bild zu groß für verfügbaren Speicher. Bitte ein kleineres Bild verwenden oder Browser neu starten.');
-          }
-        } else {
-          throw new Error('Bild konnte nicht geladen werden: ' + (err?.message || err));
-        }
-      }
+            console.log(`Bitmap erstellt (${FALLBACK_DIMENSION}px Fallback): ${bmp.width}x${bmp.height}`);
+            return bmp;
+          } catch (err2) {
+            console.warn(`Fehler bei ${FALLBACK_DIMENSION}px:`, err2.message);
 
-      URL.revokeObjectURL(url);
-      return bmp;
+            // Strategie 3: Letzter Versuch ohne Skalierung (browser-default)
+            // aber mit EXIF-Orientierung
+            try {
+              bmp = await createImageBitmap(file, {
+                imageOrientation: 'from-image'
+              });
+              console.log(`Bitmap erstellt (keine Skalierung): ${bmp.width}x${bmp.height}`);
+
+              // Wenn das Bild zu groß ist, warnen aber trotzdem verwenden
+              if (bmp.width > 2000 || bmp.height > 2000) {
+                console.warn(`Warnung: Sehr großes Bild ${bmp.width}x${bmp.height} - könnte zu Speicherproblemen führen`);
+              }
+              return bmp;
+            } catch (err3) {
+              console.error('Alle Lade-Strategien fehlgeschlagen:', err3);
+              throw new Error('Bild konnte nicht geladen werden. Möglicherweise ist die Datei zu groß oder beschädigt. Bitte Browser neu starten und kleineres Bild verwenden.');
+            }
+          }
+        }
+
+      } catch (err) {
+        console.error('Fehler beim Laden:', err);
+        throw new Error('Bild konnte nicht geladen werden: ' + (err?.message || err));
+      }
     }
 
     function clampCoverPanValues(bmp, x, y) {
