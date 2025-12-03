@@ -184,7 +184,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.18';
+    const TOOL_VERSION = 'V0.19';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -1341,40 +1341,64 @@
     }
 
     async function loadImageBitmap(file) {
-      // Neuer Ansatz: createImageBitmap OHNE resizeWidth (das scheint buggy auf Android)
-      // Stattdessen: Lade das Bild und zeichne es direkt auf den 240x240 Canvas
-      // Das ist speichereffizienter weil wir nie ein großes Bitmap im RAM haben
+      // KOMPLETT NEUER ANSATZ: createImageBitmap crasht auf Android
+      // Stattdessen: Nutze temporären Canvas zum Vorskalieren
+      // Das ist deutlich speicherschonender
 
       try {
         const sizeMB = (file.size / 1024 / 1024).toFixed(1);
         addDebugLog(`📁 ${sizeMB}MB`);
 
-        let bmp;
+        // 1. Lade in IMG-Element (sehr speichereffizient)
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.src = url;
+
         try {
-          // Lade Bitmap OHNE Größenangabe, aber mit EXIF-Orientierung
-          bmp = await createImageBitmap(file, {
-            imageOrientation: 'from-image'
-          });
-          addDebugLog(`✅ Geladen: ${bmp.width}x${bmp.height}`);
+          await img.decode();
+          addDebugLog(`✅ IMG: ${img.naturalWidth}x${img.naturalHeight}`);
         } catch (err) {
-          addDebugLog(`❌ Laden fehl: ${err.message.substring(0, 30)}`);
-          throw new Error('Bild konnte nicht geladen werden. Versuchen Sie es mit einem kleineren Bild.');
+          URL.revokeObjectURL(url);
+          addDebugLog(`❌ IMG decode fehl`);
+          throw new Error('Bild konnte nicht dekodiert werden.');
         }
 
-        // Wenn das Bild zu groß ist (>2000px), versuche es erst gar nicht zu verarbeiten
-        // da das zu einem Crash führen würde
-        if (bmp.width > 2000 || bmp.height > 2000) {
-          addDebugLog(`⚠️ Bild zu groß (${bmp.width}x${bmp.height})`);
-          try {
-            bmp.close();
-          } catch (_) {}
-          throw new Error(`Bild zu groß (${bmp.width}x${bmp.height}px). Bitte nutzen Sie ein Bild mit max. 2000px oder reduzieren Sie die Kameraauflösung in den Einstellungen.`);
+        // 2. Erstelle temporären Skalierungs-Canvas (maximal 600px)
+        const maxDim = 600;
+        const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+        const scaledW = Math.round(img.naturalWidth * scale);
+        const scaledH = Math.round(img.naturalHeight * scale);
+
+        addDebugLog(`🔧 Skaliere zu ${scaledW}x${scaledH}`);
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = scaledW;
+        tempCanvas.height = scaledH;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: false });
+
+        // 3. Zeichne skaliert auf temp Canvas
+        tempCtx.drawImage(img, 0, 0, scaledW, scaledH);
+
+        // 4. Konvertiere zu ImageBitmap
+        let bmp;
+        try {
+          bmp = await createImageBitmap(tempCanvas);
+          addDebugLog(`✅ Bitmap: ${bmp.width}x${bmp.height}`);
+        } catch (err) {
+          addDebugLog(`❌ Bitmap fehl`);
+          throw new Error('Bitmap-Konvertierung fehlgeschlagen.');
         }
+
+        // Cleanup
+        URL.revokeObjectURL(url);
+        tempCanvas.width = 1;
+        tempCanvas.height = 1;
 
         return bmp;
 
       } catch (err) {
-        addDebugLog(`❌ ${err.message.substring(0, 40)}`);
+        const msg = err.message || String(err);
+        addDebugLog(`❌ ${msg.substring(0, 30)}`);
         throw err;
       }
     }
