@@ -40,11 +40,11 @@
     body.drop-active .preview__viewport { border-color: #ff6600; box-shadow: 0 0 0 4px rgba(255, 102, 0, .25); }
     .drop-hint { margin: -.25rem 0 0; font-size: .9rem; }
     .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-    .camera-modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; padding: 1rem; }
+    .camera-modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; padding: 1rem; overflow: auto; }
     .camera-modal.active { display: flex; }
-    .camera-modal video { max-width: 100%; max-height: 70vh; border-radius: 8px; border: 2px solid #ff6600; }
-    .camera-modal .camera-controls { margin-top: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
-    .camera-modal .camera-info { color: #888; font-size: 0.9em; margin-top: 0.5rem; }
+    .camera-modal video { width: 100%; max-width: 640px; height: auto; border-radius: 8px; border: 2px solid #ff6600; }
+    .camera-modal .camera-controls { margin-top: 1rem; margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+    .camera-modal .camera-info { color: #888; font-size: 0.9em; margin-top: 0.5rem; text-align: center; }
     .file-picker { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
     .file-picker__button { display: inline-flex; align-items: center; justify-content: center; padding: .55rem .9rem; border-radius: .6rem; border: none; background: #ff6600; color: white; cursor: pointer; font-weight: bold; transition: all 0.3s ease; }
     .file-picker__button:hover { background: #ff8833; transform: scale(1.05); }
@@ -79,8 +79,8 @@
     <div class="file-picker">
       <label class="file-picker__button" for="file">Aus Galerie…</label>
       <input id="file" type="file" accept="image/*" class="visually-hidden" />
+      <button id="open-camera" class="file-picker__button">📷 Kamera öffnen</button>
     </div>
-    <button id="open-camera" style="padding: .55rem .8rem;">📷 Kamera öffnen</button>
     <label>Zuschnitt:
       <select id="mode">
         <option value="cover">Zentriert zuschneiden (füllend)</option>
@@ -200,7 +200,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.21';
+    const TOOL_VERSION = 'V0.22';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
