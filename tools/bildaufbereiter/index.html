@@ -40,6 +40,11 @@
     body.drop-active .preview__viewport { border-color: #ff6600; box-shadow: 0 0 0 4px rgba(255, 102, 0, .25); }
     .drop-hint { margin: -.25rem 0 0; font-size: .9rem; }
     .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    .camera-modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; padding: 1rem; }
+    .camera-modal.active { display: flex; }
+    .camera-modal video { max-width: 100%; max-height: 70vh; border-radius: 8px; border: 2px solid #ff6600; }
+    .camera-modal .camera-controls { margin-top: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+    .camera-modal .camera-info { color: #888; font-size: 0.9em; margin-top: 0.5rem; }
     .file-picker { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
     .file-picker__button { display: inline-flex; align-items: center; justify-content: center; padding: .55rem .9rem; border-radius: .6rem; border: none; background: #ff6600; color: white; cursor: pointer; font-weight: bold; transition: all 0.3s ease; }
     .file-picker__button:hover { background: #ff8833; transform: scale(1.05); }
@@ -72,9 +77,10 @@
 
   <div class="row">
     <div class="file-picker">
-      <label class="file-picker__button" for="file">Bild auswählen…</label>
-      <input id="file" type="file" accept="image/*" class="visually-hidden" capture="environment" />
+      <label class="file-picker__button" for="file">Aus Galerie…</label>
+      <input id="file" type="file" accept="image/*" class="visually-hidden" />
     </div>
+    <button id="open-camera" style="padding: .55rem .8rem;">📷 Kamera öffnen</button>
     <label>Zuschnitt:
       <select id="mode">
         <option value="cover">Zentriert zuschneiden (füllend)</option>
@@ -99,6 +105,16 @@
       <input id="pixelperfect" type="checkbox" checked title="Bildglättung bei starker Vergrößerung">
       Vergrösserung weichzeichnen
     </label>
+  </div>
+
+  <!-- Camera Modal -->
+  <div id="camera-modal" class="camera-modal">
+    <video id="camera-video" autoplay playsinline></video>
+    <p class="camera-info" id="camera-info">Kamera wird gestartet...</p>
+    <div class="camera-controls">
+      <button id="camera-capture">📸 Foto aufnehmen</button>
+      <button id="camera-close">❌ Abbrechen</button>
+    </div>
   </div>
 
   <div class="actions">
@@ -184,7 +200,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.20';
+    const TOOL_VERSION = 'V0.21';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -195,6 +211,12 @@
     const btnUsb    = document.getElementById('send-usb');
     // const btnUsbLog = document.getElementById('send-usb-log');
     const btnBle    = document.getElementById('send-ble');
+    const btnOpenCamera = document.getElementById('open-camera');
+    const cameraModal = document.getElementById('camera-modal');
+    const cameraVideo = document.getElementById('camera-video');
+    const cameraInfo = document.getElementById('camera-info');
+    const btnCameraCapture = document.getElementById('camera-capture');
+    const btnCameraClose = document.getElementById('camera-close');
     const versionLabel = document.getElementById('tool-version');
     const mozjpegSourceLabel = document.getElementById('mozjpeg-source');
     const usbStatus = document.getElementById('usb-status');
@@ -227,6 +249,7 @@
     let currentDownloadName = 'image.jpg';
     let bleSending = false;
     let usbSending = false;
+    let cameraStream = null;
     const usbDebugLog = [];
     let usbErrorModal = null;
     let usbErrorModalText = null;
@@ -392,6 +415,131 @@
       }
       if (debugStatus) {
         debugStatus.textContent = debugLog.join('\n');
+      }
+    }
+
+    // Kamera-Funktionen
+    async function openCamera() {
+      try {
+        addDebugLog('📷 Öffne Kamera...');
+        cameraModal.classList.add('active');
+        cameraInfo.textContent = 'Kamera wird gestartet...';
+
+        // Fordere Kamera mit niedriger Auflösung an (wichtig für Android!)
+        const constraints = {
+          video: {
+            facingMode: 'environment', // Rückkamera bevorzugen
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          },
+          audio: false
+        };
+
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        cameraVideo.srcObject = cameraStream;
+
+        // Zeige tatsächliche Auflösung
+        cameraVideo.addEventListener('loadedmetadata', () => {
+          const w = cameraVideo.videoWidth;
+          const h = cameraVideo.videoHeight;
+          cameraInfo.textContent = `Kamera bereit: ${w}x${h}px`;
+          addDebugLog(`✅ Kamera: ${w}x${h}`);
+        }, { once: true });
+
+      } catch (err) {
+        addDebugLog(`❌ Kamera-Fehler: ${err.message}`);
+        alert('Kamera konnte nicht geöffnet werden: ' + err.message);
+        closeCamera();
+      }
+    }
+
+    function closeCamera() {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+      }
+      cameraVideo.srcObject = null;
+      cameraModal.classList.remove('active');
+      addDebugLog('📷 Kamera geschlossen');
+    }
+
+    async function captureFromCamera() {
+      if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) {
+        alert('Kamera ist noch nicht bereit. Bitte warten...');
+        return;
+      }
+
+      try {
+        addDebugLog('📸 Erstelle Snapshot...');
+
+        // Erstelle Canvas mit Video-Dimensionen
+        const w = cameraVideo.videoWidth;
+        const h = cameraVideo.videoHeight;
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const tempCtx = tempCanvas.getContext('2d', {
+          willReadFrequently: false,
+          alpha: false
+        });
+
+        // Zeichne aktuelles Video-Frame
+        tempCtx.drawImage(cameraVideo, 0, 0, w, h);
+
+        addDebugLog(`✅ Snapshot: ${w}x${h}`);
+
+        // Schließe Kamera sofort (gibt Speicher frei!)
+        closeCamera();
+
+        // Jetzt laden wie ein normales Bild
+        if (currentBitmap) {
+          try {
+            currentBitmap.width = 1;
+            currentBitmap.height = 1;
+          } catch (_) { }
+          currentBitmap = null;
+        }
+
+        // Skaliere auf max 600px (wie in loadImageCanvas)
+        const maxDim = 600;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        const scaledW = Math.round(w * scale);
+        const scaledH = Math.round(h * scale);
+
+        addDebugLog(`🔧 Skaliere zu ${scaledW}x${scaledH}`);
+
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = scaledW;
+        finalCanvas.height = scaledH;
+        const finalCtx = finalCanvas.getContext('2d', {
+          willReadFrequently: false,
+          alpha: false
+        });
+
+        finalCtx.drawImage(tempCanvas, 0, 0, scaledW, scaledH);
+
+        // Temp Canvas freigeben
+        tempCanvas.width = 1;
+        tempCanvas.height = 1;
+
+        currentBitmap = finalCanvas;
+        currentDownloadName = `camera_${Date.now()}.jpg`;
+
+        resetCoverPan();
+        resetZoom();
+        drawScaled(currentBitmap);
+        updateCanvasCursor();
+
+        await initMozIfNeeded();
+        updateActionButtons();
+
+        addDebugLog('✅ Kamera-Bild geladen');
+
+      } catch (err) {
+        addDebugLog(`❌ Snapshot-Fehler: ${err.message}`);
+        alert('Fehler beim Erstellen des Fotos: ' + err.message);
+        closeCamera();
       }
     }
 
@@ -1505,6 +1653,11 @@
       const file = e.target.files?.[0];
       await setBitmapFromFile(file);
     });
+
+    // Kamera Event-Listener
+    btnOpenCamera.addEventListener('click', openCamera);
+    btnCameraClose.addEventListener('click', closeCamera);
+    btnCameraCapture.addEventListener('click', captureFromCamera);
 
     modeSel.addEventListener('change', () => {
       if (isDragging) {
