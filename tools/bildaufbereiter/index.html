@@ -58,6 +58,10 @@
     .error-modal__textarea { width: 100%; min-height: 220px; font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: .9rem; line-height: 1.35; border-radius: .6rem; border: 1px solid rgba(255, 102, 0, 0.3); background: rgba(0, 0, 0, 0.3); color: #ffffff; padding: .75rem; resize: vertical; box-sizing: border-box; }
     .error-modal__textarea:focus-visible { outline: 2px solid #ff6600; outline-offset: 2px; }
     .error-modal__actions { display: flex; justify-content: flex-end; gap: .75rem; }
+    .debug-status { display: none; }
+    .collapsible-section { display: none; margin-top: 10px; padding-left: 10px; }
+    .collapsible-trigger { cursor: pointer; color: #ff6600; text-decoration: none; font-weight: bold; }
+    .collapsible-trigger:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -69,7 +73,20 @@
       <p class="muted" style="font-size: .85rem;">
         <a href="../../#webtools" style="color: #ff6600; text-decoration: none;">← Zurück zur Dokumentation</a>
       </p>
-      <p><b>Wichtig: <a href="#usb-ble-transfer">Pixel Pin zuerst in Empfangsmodus versetzen!</a><b/></p>
+      <p><b>Wichtig: <a href="#" id="toggle-transfer-help" class="collapsible-trigger">Pixel Pin zuerst in Empfangsmodus versetzen!</a><b/></p>
+      <div class="collapsible-section" id="usb-ble-transfer">
+        <h3 style="font-size: 1.1em; color: #ff8833;">📡 USB/BLE-Transfer aktivieren</h3>
+        <ul class="feature-list" style="margin-top: 5px;">
+          <li>Button1 Doppelklick: Setup-Menü öffnen </li>
+          <li>Button 2 Einfachklick: Zum Menüpunkt "USB/BLE-Transfer" wechseln</li>
+          <li>Button 2 Langklick: "USB/BLE-Transfer" auswählen</li>
+          <li>Nach Auswahl öffnet sich der Transfer-Bildschirm</li>
+          <li>Übertragung kann per BLE (Bluetooth) oder USB Serial erfolgen</li>
+          <li>Fortschrittsanzeige während der Übertragung</li>
+          <li><strong>Langklick:</strong> Transfer abbrechen und zurück zum Setup-Menü</li>
+          <li><strong>Doppelklick:</strong> Transfer beenden und Menü schließen</li>
+        </ul>
+      </div>
     </div>
     <a class="header__logo" href="../../index.html">
       <img src="../../assets/logo.png" alt="Pixel Pin Logo" />
@@ -125,20 +142,7 @@
     <button id="send-ble" disabled>Per Bluetooth senden</button>
     <p id="usb-status" class="muted" aria-live="polite"></p>
     <p id="ble-status" class="muted" aria-live="polite"></p>
-    <p id="debug-status" style="font-family: monospace; font-size: 0.85em; color: #888; margin-top: 10px; white-space: pre-wrap;"></p>
-    <div style="margin-left: 20px; margin-top: 15px;" id="usb-ble-transfer">
-      <h3 style="font-size: 1.1em; color: #ff8833;">📡 USB/BLE-Transfer aktivieren</h3>
-      <ul class="feature-list" style="margin-top: 5px;">
-        <li>Button1 Doppelklick: Setup-Menü öffnen </li>
-        <li>Button 2 Einfachklick: Zum Menüpunkt "USB/BLE-Transfer" wechseln</li>
-        <li>Button 2 Langklick: "USB/BLE-Transfer" auswählen</li>
-        <li>Nach Auswahl öffnet sich der Transfer-Bildschirm</li>
-        <li>Übertragung kann per BLE (Bluetooth) oder USB Serial erfolgen</li>
-        <li>Fortschrittsanzeige während der Übertragung</li>
-        <li><strong>Langklick:</strong> Transfer abbrechen und zurück zum Setup-Menü</li>
-        <li><strong>Doppelklick:</strong> Transfer beenden und Menü schließen</li>
-      </ul>
-    </div>
+    <p id="debug-status" class="debug-status" style="font-family: monospace; font-size: 0.85em; color: #888; margin-top: 10px; white-space: pre-wrap;"></p>
   </div>
 
   <footer style="text-align: center; padding: 30px 20px; color: #888; margin-top: 40px; border-top: 1px solid rgba(255, 102, 0, 0.2);">
@@ -201,7 +205,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.23';
+    const TOOL_VERSION = 'V0.24';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
@@ -1892,6 +1896,24 @@
     }
 
     updateActionButtons();
+
+    // Toggle für USB/BLE-Transfer Hilfe
+    const toggleTransferHelp = document.getElementById('toggle-transfer-help');
+    const transferSection = document.getElementById('usb-ble-transfer');
+
+    if (toggleTransferHelp && transferSection) {
+      toggleTransferHelp.addEventListener('click', (e) => {
+        e.preventDefault();
+        const isCurrentlyHidden = transferSection.classList.contains('collapsible-section');
+        if (isCurrentlyHidden) {
+          transferSection.style.display = 'block';
+          transferSection.classList.remove('collapsible-section');
+        } else {
+          transferSection.style.display = 'none';
+          transferSection.classList.add('collapsible-section');
+        }
+      });
+    }
   </script>
 </body>
 </html>
