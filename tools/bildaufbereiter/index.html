@@ -40,12 +40,12 @@
     body.drop-active .preview__viewport { border-color: #ff6600; box-shadow: 0 0 0 4px rgba(255, 102, 0, .25); }
     .drop-hint { margin: -.25rem 0 0; font-size: .9rem; }
     .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-    .camera-modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; padding: 1rem; overflow-y: auto; }
+    .camera-modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); z-index: 1000; flex-direction: column; align-items: center; justify-content: flex-start; padding: 0; overflow-y: auto; }
     .camera-modal.active { display: flex; }
-    .camera-modal video { width: 100%; max-width: 640px; height: auto; max-height: 70vh; border-radius: 8px; border: 2px solid #ff6600; object-fit: contain; }
-    .camera-modal .camera-controls { margin: 1rem 0; display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 640px; }
-    .camera-modal .camera-controls button { flex: 1 1 auto; min-width: 140px; white-space: nowrap; }
-    .camera-modal .camera-info { color: #888; font-size: 0.9em; margin: 0.5rem 0; text-align: center; max-width: 640px; width: 100%; }
+    .camera-modal video { width: 100vw; max-width: 640px; height: auto; max-height: calc(100vh - 200px); border: none; border-top: 2px solid #ff6600; border-bottom: 2px solid #ff6600; object-fit: contain; display: block; }
+    .camera-modal .camera-controls { margin: 0; padding: 1.5rem 1rem; display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; width: 100%; background: rgba(0, 0, 0, 0.95); position: sticky; bottom: 0; }
+    .camera-modal .camera-controls button { flex: 1 1 140px; max-width: 200px; padding: 0.8rem 1rem; font-size: 1rem; }
+    .camera-modal .camera-info { color: #ccc; font-size: 0.95em; margin: 0; padding: 1rem; text-align: center; width: 100%; background: rgba(0, 0, 0, 0.95); position: sticky; top: 0; }
     .file-picker { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
     .file-picker__button { display: inline-flex; align-items: center; justify-content: center; padding: .55rem .9rem; border-radius: .6rem; border: none; background: #ff6600; color: white; cursor: pointer; font-weight: bold; transition: all 0.3s ease; font-size: 1rem; line-height: 1.2; }
     button.file-picker__button { margin: 0; }
@@ -206,7 +206,7 @@
       throw combinedError;
     }
     window.__mozjpegSource = mozModuleSource;
-    const TOOL_VERSION = 'V0.25';
+    const TOOL_VERSION = 'V0.26';
 
     const fileInput = document.getElementById('file');
     const modeSel   = document.getElementById('mode');
